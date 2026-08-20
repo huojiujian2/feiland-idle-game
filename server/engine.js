@@ -63,6 +63,9 @@ function createCharacter(username, charName) {
     hp: 100, maxHp: 100,
     mp: 50, maxMp: 50,
     gold: 0,
+    killCount: 0,
+    reincarnation: 0,
+    bossKills: 0,
     currentArea: 'gaomanshan',
     inventory: [],
     equips: [],
@@ -74,7 +77,7 @@ function createCharacter(username, charName) {
   };
 }
 
-// ====== 数据迁移 ======
+// ====== 数据迁移（注意：会原地修改传入对象，含 inventory/equips 清理） ======
 function migratePlayer(player) {
   if (!player.equips) player.equips = [];
   if (!player.equipped) player.equipped = { weapon: null, armor: null, accessory: null };
@@ -85,6 +88,9 @@ function migratePlayer(player) {
   if (player.faith === undefined) player.faith = 0;
   if (!player.laws) player.laws = [];
   if (!player.inventory) player.inventory = [];
+  if (player.killCount === undefined) player.killCount = 0;
+  if (player.reincarnation === undefined) player.reincarnation = 0;
+  if (player.bossKills === undefined) player.bossKills = 0;
 
   // 迁移旧5属性 → 新4属性
   if (player.attributes && player.attributes.strength !== undefined && player.attributes.atk === undefined) {
@@ -114,6 +120,41 @@ function migratePlayer(player) {
   player.equips.forEach(addEnchantField);
   Object.values(player.equipped).forEach(addEnchantField);
   return player;
+}
+
+// ====== 周键（周一 0 点边界，ISO 周） ======
+function getCurrentWeekKey() {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const day = now.getDay(); // 0 Sun .. 6 Sat
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMonday);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, '0');
+  const d = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`; // 周一日期作为周键
+}
+function maybeResetWeeklyBossKills(store) {
+  const meta = store.getMeta();
+  const cur = getCurrentWeekKey();
+  if (!meta.bossWeek) {
+    meta.bossWeek = cur;
+    store.setMeta(meta);
+    return false;
+  }
+  if (meta.bossWeek !== cur) {
+    let changed = false;
+    for (const p of store.getAllPlayers()) {
+      if ((p.bossKills || 0) !== 0) { p.bossKills = 0; changed = true; }
+    }
+    meta.bossWeek = cur;
+    store.setMeta(meta);
+    if (changed) store.save();
+    console.log(`BOSS榜周重置: ${cur}`);
+    return true;
+  }
+  return false;
 }
 
 // ====== 力量等阶（含神格） ======
@@ -713,6 +754,9 @@ function calculateIdle(player) {
 
     player.exp += expGain;
     player.gold += goldGain;
+    player.killCount = (player.killCount || 0) + 1;
+    // BOSS 语义：仅 isBoss 标记的世界 BOSS 计入周榜（见 server/data.js），避免普通怪误计
+    if (monster.isBoss) player.bossKills = (player.bossKills || 0) + 1;
 
     if (player.godhood) {
       player.faith += Math.floor(monster.exp * 0.1);
@@ -1032,6 +1076,25 @@ function learnLaw(player, lawId) {
   return { success: true };
 }
 
+// ====== 转生（为转生榜提供真实写入，最小可用；完整 T-010 后扩展） ======
+function doReincarnate(player) {
+  player = migratePlayer(player);
+  if (player.level < 100) return { success: false, message: '需要 Lv.100 才能转生' };
+  player.reincarnation = (player.reincarnation || 0) + 1;
+  player.level = 1;
+  player.exp = 0;
+  player.attrPoints = 0;
+  player.skillPoints = 0;
+  // 重置属性为初始值，避免 2580/1040 残留
+  player.attributes = { atk: 5, def: 4, hp: 5, agi: 8 };
+  recalcMaxStats(player);
+  player.hp = player.maxHp;
+  player.mp = player.maxMp;
+  player.lastTick = Date.now();
+  player.logs.push({ time: Date.now(), type: 'reincarnate', text: `转生成功！第 ${player.reincarnation} 次轮回，属性已重置，战力将重新成长` });
+  return { success: true };
+}
+
 // ====== 登神 ======
 function attemptAscension(player) {
   player = migratePlayer(player);
@@ -1128,7 +1191,7 @@ function getPlayerView(player) {
     job: player.job, jobPath: player.jobPath, godhood: player.godhood, faith: player.faith,
     stage, attributes: player.attributes, attrPoints: player.attrPoints, skillPoints: player.skillPoints,
     hp: player.hp, maxHp: player.maxHp, mp: player.mp, maxMp: player.maxMp,
-    gold: player.gold, currentArea: player.currentArea, areaName: area ? area.name : '未知',
+    gold: player.gold, killCount: player.killCount || 0, reincarnation: player.reincarnation || 0, bossKills: player.bossKills || 0, powerScore: getPowerScore(player), currentArea: player.currentArea, areaName: area ? area.name : '未知',
     inventory: player.inventory, equips: player.equips, equipped: player.equipped,
     affixes: player.affixes, equippedAffixes, affixData, passiveSlots,
     totalStats: total, equipBonus: eqBonus,
@@ -1143,11 +1206,26 @@ function getPlayerView(player) {
   };
 }
 
+// ====== 战力评分（用于排行榜） ======
+// 口径：与 GAMEPLAY_GUIDE 保持一致，采用“总属性之和” = atk + def + hp + agi
+// 如需调整权重，需同步更新 GAMEPLAY_TASKS.md 与接口文档
+function getPowerScore(player) {
+  const total = getTotalStats(player);
+  return Math.floor(total.atk + total.def + total.hp + total.agi);
+}
+
+// 只读规范化：深拷贝后迁移，不污染原存档（供排行榜等 GET 使用）
+function getReadonlyPlayer(player) {
+  const clone = JSON.parse(JSON.stringify(player));
+  return migratePlayer(clone);
+}
+
 module.exports = {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
-  migratePlayer, chooseJob, equipItem, unequipItem,
+  migratePlayer, getReadonlyPlayer, chooseJob, equipItem, unequipItem,
   useConsumable, buyItem, recalcMaxStats, sellMaterial, sellEquip,
-  evolveRace, enchantItem, learnLaw, attemptAscension,
-  simulateBattle, getCombatStats,
+  evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
+  simulateBattle, getCombatStats, getTotalStats, getPowerScore, getStageFull,
+  getCurrentWeekKey, maybeResetWeeklyBossKills,
   equipAffix, unequipAffix, findAffix, getPassiveSlots, getJobStage
 };

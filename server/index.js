@@ -7,8 +7,10 @@ const {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
   chooseJob, equipItem, unequipItem, useConsumable, buyItem,
   sellMaterial, sellEquip,
-  evolveRace, enchantItem, learnLaw, attemptAscension,
-  equipAffix, unequipAffix
+  evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
+  equipAffix, unequipAffix,
+  getPowerScore, getTotalStats, getReadonlyPlayer, getStageFull,
+  maybeResetWeeklyBossKills
 } = require('./engine');
 
 const app = express();
@@ -18,6 +20,8 @@ app.use(cors());
 app.use(express.json());
 
 store.load();
+// 初始化周键（周一 0 点语义）
+maybeResetWeeklyBossKills(store);
 
 // ====== 账号相关 ======
 
@@ -60,6 +64,8 @@ app.post('/api/login', (req, res) => {
   if (account.hasCharacter) {
     const player = store.getPlayer(username);
     if (player) {
+      // 写入前原子切周，避免登录旁路跨周丢 bossKills
+      maybeResetWeeklyBossKills(store);
       calculateIdle(player);
       store.setPlayer(username, player);
       return res.json({ success: true, hasCharacter: true, data: getPlayerView(player) });
@@ -94,6 +100,8 @@ app.post('/api/player/:username/create-character', (req, res) => {
 app.get('/api/player/:username', (req, res) => {
   const player = store.getPlayer(req.params.username);
   if (!player) return res.json({ success: false, message: '角色不存在' });
+  // 写入前原子切周，避免跨周丢 bossKills
+  maybeResetWeeklyBossKills(store);
   calculateIdle(player);
   store.setPlayer(player.username, player);
   res.json({ success: true, data: getPlayerView(player) });
@@ -384,8 +392,77 @@ app.get('/api/codex', (req, res) => {
   res.json({ success: true, data: { materials, equips, consumables, monsters } });
 });
 
+// ====== 排行榜 ======
+// 榜单配置：单一数据源，避免多处 switch 重复
+const LEADERBOARD_CONFIG = {
+  level: { sort: (a, b) => b.level - a.level || b.exp - a.exp || b.gold - a.gold },
+  power: { sort: (a, b) => b.power - a.power },
+  gold: { sort: (a, b) => b.gold - a.gold },
+  kills: { sort: (a, b) => b.killCount - a.killCount || b.level - a.level },
+  reincarnation: { sort: (a, b) => b.reincarnation - a.reincarnation || b.level - a.level },
+  boss: { sort: (a, b) => b.bossKills - a.bossKills || b.level - a.level }
+};
+app.get('/api/leaderboard', (req, res) => {
+  const type = req.query.type || 'level';
+  if (!LEADERBOARD_CONFIG[type]) {
+    return res.json({ success: false, message: '无效的排行类型' });
+  }
+  // GET 保持无副作用：周重置由后台定时任务与写入前原子切周负责
+  const players = store.getAllPlayers().map(p => {
+    const rp = getReadonlyPlayer(p);
+    const power = getPowerScore(rp);
+    const total = getTotalStats(rp);
+    const stageInfo = getStageFull(rp.level, rp.godhood);
+    return {
+      username: rp.username,
+      name: rp.name,
+      race: rp.race,
+      level: rp.level,
+      exp: rp.exp,
+      gold: rp.gold,
+      killCount: rp.killCount || 0,
+      reincarnation: rp.reincarnation || 0,
+      bossKills: rp.bossKills || 0,
+      job: rp.job,
+      jobPath: rp.jobPath,
+      godhood: rp.godhood || null,
+      stage: stageInfo.name,
+      stageColor: stageInfo.color,
+      power,
+      atk: total.atk,
+      def: total.def,
+      hp: total.hp,
+      agi: total.agi
+    };
+  });
+
+  const sorted = [...players].sort(LEADERBOARD_CONFIG[type].sort);
+  const rankedFull = sorted.map((p, idx) => ({ rank: idx + 1, ...p }));
+  const ranked = rankedFull.slice(0, 100);
+  let myRank = null;
+  const queryUser = req.query.username;
+  if (queryUser) {
+    myRank = rankedFull.find(p => p.username === queryUser) || null;
+  }
+  res.json({ success: true, data: { type, total: players.length, list: ranked, myRank } });
+});
+
+// ====== 转生（为转生榜提供真实写入；完整 T-010 落地前为最小可用） ======
+app.post('/api/player/:username/reincarnate', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const result = doReincarnate(player);
+  if (!result.success) return res.json({ success: false, message: result.message });
+  store.setPlayer(player.username, player);
+  res.json({ success: true, data: getPlayerView(player) });
+});
+
+// BOSS 榜仅由权威战斗结算写入（engine.calculateIdle 判定 isBoss），不再提供公开计数入口，避免伪造
+
 // ====== 定时任务：每5秒计算所有玩家的挂机收益 ======
 setInterval(() => {
+  // 跨周不丢数据：写入前原子切周（全局）
+  maybeResetWeeklyBossKills(store);
   const players = store.getAllPlayers();
   for (const player of players) {
     calculateIdle(player);
@@ -394,6 +471,9 @@ setInterval(() => {
     store.save();
   }
 }, 5000);
+
+// ====== 后台周重置（兜底，避免 GET 需副作用） ======
+setInterval(() => maybeResetWeeklyBossKills(store), 60 * 1000);
 
 setInterval(() => store.save(), 30000);
 

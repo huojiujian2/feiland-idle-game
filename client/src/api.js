@@ -58,5 +58,12 @@ export default {
   ascend(username) { return request(`/player/${username}/ascend`, { method: 'POST' }) },
 
   // 图鉴
-  getCodex() { return request('/codex') }
+  getCodex() { return request('/codex') },
+
+  // 排行榜
+  getLeaderboard(type, username) {
+    const q = username ? `?type=${type}&username=${encodeURIComponent(username)}` : `?type=${type}`
+    return request(`/leaderboard${q}`)
+  },
+  reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) }
 }

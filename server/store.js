@@ -16,6 +16,9 @@ function load() {
   }
   if (!data.accounts) data.accounts = {};
   if (!data.players) data.players = {};
+  if (!data.meta) data.meta = {};
+  // bossWeek 初始化由 engine 负责周一边界，此处仅保证存在
+  if (!data.meta.bossWeek) data.meta.bossWeek = null;
   // 迁移旧数据：如果有 players 但没有 accounts，把旧 player 当作 account
   const playerKeys = Object.keys(data.players);
   if (playerKeys.length > 0 && Object.keys(data.accounts).length === 0) {
@@ -50,4 +53,7 @@ function getPlayer(username) { return data.players[username]; }
 function setPlayer(username, player) { data.players[username] = player; markDirty(); }
 function getAllPlayers() { return Object.values(data.players); }
 
-module.exports = { load, save, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers };
+function getMeta() { return data.meta; }
+function setMeta(meta) { data.meta = meta; markDirty(); }
+
+module.exports = { load, save, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, getMeta, setMeta };
