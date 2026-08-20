@@ -184,8 +184,8 @@ function onBackdrop(){
 .backdrop.full{ inset:0; }
 .tutorial-hole{ position:fixed; border:var(--tutorial-outline); border-radius:var(--tutorial-hole-radius); pointer-events:none; box-shadow:var(--tutorial-hole-shadow); transition:all var(--duration-normal) var(--ease-out); }
 .tutorial-card{ position:fixed; background:var(--tutorial-card-bg); border:1px solid var(--tutorial-card-border); border-radius:var(--tutorial-card-radius); padding:0.6rem 0.8rem; max-width:260px; z-index:calc(var(--tutorial-z) + 1); box-shadow:var(--tutorial-card-shadow); pointer-events:auto; }
-.tutorial-step{ font-size:0.62rem; color:var(--dim); margin-bottom:0.2rem; }
-.tutorial-text{ font-size:0.78rem; color:var(--ink); line-height:1.4; margin-bottom:0.4rem; }
+.tutorial-step{ font-size:0.62rem; color:var(--tutorial-step); margin-bottom:0.2rem; }
+.tutorial-text{ font-size:0.78rem; color:var(--tutorial-text); line-height:1.4; margin-bottom:0.4rem; }
 .tutorial-actions{ display:flex; justify-content:space-between; align-items:center; gap:0.4rem; }
-.tutorial-hint{ font-size:0.62rem; color:var(--muted); }
+.tutorial-hint{ font-size:0.62rem; color:var(--tutorial-hint); }
 </style>

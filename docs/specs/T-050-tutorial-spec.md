@@ -37,7 +37,7 @@
   - `TutorialOverlay` 仅 `emit('next')`/`emit('skip')`，`App` 监听后调 `api.updateTutorial` 并 `player = res.data` 回写；`next` 仅 step0 显示，其余步骤通过 Tab/分配代理推进，不额外显示“下一步”绕过。
   - 跳过：`emit('skip')` → `POST {6}` 任意 200 幂等；重复 `current` 409，`6` 重复 200。
 
-- **样式 token**：`style.css` 定义 `--tutorial-overlay-bg: rgba(0,0,0,0.6)`、`--tutorial-blur: blur(2px)`、`--tutorial-outline: 2px solid var(--accent)`、`--tutorial-z: 400` 默认值，组件内仅 `var(--tutorial-*)` 无 fallback 硬编码，动效仅 `var(--duration-*/--ease-*)`。
+- **样式 token**：`style.css` 定义 `--tutorial-overlay-bg: rgba(0,0,0,0.6)`、`--tutorial-blur: blur(2px)`、`--tutorial-outline: 2px solid var(--accent)`、`--tutorial-z: 400` 默认值，组件内仅 `var(--tutorial-*)`（含文本色映射）无 fallback 硬编码，动效仅 `var(--duration-*/--ease-*)`。
 
 ## 3. 涉及文件（严格限定，v10）
 
@@ -47,7 +47,7 @@
 - `client/src/components/TutorialOverlay.vue` — 新建，`STEPS` 长度 6 索引 0-5，`overlayVisible/targetReady/waiting/fallbackCenter` 四态，`emit next/skip`，4 块镂空，`nextTick` + `requestAnimationFrame` 重算。
 - `client/src/components/MapView.vue` — 追加 `data-tutorial="log"`。
 - `client/src/components/CharacterView.vue` — 包裹容器 `data-tutorial="alloc-wrap"`，内按钮 `data-alloc-available` 仅当 `attrPoints>0` 时渲染且 `!disabled`。
-- `client/src/style.css` — 新增 `--tutorial-overlay-bg/--tutorial-blur/--tutorial-outline/--tutorial-z` 默认值。
+- `client/src/style.css` — 新增 `--tutorial-overlay-bg/--tutorial-blur/--tutorial-outline/--tutorial-z/--tutorial-step/--tutorial-text/--tutorial-hint` 默认值。
 - `client/src/App.vue` — 引入 `TutorialOverlay`，`handleTabClick/handleAllocate` 显式推进 + 重试，首次 hydrate 自动切 `map`，`data-tab` 必备。
 - `client/src/api.js` — `updateTutorial(username, step)`。
 - `server/tutorial.test.js` — 创建/迁移/视图/API 单调/条件/非法/跳过/刷新/等待隐藏/重试（服务端）；App 轮询重试/Tab 代理/DOM/rAF/自动切图为手工验收，不纳入服务端单测。
