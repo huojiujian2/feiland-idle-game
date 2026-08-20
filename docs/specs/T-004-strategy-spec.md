@@ -1,59 +1,42 @@
-# T-004 战斗策略模式选择 — Spec v2
+# T-004 战斗策略模式选择 — Spec v3
 
-> 优先级 🔴 高 · 难度 ★★ · 分支 `feat/T-004-strategy` · 依赖 无（认证依赖见 §7）· 对应 `GAMEPLAY_TASKS.md:2.2`
-> 本版修复 v1 的 8 项 MUST_FIX（收益边界/副本污染/计算顺序/原型污染/日志契约/授权模型/API 契约/可测试性）
+> 优先级 🔴 高 · 难度 ★★ · 分支 `feat/T-004-strategy` · 依赖 无（认证见 §5.6）· 对应 `GAMEPLAY_TASKS.md:2.2`
+> 本版修复 v2 的 3 P1 + 3 P2（校验/结算顺序、monsterAtk 归属、收益回归、seam 完整性、幂等/等级、取整/性能）
 
 ## 1. 背景与目标
 
-核心问题：挂机过于被动、玩家无决策点。本功能把「挂着不动」改为「挂着但有选择」，在挂机前提供策略 trade-off，影响后续所有 `calculateIdle` 收益。
+挂机被动无决策点。本功能提供 6 策略 trade-off，影响后续 `calculateIdle`。
 
 成功标准：
-- 玩家可在 3 个初始策略间切换，Lv.20/40/60 解锁 3 个进阶策略
-- 策略立即影响战斗数值与挂机收益，前端 5 分钟内不可重复切换（CD 可感知）
-- 非法客户端参数不生效；切换记录可审计（非安全边界，见 §7）
+- Lv.1 可选 3 初始，Lv.20/40/60 解锁 3 进阶
+- 切换 5 分钟 CD，前端可感知
+- 非法参数不生效；切换可审计（非安全边界）
 
 ## 2. 范围
 
-**做**
-- 6 策略定义、数值、解锁条件（`server/data.js:STRATEGIES` 单一数据源）
-- `player.strategy / strategyChangedAt` 持久化与迁移（含校验）
-- `engine` 战斗/收益唯一落点与公式定版
-- `POST /api/player/:username/strategy` 校验 + CD + 收益结算边界
-- `MapView.vue` 策略卡片、`client/src/api.js` 封装、`getPlayerView` 回传
-- `pnpm test` 可测试性 seam
+做：`STRATEGIES` 单一数据源、`strategy/strategyChangedAt` 持久化与迁移、唯一落点与公式定版、`POST /strategy` 边界与校验、`MapView` 卡片、`pnpm test` seam
+不做：二次平衡、独立榜单、付费、认证（T-061）
 
-**不做**
-- 策略与职业/词条二次平衡（后续数据驱动）
-- 策略独立排行榜
-- 付费解锁
-- 本期认证（依赖 T-061，见 §7）
+## 3. 策略定义
 
-## 3. 策略定义（权威表）
+| id | 名称 | 效果（乘法） | 解锁 |
+|----|------|--------------|------|
+| `aggressive` | 全力进攻 | `atk ×1.15`, `def ×0.90` | Lv.1 |
+| `defensive` | 稳健防守 | `def ×1.15`, `atk ×0.90`, `regen ×1.50` | Lv.1 |
+| `balanced` | 平衡 | 无加成 | Lv.1·默认 |
+| `greedy` | 贪婪掠夺 | `gold ×1.30`, `exp ×0.80`, `dropRate ×1.05` | Lv.20 |
+| `desperate` | 背水一战 | `atk ×1.40`, `def ×0.70`，且 `hp/maxHp<0.30` 时 `atk` 额外 `×1.20` | Lv.40 |
+| `training` | 极限修炼 | `exp ×1.50`, `gold ×0.50`, 怪物 `atk ×1.20` | Lv.60 |
 
-| id | 名称 | 效果（乘法） | 解锁 | 备注 |
-|----|------|--------------|------|------|
-| `aggressive` | 全力进攻 | `atk ×1.15`, `def ×0.90` | Lv.1 |  |
-| `defensive` | 稳健防守 | `def ×1.15`, `atk ×0.90`, `regen ×1.50` | Lv.1 | `regen` 指 `getTotalStats.regen` 与战斗内 `regen` |
-| `balanced` | 平衡 | 无加成 | Lv.1·默认 | 非法/缺失回退到此 |
-| `greedy` | 贪婪掠夺 | `gold ×1.30`, `exp ×0.80`, `dropRate ×1.05` | Lv.20 | `dropRate` 作用于 `area.drops[].rate` 判定 |
-| `desperate` | 背水一战 | `atk ×1.40`, `def ×0.70`，且 `hp/maxHp <0.30` 时 `atk` 额外 `×1.20`（最终 `×1.68`） | Lv.40 | 阈值在 `getCombatStats` 按实时 `hp` 判定 |
-| `training` | 极限修炼 | `exp ×1.50`, `gold ×0.50`, 怪物 `atk ×1.20` | Lv.60 | 怪物加成仅当次战斗副本生效，不写盘 |
+`regen` 指 `getTotalStats.regen` 与战斗内 `regen`；`dropRate` 仅 `win` 时生效；`training` 怪物仅当次战斗副本。
 
 ## 4. 数据模型
 
-`server/engine.js:createCharacter` 新增：
 ```js
 strategy: 'balanced',
-strategyChangedAt: 0 // ms timestamp，上次成功切换时间；0 表示从未切换
+strategyChangedAt: 0 // 上次成功切换 ms；0=从未切换
 ```
-
-`migratePlayer` 规则（覆盖旧存档与非法写盘）：
-```js
-if (typeof player.strategy !== 'string' || !Object.hasOwn(STRATEGIES, player.strategy)) player.strategy = 'balanced'
-if (!Number.isFinite(player.strategyChangedAt)) player.strategyChangedAt = 0
-```
-
-`store` 无 schema 变更，JSON 透传。
+`migratePlayer`：`typeof !== string || !Object.hasOwn(STRATEGIES, strategy)` 回退 `balanced`；`!Number.isFinite(strategyChangedAt)` 回退 `0`。`store` 透传。
 
 ## 5. 后端设计
 
@@ -61,171 +44,164 @@ if (!Number.isFinite(player.strategyChangedAt)) player.strategyChangedAt = 0
 
 `server/data.js`
 ```js
-const STRATEGIES = {
-  aggressive: { name:'全力进攻', desc:'ATK+15% DEF-10%', reqLevel:1, effects:{ atk:0.15, def:-0.10 } },
-  defensive:  { name:'稳健防守', desc:'DEF+15% ATK-10% 回复+50%', reqLevel:1, effects:{ def:0.15, atk:-0.10, regen:0.50 } },
-  balanced:   { name:'平衡', desc:'无加成', reqLevel:1, effects:{} },
-  greedy:     { name:'贪婪掠夺', desc:'GOLD+30% EXP-20% 掉落+5%', reqLevel:20, effects:{ gold:0.30, exp:-0.20, drop:0.05 } },
-  desperate:  { name:'背水一战', desc:'ATK+40% DEF-30% 低血再+20%', reqLevel:40, effects:{ atk:0.40, def:-0.30, desperateAtk:0.20, hpThreshold:0.30 } },
-  training:   { name:'极限修炼', desc:'EXP+50% GOLD-50% 怪物ATK+20%', reqLevel:60, effects:{ exp:0.50, gold:-0.50, monsterAtk:0.20 } },
-}
-const STRATEGY_CD_MS = 5 * 60 * 1000
-module.exports = { AREAS, EQUIP_TEMPLATES, ..., STRATEGIES, STRATEGY_CD_MS, getStage, expToNext, createEquipItem }
+const STRATEGIES = { aggressive:{...}, defensive:{...}, balanced:{...}, greedy:{...}, desperate:{...}, training:{...} }
+const STRATEGY_CD_MS = 5*60*1000
+module.exports = { AREAS, ..., STRATEGIES, STRATEGY_CD_MS, getStage, expToNext, createEquipItem }
 ```
-必须加入显式导出列表（当前 `data.js:674-680` 为显式导出，遗漏则前端/引擎无法引用）。
+必须加入显式导出列表（`data.js:674-680`）。
 
 ### 5.2 收益结算边界（修复 P1-1）
 
-`calculateIdle` 按 `lastTick → now` 单次结算，策略切换不得追溯修改已产生的挂机时间。
+`calculateIdle` 单次按 `lastTick→now` 结算，切换不得追溯。
 
-`POST /strategy` 成功路径必须：
-1. `maybeResetWeeklyBossKills(store)` 与登录/查询一致（如需）
-2. **先用旧策略结算**：`calculateIdle(player)`（若 `elapsed >= 3000` 则按旧 `strategy` 产生成果并更新 `player.lastTick`）
-3. 再校验并写入新策略（见 §5.4）
-4. `store.setPlayer` + `store.save()`（或由定时落盘）并返回 `getPlayerView`
+`POST /strategy` 采用两阶段校验，避免非法请求推进 `lastTick`：
 
-禁止按 `strategyChangedAt` 拆分单次 `calculateIdle`（当前引擎为单次随机怪物，拆分会引入二次随机不一致）。切换前的 `lastTick→now` 全部归旧策略，切换后的下一次 `calculateIdle` 才用新策略。
+**阶段 A — 无副作用校验（不写盘、不结算）**
+- A1 `typeof strategy !== 'string' || !Object.hasOwn(STRATEGIES, strategy)` → `策略不存在`
+- A2 若 `strategy === player.strategy` → 幂等直接返回 `success:true`（绕过等级与 CD，见 §5.4）
+- A3 `Date.now() - strategyChangedAt < CD && strategyChangedAt !==0` → `冷却中`
 
-### 5.3 数值唯一落点与公式（修复 P1-3）
+**阶段 B — 旧策略结算（仅 A 通过后）**
+- B1 `maybeResetWeeklyBossKills(store)`（如需）
+- B2 `calculateIdle(player)` 按旧 `strategy` 结算（`elapsed<3000` 则无收益但仍更新 `lastTick` 逻辑与现有保持一致）
+- 此次结算可能升级（Lv.19→20），需进入 C
 
-唯一落点：
-- **战斗向**（`atk/def/regen/monsterAtk/desperate`）：仅在 `getTotalStats` / `getCombatStats` 内生效，不在 `calculateIdle` 重复计算
-- **收益向**（`exp/gold/drop`）：仅在 `calculateIdle` 结算阶段生效，不在 `getTotalStats` 内生效
-- `getPowerScore` 定义为 `floor(total.atk + total.def + total.hp + total.agi)`，其中 `total` 来自 `getTotalStats`（含策略战斗向加成）。因此切换 `aggressive/defensive/desperate` 会影响排行榜战力，`greedy/training` 的 `exp/gold` 不影响战力。此为预期行为，需在接口文档注明
+**阶段 C — 等级复核与写入**
+- C1 以结算后 `player.level` 复核 `reqLevel`：`player.level < STRATEGIES[target].reqLevel` → `需要 Lv.X`（因此 Lv.19 已结算到 20 后可通过）
+- C2 通过则 `old=player.strategy; player.strategy=target; player.strategyChangedAt=_now()`，写日志（§5.5），`store.setPlayer`，返回 `getPlayerView`
 
-固定顺序与取整：
+非法/冷却/等级不满足的请求不执行 B/C，不产生收益、不改 `lastTick`。
+
+### 5.3 数值唯一落点与公式（修复 P1-2/3）
+
+**归属**
+- 战斗向 `atk/def/regen/desperateAtk`：唯一落点 `getTotalStats` / `getCombatStats`（玩家属性）
+- 怪物向 `monsterAtk`：唯一落点 `buildBattleMonster(monster, strategy)` → `simulateBattle(battleMonster)` 的战斗输入变换，不属于玩家属性，也不属于收益向；`calculateIdle` 仅负责选怪并传入副本
+- 收益向 `exp/gold/drop`：唯一落点 `calculateIdle` 结算阶段
+
+**battleMonster**
 ```js
-// getTotalStats 内（战斗向）
-baseAtk = 10 + (level-1)*3 + attr.atk*2 + eq.atk + ...
-atk = floor(baseAtk * (1+affix.atk) * (1+strategy.atk) * allAttrMult)
-// 同理 def/hp/agi；regen = (affix.regen+mechanics.regen) * (1+strategy.regen)
-// desperate 低血：在 getCombatStats 内按实时 hpRatio < threshold 时 atk = floor(atk * 1.20)
-
-// calculateIdle 内（收益向）
-expMult = 1 + total.expBonus + lawBonus.exp
-goldMult = 1 + total.goldBonus + lawBonus.gold
-if (strategy==='greedy') { expMult *= 0.80; goldMult *= 1.30 }
-if (strategy==='training') { expMult *= 1.50; goldMult *= 0.50 }
-// 胜/败/超时均走同一 expMult/goldMult：
-// win: expGain = floor(monster.exp * expMult) + talents + affix flat；goldGain = floor(monster.gold * goldMult) ...
-// lose: expGain = floor(monster.exp * 0.1 * expMult)  // 策略同样影响失败/超时保底经验
-// timeout: expGain = floor(monster.exp * 0.3 * expMult)
-// drop: effectiveRate = drop.rate * (strategy==='greedy' ? 1.05 : 1)  // 仅 win 时判定
-// training 怪物：const battleMonster = {...monster, atk: Math.floor(monster.atk * 1.20)} // 副本，不污染 AREAS
-```
-日志记录 `battleMonster.atk` 为调整后值，同时在 `logEntry` 保留 `monsterBaseAtk: monster.atk` 供审计。
-
-### 5.4 API 契约（修复 P1-4/6/7）
-
-`POST /api/player/:username/strategy` `Content-Type: application/json` `body: { strategy: string }`
-
-**项目约定**：沿用现有风格 `HTTP 200 + { success: boolean, message?: string, data? }`，不使用 400 状态码（保持前端 `request` 统一处理）。
-
-校验顺序（全部失败返回 `success:false`）：
-1. `typeof strategy !== 'string' || !Object.hasOwn(STRATEGIES, strategy)` → `策略不存在`（防 `__proto__/constructor` 原型污染）
-2. `player.level < STRATEGIES[strategy].reqLevel` → `需要 Lv.X 才能使用该策略`
-3. `!Number.isFinite(player.strategyChangedAt)` 视为 `0`
-4. 若 `strategy === player.strategy` → 直接返回 `success:true, data: getPlayerView(player)`（幂等，不刷新 CD，不写日志）
-5. `Date.now() - player.strategyChangedAt < STRATEGY_CD_MS` 且 `strategyChangedAt !== 0` → `策略切换冷却中，剩余Xs`（`X = ceil((CD - elapsed)/1000)`）
-6. 通过则先执行 §5.2 的旧策略结算，再 `player.strategy = strategy; player.strategyChangedAt = Date.now()`，写入 `player.logs`（见 §5.5），`store.setPlayer`，返回 `getPlayerView`
-
-`getPlayerView` 新增透出：
-```js
-strategy: 'balanced',
-strategyChangedAt: 1700000000000,
-strategyCdRemaining: 0, // ms，向下取整，0 表示可切换；由 Date.now() - strategyChangedAt 计算，<0 取 0
-strategies: [
-  { id:'aggressive', name:'全力进攻', desc:'...', reqLevel:1, unlocked:true, active:false },
-  // ...6 项，按 STRATEGIES 顺序
-]
+function buildBattleMonster(monster, strategy){
+  if(strategy==='training') return { ...monster, atk: Math.floor(monster.atk * 1.20) }
+  return { ...monster }
+}
+// calculateIdle: const battleMonster = buildBattleMonster(monster, player.strategy); simulateBattle(player, battleMonster)
 ```
 
-等级回退：已选高阶策略不自动踢出，但 `strategies[].unlocked` 为 false 且前端置灰；再次切换时仍校验 `reqLevel`。
+**完整收益公式（保留现有回归项）**
+现有 `engine.js:729-753` 包含：`total.expBonus/lawBonus.exp/raceBonus.exp`、`godhood 1.5/2`、`talents.killExp`、`total.killExp/flatExp/killGold`、`doubleKill`。
 
-### 5.5 日志契约（修复 P1-5）
-
-切换成功追加：
+v3 插入策略倍率后的定版顺序（策略不覆盖现有项，乘法叠加）：
 ```js
-player.logs.push({
-  time: Date.now(), // 必须，MapView.vue:240 formatTime 依赖
-  type: 'strategy',
-  from: oldStrategy,
-  to: newStrategy,
-  strategy: newStrategy, // 冗余便于过滤
-  text: `策略切换：${STRATEGIES[oldStrategy].name} → ${STRATEGIES[newStrategy].name}`
-})
+// 1) 基础倍率（保留现有）
+let expMult = 1 + total.expBonus + lawBonus.exp + (raceBonus.exp||0)
+let goldMult = 1 + total.goldBonus + lawBonus.gold
+if(player.godhood==='demigod') expMult *= 1.5
+if(player.godhood==='god') expMult *= 2
+// 2) 策略收益倍率（新增，紧接基础倍率）
+if(strategy==='greedy'){ expMult *= 0.80; goldMult *= 1.30 }
+if(strategy==='training'){ expMult *= 1.50; goldMult *= 0.50 }
+// 3) 基础掉落
+let expGain = Math.floor(monster.exp * expMult)
+let goldGain = Math.floor(monster.gold * goldMult)
+let effectiveDropRate = drop.rate * (strategy==='greedy' ? 1.05 : 1)
+// 4) 击杀额外（保留现有，策略已在 expMult/goldMult 生效，不重复）
+if(talents.killExp){ expGain += (talents.killExp==='level*2'? player.level*2 : Math.floor(monster.exp*talents.killExp)) }
+if(total.killExp) expGain += Math.floor(monster.exp * total.killExp)
+if(total.killGold) goldGain += Math.floor(monster.gold * total.killGold)
+if(total.flatExp) expGain += total.flatExp
+// 5) 炼金双倍（最后）
+if(total.doubleKill){ expGain *= 2; goldGain *= 2 }
+// lose/timeout 同走 expMult：lose= floor(monster.exp*0.1*expMult)，timeout= floor(monster.exp*0.3*expMult)，gold 0；策略倍率同样生效
 ```
-保留既有截断：`engine:814` 保留 30 条、`getPlayerView:1202` 返回 20 条，策略日志遵循同一上限（可审计窗口为最近 20 条，非长期审计；长期审计依赖 T-061 后端日志）。
 
-### 5.6 安全与授权（修复 P1-6）
+**取整与战力**
+- `getTotalStats` 内 `atk = floor(baseAtk * (1+affix.atk) * (1+strategy.atk) * allAttrMult)`；`def/hp/agi` 同理；`regen = (affix.regen+mechanics.regen)*(1+strategy.regen)` 不 floor
+- `desperate` 低血：`atkLow = floor(floor(baseAtk *...*1.40) *1.20)`，两次 floor 不合并为 `*1.68`，验收以分步结果为准
+- `powerScore = floor(total.atk+total.def+total.hp+total.agi)` 含战斗向策略，不含收益向
 
-当前 ` /api/player/:username/...` 信任路径参数 `username`，无服务端身份校验，任何知晓用户名者可改他人策略。**T-004 不引入认证**，不宣称安全边界。
+日志记录 `monsterBaseAtk` 与 `battleMonster.atk` 双值供审计。
 
-Spec 声明：T-004 的“可追责”仅指 `logs.from/to/time` 可回溯到玩家对象，不作为防伪/授权保证；完整认证/授权由 T-061 `API 限流与安全加固（JWT/bcrypt）` 解决，T-004 仅预留 `req.user` 接入点。
+### 5.4 API 契约
+
+`POST /api/player/:username/strategy` `200 {success,message,data}`
+
+顺序见 §5.2：
+1. A1 原型污染校验 → A2 幂等（同策略直接成功，绕过等级与 CD）→ A3 CD
+2. 仅通过后进入 B 旧策略结算
+3. C 以结算后等级复核 `reqLevel`，通过后写入
+
+`getPlayerView` 新增：
+```js
+strategy, strategyChangedAt,
+strategyCdRemaining: Math.max(0, STRATEGY_CD_MS - (_now() - strategyChangedAt)), // ms 向下取整
+strategies: [{id,name,desc,reqLevel,unlocked,active},...] // 6 项按 STRATEGIES 顺序
+```
+同策略幂等时 `unlocked` 可为 false 仍返回成功；`active:true` 优先级高于 `unlocked:false`（前端高亮已选，置灰解锁提示并存）。
+
+等级回退不踢出已选高阶策略。
+
+### 5.5 日志契约
+
+```js
+player.logs.push({ time:_now(), type:'strategy', from:old, to:target, strategy:target, text:`策略切换：${STRATEGIES[old].name}→${STRATEGIES[target].name}` })
+if(player.logs.length>30) player.logs = player.logs.slice(-30) // 追加后再次截断，避免 31 条瞬时
+// getPlayerView 返回 20 条，可审计窗口 20，非长期审计
+```
+`time` 必填，`formatTime` 可渲染。
+
+### 5.6 安全
+
+信任 `username` 路径参数，无认证。T-004 不宣称安全边界，完整 JWT/bcrypt 由 T-061 负责，预留 `req.user`。
 
 ## 6. 前端设计
 
-`MapView.vue`（不新增 Tab，保持全屏替换）：
-- 在「挂机区域」与「战斗属性」之间新增「战斗策略」卡片，复用现有网格（桌面 4 列/手机 2 列/底部翻页器无需）
-- 6 按钮：`active` 高亮、`locked` 置灰、`cd` 遮罩显示 `剩余 XmYs`（由 `strategyCdRemaining` 轮询 1s 递减）
-- 交互：点击 → `emit('strategy-change', id)` → `App.vue` 调用 `api.setStrategy(username, id)` → 成功用返回 `data` 全量回写 `player`（禁止直接 `props.player.strategy =`），失败用项目现有 `alert`/`toast` 提示 `message`
-- 样式：仅 `var(--duration-*/--ease-*/--accent-*/--lb-*)`，无硬编码色值
+`MapView.vue` 新增「战斗策略」卡片（区域与属性之间）：
+- 6 个原生 `<button>` 网格，`disabled` + `aria-pressed={active}` + `aria-disabled`，`locked` 与 `cd` 时 `disabled`
+- 交互：`emit('strategy-change', id)` → `App.vue` 调 `api.setStrategy` → 用返回 `data` 回写 `player`（禁 `props.player.strategy=`），失败 `alert(message)`
+- 样式仅 `var(--duration-*/--ease-*/--accent-*/--lb-*)`
 
-`client/src/api.js`：
+`client/src/api.js`: `setStrategy(username,strategy)`
+
+## 7. 非功能
+
+- 策略新增开销：`getTotalStats` 内 2 次乘法与 1 次分支；验收以 benchmark 为准（见 §9）
+- 时间/随机见 §8
+
+## 8. 可测试性
+
+`package.json`: `"test":"node --test server/**/*.test.js"`
+
+`server/engine.js` seam：
 ```js
-setStrategy(username, strategy) { return request(`/player/${username}/strategy`, { method:'POST', body: JSON.stringify({ strategy }) }) }
+let _now=()=>Date.now(), _rand=Math.random, _dropRand=Math.random
+function __setNow(fn){ _now=fn } function __setRandom(fn){ _rand=fn } function __setDropRandom(fn){ _dropRand=fn }
+function __resetSeams(){ _now=()=>Date.now(); _rand=Math.random; _dropRand=Math.random }
 ```
-
-## 7. 非功能与约束
-
-- 性能：常数分支，`calculateIdle` 单次 <1ms
-- 时间/随机可测试：见 §8 seam
-- 安全：见 §5.6
-
-## 8. 可测试性（修复 P1-8）
-
-`package.json` 新增：
-```json
-"scripts": { "test": "node --test server/**/*.test.js" }
-```
-
-`server/engine.js` 暴露 seam（不改业务逻辑）：
-```js
-// 仅测试注入：__setNow, __setRandom, __setDropRandom
-let _now = () => Date.now(), _rand = Math.random
-function __setNow(fn){ _now = fn } // 测试用
-```
-`calculateIdle` 内 `Date.now` → `_now()`，`Math.random` 抽样走 `_rand`，`drop` 判定单独函数 `shouldDrop(rate, strategy)` 便于单测覆盖 `greedy ×1.05`。
-
-单测覆盖（`server/engine.strategy.test.js`）：
-- 收益边界：`lastTick` 未结算时切换，旧策略结算一次、新策略下一次生效
-- `training` 不污染 `AREAS`（切换前后 `AREAS.shenyuan.monsters[1].atk` 不变）
-- 数值：`aggressive atk×1.15 def×0.90` 等 6 策略对照表
-- 校验：`__proto__/constructor/toString` 被拒，`strategyChangedAt=NaN` 回退
-- CD：`strategyChangedAt=0` 首次无 CD，重复选同一策略幂等，冷却中剩余秒误差 <2s
-- 日志：`time/from/to` 存在且 `formatTime` 可渲染
+`calculateIdle`、`buildBattleMonster`、`shouldDrop`、`POST /strategy` 的 `Date.now`/`Math.random`/`drop` 均走 seam；测试后 `__resetSeams()`。
 
 ## 9. 验收标准
 
-- [ ] 初始号 `strategy==='balanced'`，`strategies` 6 项且解锁态正确
-- [ ] 切换前有未结算 `elapsed>=3s` 时，先按旧策略产出一条 battle 日志，再更新策略
-- [ ] `training` 时 `AREAS` 原始 `atk` 不变，`log.monsterBaseAtk` 与 `log.monster.atk` 差 `×1.20`
-- [ ] `aggressive` 等数值符合 §5.3 公式且 `powerScore` 随战斗向策略变化，`greedy` 不影响战力
-- [ ] `greedy` Lv.19 拒、Lv.20 过；`desperate` 阈值行为正确；`training` 掉落不变
-- [ ] 冷却中二次切返回 `剩余Xs`，`strategyCdRemaining` 单位 ms 且倒计时准确
-- [ ] 日志含 `time/from/to` 且 MapView 不显示 `NaN:NaN:NaN`
-- [ ] `api.setStrategy` 经 `App.vue` 回写，不直接改 prop；失败走 `alert`
-- [ ] `pnpm test` 通过，`pnpm build` 通过，`git diff --check` 0
+- [ ] 旧策略结算边界：`elapsed>=3s` 时切换前产生旧策略 battle 日志
+- [ ] 非法/`__proto__` 不结算不改 `lastTick`
+- [ ] Lv.19 未结算→结算到 20 后可切 `greedy`
+- [ ] 同策略幂等：转生后已选 `training` 仍可提交自身，不被等级拦截，`active` 高亮
+- [ ] `training` 时 `AREAS` 原 `atk` 不变，`log.monsterBaseAtk=100` 则 `log.monster.atk=120`
+- [ ] `desperate` 低血分步 floor 校验（非 `*1.68` 合并）
+- [ ] 失败/超时经验同样受 `greedy/training` 影响；`doubleKill` 最后翻倍
+- [ ] `strategyCdRemaining` ms 误差 <2s，`time/from/to` 可渲染
+- [ ] 切换 31 条时截断回 30
+- [ ] `<button disabled aria-pressed>` 且失败 `alert`
+- [ ] `pnpm test && pnpm build && git diff --check 0`，benchmark：策略路径 p95 <5ms（`node --test` 计时或 1k 次 `calculateIdle` 均值）
 
 ## 10. 风险与回滚
 
-- 数值风险：仅改 `STRATEGIES` 热修
-- 回滚：分支删除即回退；存档 `strategy` 保留，回退后按 `balanced` 语义忽略
+常更热修；分支删除回退，存档字段按 `balanced` 忽略。
 
 ## 11. 实施步骤
 
-1. `server/data.js` 增 `STRATEGIES/STRATEGY_CD_MS` 并加入 `module.exports`
-2. `server/engine.js` 增迁移、公式定版、`training` 副本、`__setNow/__setRandom` seam
-3. `server/index.js` 增 `POST /strategy`（含旧策略结算边界与校验）与 `getPlayerView` 透出
-4. `client/src/api.js` + `MapView.vue` + `App.vue` 事件透传 + `style.css` 变量
-5. `package.json` 增 `test` 脚本与单测，`pnpm test && pnpm build` 验证后提交 PR（不合入）
+1. `data.js` 增 `STRATEGIES/STRATEGY_CD_MS` 并导出
+2. `engine.js` 增迁移、公式、`buildBattleMonster`、seam 与 `__resetSeams`
+3. `index.js` 按 §5.2 两阶段实现 `POST /strategy` 与 `getPlayerView`
+4. `api.js` + `MapView.vue` + `App.vue` + `style.css`
+5. `test` 单测 + `pnpm test && pnpm build`
