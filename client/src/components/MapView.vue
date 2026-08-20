@@ -53,7 +53,7 @@
       </div>
     </div>
 
-    <!-- 下半：战斗日志 -->
+    <!-- 下半：战斗日志（含飘字 overlay） -->
     <div class="log-section card">
       <div class="log-header">
         <span>⚔ 战斗日志</span>
@@ -61,6 +61,14 @@
           <span class="hourglass" :class="{ running: countdown > 0 }">⏳</span>
           <span class="countdown">{{ countdown }}s</span>
         </span>
+      </div>
+      <div class="damage-layer" aria-hidden="true">
+        <div v-for="d in damageItems" :key="d.id" class="dmg-float" :class="[d.kind, { crit: d.crit }]" :style="{ left: d.x + '%', top: d.y + '%' }">
+          <span v-if="d.kind==='heal'">+{{ d.value }}</span>
+          <span v-else-if="d.kind==='miss'">闪避</span>
+          <span v-else>-{{ d.value }}</span>
+          <span v-if="d.crit" class="dmg-crit-tag">暴击</span>
+        </div>
       </div>
       <div class="log-body" ref="logBody">
         <div v-if="!player.logs.length" class="log-empty">正在寻找猎物...</div>
@@ -300,6 +308,57 @@ const logBody = ref(null)
 const expandedLogs = ref(new Set())
 const currentAreaName = computed(() => props.areas.find(a => a.id === props.player.currentArea)?.name || '')
 
+// ====== 飘字 overlay ======
+const damageItems = ref([])
+const lastBattleTime = ref(null)
+let dmgSeq = 0
+let dmgTimers = []
+
+function spawnDamageFromLog(log){
+  if(!log || log.type !== 'battle' || !Array.isArray(log.detail)) return
+  if(lastBattleTime.value === log.time) return
+  lastBattleTime.value = log.time
+  const actions = []
+  for(const r of log.detail){
+    for(const a of (r.actions||[])){
+      if(a.damage !== undefined) actions.push(a)
+      else if(a.heal !== undefined) actions.push(a)
+      else if(a.dodge) actions.push(a)
+    }
+  }
+  // 截断 12 个，取最新回合的伤害优先
+  const slice = actions.slice(-12)
+  slice.forEach((a, idx)=>{
+    const id = Date.now() + '_' + (dmgSeq++)
+    let kind = 'player-dmg'
+    let value = a.damage
+    let crit = !!a.crit
+    if(a.heal !== undefined){ kind='heal'; value=a.heal }
+    else if(a.dodge){ kind='miss'; value=0 }
+    else if(a.actor==='monster'){ kind='monster-dmg' }
+    const item = { id, kind, value, crit, x: 20 + Math.random()*60, y: 18 + Math.random()*42 }
+    const delay = idx * 80
+    const t = setTimeout(()=>{
+      damageItems.value.push(item)
+      if(damageItems.value.length>12) damageItems.value = damageItems.value.slice(-12)
+      const rm = setTimeout(()=>{ damageItems.value = damageItems.value.filter(x=>x.id!==id) }, 1600)
+      dmgTimers.push(rm)
+    }, delay)
+    dmgTimers.push(t)
+  })
+}
+
+// 首次挂载不飘旧日志，仅记录时间
+if(props.player.logs && props.player.logs.length){
+  const latest = props.player.logs[0]
+  if(latest) lastBattleTime.value = latest.time
+}
+watch(() => props.player.logs, (logs)=>{
+  if(!logs || !logs.length) return
+  const latest = logs[0]
+  if(latest && latest.type==='battle') spawnDamageFromLog(latest)
+})
+
 // ====== 沙漏倒计时 ======
 const countdown = ref(5)
 let countdownTimer = null
@@ -313,6 +372,7 @@ watch(() => props.player.logs, () => {
 }, { deep: true })
 
 onUnmounted(() => { if (countdownTimer) clearInterval(countdownTimer) })
+onUnmounted(()=>{ dmgTimers.forEach(t=>clearTimeout(t)); dmgTimers=[] })
 
 watch(() => props.player.logs, () => {
   nextTick(() => { if (logBody.value) logBody.value.scrollTop = 0 })
@@ -501,9 +561,22 @@ function dropQuality(name) {
 .cs-val.agi { color: var(--success); }
 
 /* 战斗日志 */
-.log-section { flex: 1; display: flex; flex-direction: column; min-height: 180px; overflow: hidden; }
+.log-section { flex: 1; display: flex; flex-direction: column; min-height: 180px; overflow: hidden; position: relative; }
 .log-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.4rem; border-bottom: 1px solid var(--rule); margin-bottom: 0.3rem; font-size: 0.85rem; }
 .countdown-timer { display: flex; align-items: center; gap: 0.2rem; font-size: 0.7rem; color: var(--muted); }
+/* 飘字 overlay */
+.damage-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+.dmg-float { position: absolute; font-weight: 800; font-size: 0.95rem; text-shadow: 0 1px 4px rgba(0,0,0,0.6); animation: dmgFloat var(--duration-slow) var(--ease-out) forwards; white-space: nowrap; }
+.dmg-float.player-dmg { color: var(--danger); }
+.dmg-float.monster-dmg { color: var(--accent2); }
+.dmg-float.heal { color: var(--success); }
+.dmg-float.miss { color: var(--muted); font-size: 0.78rem; font-weight: 600; animation: missFloat var(--duration-normal) var(--ease-out) forwards; }
+.dmg-float.crit { color: #ff6b3d; font-size: 1.15rem; transform: scale(1.15); animation: dmgFloat var(--duration-slow) var(--ease-out) forwards, critShake 0.15s 0.05s; }
+.dmg-crit-tag { font-size: 0.58rem; margin-left: 0.15rem; vertical-align: super; }
+@keyframes dmgFloat { 0% { transform: translateY(0) scale(1); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(-60px) scale(1); opacity: 0; } }
+@keyframes missFloat { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(-32px); opacity: 0; } }
+@keyframes critShake { 0%,100% { transform: translateX(0) scale(1.15); } 25% { transform: translateX(-2px) scale(1.3); } 50% { transform: translateX(2px) scale(1.3); } 75% { transform: translateX(-1px) scale(1.3); } }
+@media (prefers-reduced-motion: reduce){ .dmg-float, .dmg-float.crit { animation: dmgFade var(--duration-slow) var(--ease-out) forwards; } @keyframes dmgFade { 0% { opacity:0;} 12%{opacity:1;} 100%{opacity:0;} } }
 .hourglass { display: inline-block; font-size: 0.75rem; }
 .hourglass.running { animation: spin 2s linear infinite; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }

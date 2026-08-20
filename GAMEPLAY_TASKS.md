@@ -10,13 +10,13 @@
 | 维度 | 数值 |
 |------|------|
 | 总任务数 | 33 |
-| ✅ 已完成 | 2 |
+| ✅ 已完成 | 3 |
 | 🟡 进行中 | 0 |
-| ⬜ 待办 | 31 |
-| 高优先剩余 | 8 / 10 |
-| 完成率 | 6% |
+| ⬜ 待办 | 30 |
+| 高优先剩余 | 7 / 10 |
+| 完成率 | 9% |
 
-> 更新时间：2026-08-20 · 当前分支：`feat/T-004-strategy` · 最后完成：`T-004 战斗策略模式选择`
+> 更新时间：2026-08-20 · 当前分支：`feat/T-001-damage-numbers` · 最后完成：`T-001 战斗伤害数字飘字`
 
 ---
 
@@ -81,18 +81,18 @@
 
 ### 2.1 战斗可视化与反馈
 
-#### T-001 战斗伤害数字飘字 — 🟡 高优先 · 难度 ★★ · ⬜ 待办
+#### T-001 战斗伤害数字飘字 — 🟡 高优先 · 难度 ★★ · ✅ 已完成
 
 在战斗日志上方/侧边添加浮动伤害数字（红色物理、蓝色魔法、绿色治疗、黄色暴击放大），向上飘移淡出约 1.5s，暴击更大+抖动。
 
 - 技术要点：
-  - `client/src/components/MapView.vue` 战斗区域加 overlay 层
-  - `server/engine.js` `calculateIdle()` 已返回伤害数据，前端消费即可
+  - `client/src/components/MapView.vue` 战斗区域加 `damage-layer` overlay，`damageItems` 队列（`damage/heal/dodge`），`translateY(-60px)+opacity 0→1→0` 1.5s，暴击 `scale(1.3)`+`critShake`，`prefers-reduced-motion` 降级，`pointer-events:none` 隔离
+  - `server/engine.js` `calculateIdle()` 已返回伤害数据，前端消费 `log.detail[].actions`
   - CSS `translateY(-60px) + opacity 0→1→0`，暴击 `scale(1.3)` 加粗
 - 涉及文件：`client/src/components/MapView.vue`、`client/src/style.css`
 - 依赖：无
-- 状态：⬜ 待办
-- 分支：—
+- 状态：✅ 已完成
+- 分支：`feat/T-001-damage-numbers` · Spec：`docs/specs/T-001-damage-numbers-spec.md` · 完成时间：2026-08-20 · 验收：`build`/`diff --check` 通过，动画使用 `var(--duration-*/--ease-*)` 无硬编码
 
 #### T-002 战斗动作动画与特效 — 🟡 高优先 · 难度 ★★★ · ⬜ 待办
 
@@ -351,7 +351,7 @@ JWT + `express-rate-limit` + 二次确认 + bcrypt + 参数校验。
 
 | ID | 任务 | 优先级 | 难度 | 依赖 | 状态 | 分支 | 完成时间 | 备注 |
 |----|------|--------|------|------|------|------|----------|------|
-| T-001 | 战斗伤害数字飘字 | 🔴 高 | ★★ | 无 | ⬜ 待办 | — | — |  |
+| T-001 | 战斗伤害数字飘字 | 🔴 高 | ★★ | 无 | ✅ 已完成 | `feat/T-001-damage-numbers` | 2026-08-20 | 前端 overlay 飘字，`build`/`diff --check` 通过 |
 | T-002 | 战斗动作动画与特效 | 🔴 高 | ★★★ | T-001 | ⬜ 待办 | — | — |  |
 | T-003 | 战斗 BGM 与音效 | 🟢 低 | ★★ | 无 | ⬜ 待办 | — | — |  |
 | T-004 | 战斗策略模式选择 | 🔴 高 | ★★ | 无 | ✅ 已完成 | `feat/T-004-strategy` | 2026-08-20 | 单一数据源+两阶段事务+4列网格 |
@@ -457,4 +457,5 @@ pnpm build            # 构建前端到 client/dist/
 
 | 日期 | 变更 | 分支 |
 |------|------|------|
+| 2026-08-20 | T-001 战斗伤害数字飘字完成（overlay+1.5s飘字+暴击抖动） | `feat/T-001-damage-numbers` |
 | 2026-08-20 | 初始化 Markdown 可追踪版，T-030 标记已完成 | `feat/leaderboard-T030` |
