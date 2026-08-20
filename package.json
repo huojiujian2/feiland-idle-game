@@ -6,7 +6,8 @@
     "dev:server": "node server/index.js",
     "dev:client": "vite",
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "node --test server/**/*.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

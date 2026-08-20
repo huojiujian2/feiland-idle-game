@@ -2,7 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const store = require('./store');
-const { AREAS, JOB_TREE, SHOP_ITEMS, EQUIP_TEMPLATES, QUALITY_COLORS, MATERIAL_PRICES, MONSTER_SKILLS, ENCHANT_RECIPES, RACE_EVOLUTION, LAWS, AFFIX_TREE, AFFIX_LEVELS } = require('./data');
+const { AREAS, JOB_TREE, SHOP_ITEMS, EQUIP_TEMPLATES, QUALITY_COLORS, MATERIAL_PRICES, MONSTER_SKILLS, ENCHANT_RECIPES, RACE_EVOLUTION, LAWS, AFFIX_TREE, AFFIX_LEVELS, STRATEGIES, STRATEGY_CD_MS } = require('./data');
 const {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
   chooseJob, equipItem, unequipItem, useConsumable, buyItem,
@@ -10,7 +10,8 @@ const {
   evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
   equipAffix, unequipAffix,
   getPowerScore, getTotalStats, getReadonlyPlayer, getStageFull,
-  maybeResetWeeklyBossKills
+  maybeResetWeeklyBossKills,
+  getNow
 } = require('./engine');
 
 const app = express();
@@ -41,7 +42,7 @@ app.post('/api/register', (req, res) => {
     username,
     password,
     hasCharacter: false,
-    createdAt: Date.now()
+    createdAt: getNow()
   });
   console.log(`新账号注册: ${username}`);
   res.json({ success: true, message: '注册成功' });
@@ -120,7 +121,7 @@ app.post('/api/player/:username/area', (req, res) => {
   }
 
   player.currentArea = areaId;
-  player.lastTick = Date.now();
+  player.lastTick = getNow();
   store.setPlayer(player.username, player);
   res.json({ success: true, data: getPlayerView(player) });
 });
@@ -457,31 +458,101 @@ app.post('/api/player/:username/reincarnate', (req, res) => {
   res.json({ success: true, data: getPlayerView(player) });
 });
 
+// ====== 战斗策略 ======
+app.post('/api/player/:username/strategy', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const { strategy } = req.body;
+
+  // A — 无副作用校验（必须在任何迁移/写盘前，避免 __proto__ 等非法请求污染存档）
+  if (typeof strategy !== 'string' || !Object.hasOwn(STRATEGIES, strategy)) {
+    return res.json({ success: false, message: '策略不存在' });
+  }
+  // 计算迁移后有效值（不原地修改），用于幂等与 CD 判断，确保任意 A 失败无副作用
+  const { migratePlayer } = require('./engine');
+  const effStrategy = (typeof player.strategy === 'string' && Object.hasOwn(STRATEGIES, player.strategy)) ? player.strategy : 'balanced';
+  const effChangedAt = Number.isFinite(player.strategyChangedAt) ? player.strategyChangedAt : 0;
+  // 幂等：同策略直接成功，绕过等级与 CD；若需迁移则落盘
+  if (strategy === effStrategy) {
+    const beforeS = player.strategy, beforeC = player.strategyChangedAt;
+    migratePlayer(player);
+    const migrated = (beforeS !== player.strategy) || (beforeC !== player.strategyChangedAt);
+    if (migrated) { store.setPlayer(player.username, player); store.save(); }
+    return res.json({ success: true, data: getPlayerView(player) });
+  }
+  if (effChangedAt !== 0 && getNow() - effChangedAt < STRATEGY_CD_MS) {
+    const remain = Math.ceil((STRATEGY_CD_MS - (getNow() - effChangedAt)) / 1000);
+    return res.json({ success: false, message: `策略切换冷却中，剩余${remain}s` });
+  }
+  // 全部 A 通过后再原地迁移（旧存档缺失字段、背包清理等），进入 B
+  migratePlayer(player);
+
+  // B — 旧策略结算（按旧 strategy）
+  maybeResetWeeklyBossKills(store);
+  const result = calculateIdle(player);
+  // C — 等级复核（以结算后等级为准）
+  if (player.level < STRATEGIES[strategy].reqLevel) {
+    // 保留 B 的结算结果并落盘
+    store.setPlayer(player.username, player);
+    // 关窗：若 B 无收益，显式推进 lastTick 避免 <3s 窗口追溯
+    if (result === null) {
+      player.lastTick = getNow();
+      store.setPlayer(player.username, player);
+    }
+    store.save();
+    return res.json({ success: false, message: `需要 Lv.${STRATEGIES[strategy].reqLevel} 才能使用该策略`, data: getPlayerView(player) });
+  }
+
+  // C2 — 写入新策略
+  const old = player.strategy;
+  player.strategy = strategy;
+  player.strategyChangedAt = getNow();
+  // 关窗：若 B 无收益，显式推进
+  if (result === null) {
+    player.lastTick = getNow();
+  }
+  player.logs.push({
+    time: getNow(),
+    type: 'strategy',
+    from: old,
+    to: strategy,
+    strategy,
+    text: `策略切换：${STRATEGIES[old].name}→${STRATEGIES[strategy].name}`
+  });
+  if (player.logs.length > 30) player.logs = player.logs.slice(-30);
+  store.setPlayer(player.username, player);
+  store.save();
+  res.json({ success: true, data: getPlayerView(player) });
+});
+
 // BOSS 榜仅由权威战斗结算写入（engine.calculateIdle 判定 isBoss），不再提供公开计数入口，避免伪造
 
-// ====== 定时任务：每5秒计算所有玩家的挂机收益 ======
-setInterval(() => {
-  // 跨周不丢数据：写入前原子切周（全局）
-  maybeResetWeeklyBossKills(store);
-  const players = store.getAllPlayers();
-  for (const player of players) {
-    calculateIdle(player);
-  }
-  if (players.length > 0) {
-    store.save();
-  }
-}, 5000);
+// ====== 定时任务（仅主进程，避免测试挂起） ======
+if (require.main === module) {
+  setInterval(() => {
+    // 跨周不丢数据：写入前原子切周（全局）
+    maybeResetWeeklyBossKills(store);
+    const players = store.getAllPlayers();
+    for (const player of players) {
+      calculateIdle(player);
+    }
+    if (players.length > 0) {
+      store.save();
+    }
+  }, 5000);
 
-// ====== 后台周重置（兜底，避免 GET 需副作用） ======
-setInterval(() => maybeResetWeeklyBossKills(store), 60 * 1000);
+  // ====== 后台周重置（兜底，避免 GET 需副作用） ======
+  setInterval(() => maybeResetWeeklyBossKills(store), 60 * 1000);
 
-setInterval(() => store.save(), 30000);
+  setInterval(() => store.save(), 30000);
 
-app.listen(PORT, () => {
-  console.log(`\n========================================`);
-  console.log(`  费兰德世界 - 挂机服务器已启动 v0.3`);
-  console.log(`  API: http://localhost:${PORT}`);
-  console.log(`  前端: http://localhost:3000`);
-  console.log(`  系统: 账号密码/种族进化/附魔/法则/登神`);
-  console.log(`========================================\n`);
-});
+  app.listen(PORT, () => {
+    console.log(`\n========================================`);
+    console.log(`  费兰德世界 - 挂机服务器已启动 v0.3`);
+    console.log(`  API: http://localhost:${PORT}`);
+    console.log(`  前端: http://localhost:3000`);
+    console.log(`  系统: 账号密码/种族进化/附魔/法则/登神`);
+    console.log(`========================================\n`);
+  });
+}
+module.exports = app;

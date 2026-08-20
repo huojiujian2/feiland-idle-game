@@ -542,12 +542,12 @@ function expToNext(level) {
   return Math.floor(50 * Math.pow(level, 1.5));
 }
 
-// 生成一件装备实例
-function createEquipItem(templateId) {
+// 生成一件装备实例（静态数据模块，uid 由调用方注入以保持可测试性）
+function createEquipItem(templateId, uid) {
   const t = EQUIP_TEMPLATES[templateId];
   if (!t) return null;
   return {
-    uid: Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+    uid: uid || (Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
     templateId,
     name: t.name,
     slot: t.slot,
@@ -671,11 +671,23 @@ const MATERIAL_PRICES = {
 // 装备出售价格（按品质）
 const EQUIP_SELL_PRICES = { normal: 20, fine: 80, epic: 300, legend: 1500 };
 
+// ====== 战斗策略（T-004 单一数据源） ======
+const STRATEGIES = {
+  aggressive: { name: '全力进攻', desc: 'ATK+15% DEF-10%', reqLevel: 1, effects: { atk: 0.15, def: -0.10 } },
+  defensive: { name: '稳健防守', desc: 'DEF+15% ATK-10% 回复+50%', reqLevel: 1, effects: { def: 0.15, atk: -0.10, regen: 0.50 } },
+  balanced: { name: '平衡', desc: '无加成', reqLevel: 1, effects: {} },
+  greedy: { name: '贪婪掠夺', desc: 'GOLD+30% EXP-20% 掉落+5%', reqLevel: 20, effects: { gold: 0.30, exp: -0.20, drop: 0.05 } },
+  desperate: { name: '背水一战', desc: 'ATK+40% DEF-30% 低血再+20%', reqLevel: 40, effects: { atk: 0.40, def: -0.30, desperateAtk: 0.20, hpThreshold: 0.30 } },
+  training: { name: '极限修炼', desc: 'EXP+50% GOLD-50% 怪物ATK+20%', reqLevel: 60, effects: { exp: 0.50, gold: -0.50, monsterAtk: 0.20 } }
+};
+const STRATEGY_CD_MS = 5 * 60 * 1000;
+
 module.exports = {
   AREAS, EQUIP_TEMPLATES, QUALITY_COLORS, JOB_TREE, SHOP_ITEMS,
   MATERIAL_PRICES, EQUIP_SELL_PRICES,
   RACE_EVOLUTION, ENCHANT_RECIPES, MAX_ENCHANT_SLOTS, LAWS, ASCENSION,
   MONSTER_SKILLS,
   AFFIX_LEVELS, AFFIX_TREE,
+  STRATEGIES, STRATEGY_CD_MS,
   getStage, expToNext, createEquipItem
 };

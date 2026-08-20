@@ -22,6 +22,24 @@
       </div>
     </div>
 
+    <!-- 战斗策略 -->
+    <div class="strategy-section card" v-if="player.strategies">
+      <div class="section-header"><span>⚔ 战斗策略</span><span v-if="strategyCdText" class="strategy-cd">{{ strategyCdText }}</span></div>
+      <div class="strategy-grid">
+        <button v-for="s in player.strategies" :key="s.id"
+          class="strategy-btn"
+          :class="{ active: s.active, locked: !s.unlocked && !s.active }"
+          :disabled="(!s.unlocked && !s.active) || (strategyCdRemaining>0 && !s.active)"
+          :aria-pressed="s.active ? 'true' : 'false'"
+          @click="$emit('strategy-change', s.id)">
+          <span class="strategy-name">{{ s.name }}</span>
+          <span class="strategy-desc">{{ s.desc }}</span>
+          <span v-if="!s.unlocked && !s.active" class="strategy-lock">🔒Lv.{{ s.reqLevel }}</span>
+          <span v-else-if="s.active" class="strategy-tag">当前</span>
+        </button>
+      </div>
+    </div>
+
     <!-- 战斗属性面板 -->
     <div class="combat-stats card" v-if="player.combatStats">
       <div class="section-header"><span>⚔ 战斗属性</span></div>
@@ -252,7 +270,31 @@
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 
 const props = defineProps(['player', 'areas'])
-defineEmits(['select'])
+defineEmits(['select', 'strategy-change'])
+
+const strategyCdRemaining = ref(0)
+let strategyCdTimer = null
+
+function refreshStrategyCd(){
+  const v = props.player.strategyCdRemaining
+  strategyCdRemaining.value = typeof v === 'number' ? v : 0
+}
+watch(() => props.player.strategyCdRemaining, refreshStrategyCd, { immediate:true })
+watch(() => props.player.strategy, refreshStrategyCd)
+
+watch(() => strategyCdRemaining.value, (val)=>{
+  if(strategyCdTimer) clearInterval(strategyCdTimer)
+  if(val>0){
+    strategyCdTimer = setInterval(()=>{ strategyCdRemaining.value = Math.max(0, strategyCdRemaining.value - 1000) }, 1000)
+  }
+})
+onUnmounted(()=>{ if(strategyCdTimer) clearInterval(strategyCdTimer) })
+const strategyCdText = computed(()=>{
+  if(strategyCdRemaining.value<=0) return ''
+  const s = Math.ceil(strategyCdRemaining.value/1000)
+  const m = Math.floor(s/60), sec = s%60
+  return m>0 ? `冷却 ${m}m${sec}s` : `冷却 ${sec}s`
+})
 
 const logBody = ref(null)
 const expandedLogs = ref(new Set())
@@ -605,6 +647,21 @@ function dropQuality(name) {
 .drop-chip.q-rare { color: var(--accent2); background: rgba(157,140,240,0.08); border: 1px solid rgba(157,140,240,0.2); }
 .drop-chip.q-uncommon { color: var(--success); background: rgba(94,218,122,0.08); border: 1px solid rgba(94,218,122,0.2); }
 .drop-chip.q-common { color: var(--dim); background: rgba(157,155,184,0.08); }
+
+/* 战斗策略 — 4列网格（GAMEPLAY_TASKS:421）仅 var(--*) */
+.strategy-section { padding: 0.6rem 0.8rem; }
+.strategy-cd { font-size: 0.68rem; color: var(--accent); font-weight: 600; }
+.strategy-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; }
+@media (max-width: 480px){ .strategy-grid { grid-template-columns: repeat(2, 1fr); } }
+.strategy-btn { display:flex; flex-direction:column; gap:0.15rem; padding:0.45rem 0.5rem; border:1px solid var(--rule); border-radius:6px; background: var(--lb-row-bg); cursor:pointer; transition: all var(--duration-normal) var(--ease-out); text-align:left; }
+.strategy-btn:hover:not(:disabled) { border-color: var(--accent2); background: var(--lb-row-hover); }
+.strategy-btn.active { border-color: var(--accent); background: var(--lb-gold-bg); box-shadow: 0 0 0 1px var(--accent); }
+.strategy-btn.locked { opacity:0.5; cursor:not-allowed; }
+.strategy-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.strategy-name { font-size:0.78rem; font-weight:700; color: var(--ink); }
+.strategy-desc { font-size:0.62rem; color: var(--muted); }
+.strategy-lock { font-size:0.62rem; color: var(--dim); }
+.strategy-tag { font-size:0.62rem; color: var(--accent); font-weight:600; }
 
 /* 展开动画 */
 .expand-enter-active, .expand-leave-active { transition: all var(--duration-normal) var(--ease-out); overflow: hidden; }
