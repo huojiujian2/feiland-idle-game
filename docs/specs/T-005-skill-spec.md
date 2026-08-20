@@ -1,7 +1,7 @@
-# T-005 手动技能释放（主动词条实战） — Spec v4
+# T-005 手动技能释放（主动词条实战） — Spec v5
 
 > 优先级 🔴 高 · 难度 ★★★★ · 分支 `feat/T-005-skill` · 依赖 无 · 对应 `GAMEPLAY_GUIDE.html:2.2 T-005` / `GAMEPLAY_TASKS.md:2.2`
-> 本版修复 v3 剩余 3×P1（A2-04 复合/普攻回归/顺序断言）+ 回合顶部判定契约，其余沿用 v3
+> 本版修复 v4 剩余 1×P0 + 2×P1（返回结构/复合日志/旧机制保留）+ `dmgBonus` 一致性，其余沿用 v4
 
 ## 1. 背景与目标
 
@@ -18,7 +18,7 @@
 
 | 指南六类 | `effect.type` 精确匹配 | 归一化执行 | 本版是否改 `combat`/结算 |
 |---|---|---|---|
-| damage | `damage` | `calcDamage(combat.atk, mDef, mult, dmgBonus=0, 0, ignoreDef, crit/critDmg)` 追伤，不替代普攻 | 是 |
+| damage | `damage` | `calcDamage(combat.atk, mDef, mult, combat.dmgBonus, 0, ignoreDef, crit/critDmg)` 追伤，不替代普攻（`dmgBonus` 来自 `getLawBonus`，`defBonus` 固定 0） | 是 |
 | heal | `heal` | `pHp = min(maxHp, pHp+floor(maxHp*value))` | 是 |
 | atk_buff | `atk_buff` | `combat.atk = floor(combat.atk*(1+value))` 持续 `turns` | 是 |
 | def_buff | `def_buff` | `combat.def = floor(combat.def*(1+value))` 持续 `turns` | 是 |
@@ -86,7 +86,7 @@ function simulateBattle(player, monster){
     buffs = remain;
   }
   function doPlayerNormalAction(){
-    // 统一普通攻击：保留现有被动（吸血 calcDamage 后回血），彻底移除 pickPlayerSkill 随机
+    // 统一普通攻击：保留现有被动（吸血），彻底移除 pickPlayerSkill 随机
     const r = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
     mCurHp -= r.value;
     if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(r.value*combat.lifesteal));
@@ -94,8 +94,14 @@ function simulateBattle(player, monster){
     return r;
   }
   function doMonsterNormalAction(){
+    // 完整保留旧战斗行为（闪避/反伤/regen/healBonus/dmgTaken/thorns/dodgeAtk/deathShield/revive 均不变）
     if(_rand() < (combat.dodge||0)){
       actions.push({ actor:'player', skill:'闪避!', dodge:true, targetHp:pHp, targetMaxHp:combat.maxHp });
+      // 保留：风行闪避反击（旧 engine.js:861）
+      if(combat.dodgeAtk){
+        const c = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, 1, combat.critDmg);
+        mCurHp -= c.value;
+      }
       return;
     }
     const mSkill = pickMonsterSkill(monster);
@@ -106,6 +112,12 @@ function simulateBattle(player, monster){
     pHp -= dmg;
     if(combat.thorns>0) mCurHp -= Math.floor(dmg*combat.thorns);
     if(combat.regen>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.regen));
+    if(combat.healBonus>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.healBonus*0.1)); // 保留 healBonus
+    // 保留：免死护盾（旧 897）
+    if(pHp<=0 && combat.deathShield>0){
+      pHp=Math.floor(combat.maxHp*combat.deathShield);
+      // 护盾消耗后置 0，由外层判定避免重复
+    }
     actions.push({ actor:'monster', skill:skillName, damage:dmg, targetHp:Math.max(0,pHp), targetMaxHp:combat.maxHp });
   }
   // 校验指南：玩家技能不使用 defBonus，calcDamage 第5参传 0
@@ -129,11 +141,12 @@ function simulateBattle(player, monster){
             const d = calcDamage(combat.atk, mDef, eff.mult, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
             mCurHp -= d.value;
             if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(d.value*combat.lifesteal));
+            // 复合时保留怪物目标 HP，治疗另记 selfHeal/selfHp，避免覆盖
             actions.push({ actor:'player', skill:activeAffix.name, damage:d.value, crit:d.isCrit, type:'skill', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
             skillPushed = true;
           } else if(eff.type==='heal'){
             const h=Math.floor(combat.maxHp*eff.value); pHp=Math.min(combat.maxHp,pHp+h);
-            actions.push({ actor:'player', skill:activeAffix.name, heal:h, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+            actions.push({ actor:'player', skill:activeAffix.name, heal:h, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp, healTargetHp:pHp });
             skillPushed = true;
           } else if(['atk_buff','def_buff','agi_buff'].includes(eff.type)){
             const key=eff.type.split('_')[0]; applyBuff(key, eff.value, eff.turns, round);
@@ -147,14 +160,12 @@ function simulateBattle(player, monster){
             actions.push({ actor:'player', skill:activeAffix.name, type:'skill', note:eff.type, targetHp:pHp, targetMaxHp:combat.maxHp });
             skillPushed = true;
           }
-          // 统一处理附带 heal（覆盖 A2-04 def_buff+heal 与 A4-02 damage+heal 等所有含 heal 的主动）
+          // 统一附带 heal（A2-04 def_buff+heal / A4-02 damage+heal 等）：不覆盖 damage 的怪物 targetHp，另记 heal/selfHp
           if(skillPushed && eff.heal){
             const h=Math.floor(combat.maxHp*eff.heal); pHp=Math.min(combat.maxHp,pHp+h);
-            // 将 heal 合并进最后一条 skill 日志（若已有 heal 则累加，否则追加 heal 字段）
             const last = actions[actions.length-1];
             if(last.heal) last.heal += h; else last.heal = h;
-            // 同步 targetHp
-            last.targetHp = pHp;
+            last.selfHeal = h; last.selfHp = pHp; last.healTargetHp = pHp;
           }
         }
       } else if(actor==='monster'){
@@ -166,9 +177,17 @@ function simulateBattle(player, monster){
     }
     rounds.push({ round, actions, pHp:Math.max(0,pHp), mHp:Math.max(0,mCurHp), pActions:curPActions, mActions:curMActions });
     if(mCurHp<=0){ result='win'; break; }
-    if(pHp<=0){ /* 复活/护盾 */ }
+    if(pHp<=0){
+      // 保留：光明系复活（旧 933-938），deathShield 已在 doMonsterNormalAction 处理
+      if(combat.revive>0 && !revived){
+        pHp=Math.floor(combat.maxHp*combat.revive); revived=true;
+        rounds.push({ round, actions:[{ actor:'player', skill:'圣光复生!', revive:true, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp }], pHp, mHp:Math.max(0,mCurHp), pActions:0, mActions:0 });
+      } else { result='lose'; break; }
+    }
   }
-  return { result, rounds, playerHp:Math.max(0,pHp), playerMaxHp:combat.maxHp, monsterHp:Math.max(0,mCurHp), skillGoldBonus };
+  // P0：保留原有全部返回字段，仅新增 skillGoldBonus，避免破坏 calculateIdle/log 读取
+  pMp=Math.min(combat.maxMp, pMp+Math.floor(combat.maxMp*0.1));
+  return { result, rounds, playerHp:Math.max(0,pHp), playerMaxHp:combat.maxHp, playerMp:pMp, playerMaxMp:combat.maxMp, monsterHp:Math.max(0,mCurHp), monsterMaxHp:mHp, monsterName:monster.name, agiRatio:agiRatio.toFixed(2), combatStats:{ atk:combat.atk, def:combat.def, agi:combat.agi, crit:combat.crit, dodge:combat.dodge }, skillGoldBonus };
 }
 ```
 
@@ -202,7 +221,7 @@ if(battle.result==='win'){
 - `MapView.vue`：
   - `processActions()` 的 `combo` 分支保留 `type:'skill'` 时追加 `skill-action`（紫色高亮），不以 `skill` 字段判别；
   - `actionClass(a)`：`a.type==='skill'`→`skill-action`；
-  - 日志字段：所有 `type:'skill'` 的 `actions` 必须含 `targetHp/targetMaxHp`（damage 行取 `mCurHp/mHp`，heal/buff 行取 `pHp/maxHp`），`MapView.vue:154` 的 `targetHp` 渲染不再空；
+  - 日志字段：所有 `type:'skill'` 均含 `targetHp/targetMaxHp`（damage 取怪物，heal/buff 取玩家），复合 `damage+heal` 的 damage 行保留怪物 `targetHp`，另加 `heal/selfHp/healTargetHp` 字段，前端优先渲染 `damage` 的怪物血条、附带 `heal` 另行显示 `+HP`，不再覆盖；
   - 仅日志的 `note` 行：模板增加 `v-else-if="a.note"` 兜底显示 `{{a.skill}}（{{a.note}}）`，避免空行。
 - `style.css`：`--skill-highlight/--skill-bg/--skill-border` 映射 `var(--accent2)` 等，组件仅 `var(--skill-*)`。
 
