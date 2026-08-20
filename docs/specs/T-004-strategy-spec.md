@@ -1,7 +1,7 @@
-# T-004 战斗策略模式选择 — Spec v4
+# T-004 战斗策略模式选择 — Spec v5
 
 > 优先级 🔴 高 · 难度 ★★ · 分支 `feat/T-004-strategy` · 依赖 无（认证见 §5.6）· 对应 `GAMEPLAY_TASKS.md:2.2`
-> 本版修复 v3 的 2 P1 + 3 P2（C 失败事务、<3s 窗口、路由 seam、doubleKill 范围、p95 口径、desperate 快照），其余副本/回归/校验等沿用 v3
+> 本版修复 v4 的 1 P1 + 2 P2（C 失败落盘、benchmark 新鲜快照、desperate 与低血词条叠加），其余沿用 v4
 
 ## 1. 背景与目标
 
@@ -64,13 +64,13 @@ module.exports = { AREAS, ..., STRATEGIES, STRATEGY_CD_MS, getStage, expToNext, 
   - B2 `const result = calculateIdle(player)` // 内部用旧 `strategy` 与 `_now()/_rand()`
   - B2 产生的 `exp/gold/drops/levelUps` 立即落盘：若 `result` 非空已在 `calculateIdle` 内更新 `player.exp/gold/inventory` 与 `lastTick=_now()`；若 `result===null`（`elapsed<3000`）则 **不**更新 `lastTick`，需由 C 统一关窗（见下）
 
-- **C — 等级复核与写入（以 B 结算后等级为准）**
-  - C1 以结算后 `player.level` 复核：`player.level < STRATEGIES[target].reqLevel` → 返回 `success:false, message:'需要 Lv.X'` **但保留 B 的结算结果**（不回滚）：`store.setPlayer(player)` 已提交的 `exp/gold/lastTick` 保留，仅 `strategy` 不变
-  - C2 通过则 `old=player.strategy; player.strategy=target; player.strategyChangedAt=_now();` 追加日志（§5.5）并在追加后再次截断
-  - C3 关窗：若 B 无收益（`result===null`）则显式 `player.lastTick = _now()`，避免 <3s 窗口被下一次战斗按新策略追溯
-  - C4 `store.setPlayer` + 返回 `getPlayerView`
+- **C — 等级复核与写入（以 B 结算后等级为准，B 结果必须落盘）**
+  - C1 以结算后 `player.level` 复核：`player.level < STRATEGIES[target].reqLevel` → **保留 B 的结算结果并落盘**：`store.setPlayer(player)`（必要时 `store.save()`，见 `store.js:48-53` 定时落盘外显式持久化），再返回 `success:false, message:'需要 Lv.X', data:getPlayerView(player)`，前端可立即看到已获得的 `exp/gold/level/logs/lastTick`，仅 `strategy` 不变
+  - C2 通过则 `old=player.strategy; player.strategy=target; player.strategyChangedAt=getNow();` 追加日志（§5.5）并在追加后再次截断
+  - C3 关窗：若 B 无收益（`result===null`）则显式 `player.lastTick = getNow()`，避免 <3s 窗口被下一次战斗按新策略追溯
+  - C4 `store.setPlayer(player)`（必要时 `store.save()`）+ 返回 `success:true, data:getPlayerView(player)`
 
-因此 Lv.19 未结算→B 结算到 20→C 通过；Lv.19 结算后仍 19→C 失败但 B 的 1 场旧策略收益已保留，下一次满 3s 再试即满足等级。
+因此 Lv.19 未结算→B 结算到 20→C 通过；Lv.19 结算后仍 19→C 失败但 B 的 1 场旧策略收益已通过 `store.setPlayer` 落盘，下一次满 3s 再试即满足等级。
 
 ### 5.3 数值唯一落点与公式
 
@@ -113,8 +113,24 @@ if(battle.result==='win'){
 
 **取整与战力**
 - `atk = floor(baseAtk * (1+affix.atk) * (1+strategy.atk) * allAttrMult)`；`def/hp/agi` 同理；`regen` 不 floor
-- `desperate` 分步：`atkStep1 = floor(baseAtk *...*1.40)`, `atkLow = floor(atkStep1 *1.20)`（不合并为 `*1.68`）
+- `desperate` 分步且与低血词条叠加：见下“desperate 与低血词条叠加”
 - `powerScore = floor(total.atk+total.def+total.hp+total.agi)` 含战斗向不含收益向
+
+**desperate 与低血词条叠加（修复 P2-3）**
+现有 `getCombatStats:381-389` 已有 `total.lowHpAtk`（如 嗜血 `Q2-12/Q3-12` 等，`hp<0.5` 时 `lowHpAtk`）。`desperate` 为战斗开始时 `hp/maxHp<0.30` 快照，两者同为低血条件但阈值不同，需明确叠加：
+```js
+// getCombatStats 内（快照时 hpRatio = player.hp / player.maxHp）
+let bonusAtk = 0
+if(total.lowHpAtk && hpRatio < 0.5) bonusAtk += total.lowHpAtk      // 词条
+if(strategy==='desperate' && hpRatio < 0.30) bonusAtk += 0.40       // 策略基础（对应 atk×1.40 的增量部分，已在 getTotalStats 处理，此处仅处理 desperate 的额外低血部分与词条叠加）
+ // 实际实现：strategy 的 atk×1.40 已在 getTotalStats 完成，此处仅处理 lowHp 额外
+if(strategy==='desperate' && hpRatio < 0.30) bonusAtk += 0.20       // desperate 额外低血 +20%
+if(strategy==='desperate' && total.lowHpAtk && hpRatio < 0.30) {
+  // 当 hp<0.30 时同时满足 <0.5，词条与策略额外均生效，相加后统一 floor
+}
+const finalAtk = Math.floor(total.atk * (1 + bonusAtk)) // total.atk 已含 getTotalStats 的 1.40 与 affix
+```
+验收用例：`total.lowHpAtk=0.06`（嗜血）且 `hp=0.25` 且 `desperate` 时 `bonusAtk=0.26`，`finalAtk = floor(total.atk *1.26)`；`hp=0.40` 时仅词条 `0.06`；`hp=0.25` 无词条时 `0.20`。测试覆盖三种阈值交叉。
 
 日志记录 `monsterBaseAtk` 与 `battleMonster.atk`。
 
@@ -171,15 +187,15 @@ module.exports = { ..., getNow, __setNow, __setRandom, __setDropRandom, __resetS
 ## 9. 验收标准
 
 - [ ] 非法/`__proto__` 不结算不改 `lastTick`
-- [ ] `elapsed>=3s` 切换前产生旧策略 battle 日志，C 失败仍保留该收益仅策略不变
+- [ ] `elapsed>=3s` 切换前产生旧策略 battle 日志，C 失败仍通过 `store.setPlayer` 落盘并返回 `data`，仅策略不变
 - [ ] `elapsed<3s` 切换成功后 `lastTick===getNow()`，下一次战斗不含旧时间
 - [ ] Lv.19→B 到 20 后可切 `greedy`；同策略幂等 `active` 高亮不受等级拦截
 - [ ] `training` 时 `AREAS` 原 `atk` 不变，`log.monsterBaseAtk=100` 则 `log.monster.atk=120`
-- [ ] `desperate` 分步 floor 且为战斗开始快照（非每回合重算）
+- [ ] `desperate` 分步 floor 且为战斗开始快照，与 `lowHpAtk` 叠加按 §5.3 相加后 `floor`
 - [ ] `doubleKill` 仅 win 翻倍，lose/timeout 不翻倍但策略 `expMult` 仍生效
 - [ ] `strategyCdRemaining` ms 误差 <2s，`time/from/to` 可渲染，>30 条截断回 30
 - [ ] `<button disabled aria-pressed>` 且失败 `alert`
-- [ ] `pnpm test && pnpm build && git diff --check 0`，benchmark：固定 Node 20、空载 1k 次 `calculateIdle` 的 p95 <5ms（取排序后 95 分位，非均值）
+- [ ] `pnpm test && pnpm build && git diff --check 0`，benchmark：固定 Node 20、**每次用 fresh player 快照（`structuredClone` 或 `createCharacter`）并推进 `__setNow` 至少 3000ms**，排除 fixture 构造耗时，仅计时 `calculateIdle`，1k 次取 p95 <5ms
 
 ## 10. 风险与回滚
 
