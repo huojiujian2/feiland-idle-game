@@ -50,7 +50,7 @@
 - `client/src/components/QuestView.vue` — 新建，全屏替换，4 列 12/页 底部翻页器（复用排行/策略样式），日常/成就两 Tab，进度条与领取按钮。
 - `client/src/style.css` — 新增 `--quest-*` 若需，否则复用现有 `--lb-*`/`--accent`。
 - `client/src/App.vue` / `client/src/api.js` — TabBar 新增“任务”入口与对应 `api` 方法。
-- `server/quest.test.js` / `server/engine.quest.test.js` — 新增日常重置/领取幂等/成就触发单测。
+- `server/quest.test.js` / `server/engine.quest.test.js` / `server/quest.route.test.js` — 新增日常重置/领取幂等/成就触发单测。
 - 不新增其他系统。
 
 ## 4. 数据与落点（v4 明确可持久化与触发闭合）
@@ -63,9 +63,9 @@ ACHIEVEMENTS = [{id:'first', name:'初次冒险', cond:{always:true}, reward:{go
 
 // player 扩展（migratePlayer 默认，全部可 JSON 持久化，字段名统一）
 dailyQuests: [{id, progress, target, done, claimed}], dailyResetAt: 'YYYY-MM-DD', dailyChestClaimed: false,
-achievements: { [id]: {unlocked:bool, claimed:bool, unlockAt:number} },
+achievements: { [id]: {unlocked:bool, claimed:bool, unlockAt:number, grantedTitle?:string} } // ascend 领取时写入半神/神灵，展示固定为领取时称号,
 questStats: { totalGoldEarned:number, affixSeen: string[], seenEquipTemplates: string[] }, // 数组去重，非 Set
-titles: string[], currentTitle: string|null, reincPoints: number
+titles: string[], currentTitle: string|null, reincPoints: number // grantedTitle 仅 ascend 需持久化，避免后续登神漂移
 ```
 
 - 每日重置：`getTodayKey(getNow())` 按服务器 0 点 `YYYY-MM-DD`，**所有会更新日常状态或领取奖励的入口** `migratePlayer/getPlayerView/calculateIdle/allocateAttributes/equipAffix/unequipAffix/enchantItem/buyItem/equipItem/sellMaterial/sellEquip/claimDaily/claimChest/claimAchievement` 均先执行 `refreshDailyIfNeeded(player)` 再更新进度，避免跨零点操作被重置覆盖；成就检查 `checkAchievements` 则在 `grantGold/equipItem/buyItem/sell*/attemptAscension/doReincarnate` 等状态变更后立即执行；重建时 `dailyQuests` 6项 `progress=0/done=false/claimed=false` 并 `dailyChestClaimed=false`，过期未领取不补发。
