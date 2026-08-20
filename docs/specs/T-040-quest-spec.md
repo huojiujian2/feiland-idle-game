@@ -1,6 +1,6 @@
 # T-040 任务/委托系统 — 技术方案 Spec v4（待审核·修订版）
 
-> 严格按 `GAMEPLAY_GUIDE.html:605` 范围，不扩展。v4 修订 v3 剩余3项（装备图鉴范围/日切表述/版本残留与池命名）。宝箱奖励待指南定义、本次仅状态占位；装备图鉴 10/20 待指南同步后实现，Spec 仅做可实现落点说明，不越界。
+> 严格按 `GAMEPLAY_GUIDE.html:605` 范围，不扩展。v4 已与指南同步：装备图鉴 10/20、宝箱仅状态占位均在“完成5个领宝箱”范围内。
 
 ## 1. 背景与目标
 
@@ -36,7 +36,7 @@
 | 词条大师 | 累计装备过 50 种不同词条 | 大师随机词条 | 词条大师 | 大师池：`AFFIX_TREE[4]` 随机1（修正 `AFFIX_LEVELS[4]` 为配置对象） |
 | 财富自由 | 累计获得 100 万金币（totalGoldEarned，含战斗/出售/任务奖励所有金币流入） | 100000 金币 | 金主 | |
 | 转生者 | 完成 1 次转生 | 转生点 1（新增 `reincPoints`，与 `reincarnation` 次数分离） | 轮回者 | |
-| 收集者 | 装备图鉴 50%（定义：`distinct equips collected / 20 模板 >=0.5`，按 `EQUIP_TEMPLATES` 20计，需10种；指南“图鉴 50%”本次明确为**装备图鉴**，待 `GAMEPLAY_GUIDE` 同步修订） | 5000 金币 | 收藏家 | 去重按 `templateId`，含 `calculateIdle` 掉落与商店/任务获得 |
+| 收集者 | 装备图鉴 50%（定义：`distinct equips collected / 20 模板 >=0.5`，按 `EQUIP_TEMPLATES` 20计，需10种；已与指南“装备图鉴 10种”同步） | 5000 金币 | 收藏家 | 去重按 `templateId`，含 `calculateIdle` 掉落与商店/任务获得 |
 
 - 领取语义：达成→`unlocked=true`，需 `POST /quest/achievement/claim` 手动领取后 `claimed=true` 才发奖励/称号（称号写入 `player.titles[]` 并 `currentTitle` **必返**，初始 `null`，领取后 `currentTitle||=title`）；幂等，已领取重复请求返回 200 不重复发放。
 - 迁移：`migratePlayer` 时对老存档执行 `checkAchievements` 补发 `unlocked`（初次冒险按 `createdAt` 存在即解锁）；历史 `totalGoldEarned/affixSeen/seenEquipTemplates` **不补算**，仅按当前 `killCount/level/godhood/reincarnation` 等可还原状态补 `unlocked`，后续增量才计入。

@@ -216,7 +216,7 @@ const tabs = computed(() => [
   { id: 'codex', label: '图鉴', icon: '📖', badge: null },
   { id: 'evo', label: '进阶', icon: '🧬', badge: player.value?.canEvolve ? '!' : null },
   { id: 'rank', label: '排行', icon: '🏆', badge: null },
-  { id: 'quest', label: '任务', icon: '📜', badge: (()=>{ const q=player.value?.questView; if(!q) return null; const c=q.dailyQuests?.filter(x=>x.done&&!x.claimed).length||0; const a=q.achievements?.filter(x=>x.unlocked&&!x.claimed).length||0; const cc=q.chest?.canClaim?1:0; const tot=c+a+cc; return tot>0?tot:null })() }
+  { id: 'quest', label: '任务', icon: '📜', badge: (()=>{ const q=player.value?.questView; if(!q) return null; const dailyClaimable=q.dailyQuests?.filter(x=>x.done&&!x.claimed).length||0; const achClaimable=q.achievements?.filter(x=>x.unlocked&&!x.claimed).length||0; const chestClaimable=q.chest?.canClaim?1:0; const totalClaimable=dailyClaimable+achClaimable+chestClaimable; return totalClaimable>0?totalClaimable:null })() }
 ])
 
 const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest']

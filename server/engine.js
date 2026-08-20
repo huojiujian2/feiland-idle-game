@@ -60,11 +60,16 @@ function updateDailyProgress(player, questId, inc=1){
   dq.progress = Math.min(dq.target, (dq.progress||0)+inc);
   if(dq.progress >= dq.target) dq.done = true;
 }
+function ensureQuestStats(player){
+  if(!player.questStats) player.questStats = { totalGoldEarned:0, affixSeen:[], seenEquipTemplates:[] };
+  if(!Array.isArray(player.questStats.affixSeen)) player.questStats.affixSeen = [];
+  if(!Array.isArray(player.questStats.seenEquipTemplates)) player.questStats.seenEquipTemplates = [];
+  if(!Number.isFinite(player.questStats.totalGoldEarned)) player.questStats.totalGoldEarned = 0;
+}
 function grantGold(player, amount){
   if(!amount) return;
   player.gold += amount;
-  player.questStats = player.questStats || { totalGoldEarned:0, affixSeen:[], seenEquipTemplates:[] };
-  if(!Number.isFinite(player.questStats.totalGoldEarned)) player.questStats.totalGoldEarned = 0;
+  ensureQuestStats(player);
   player.questStats.totalGoldEarned += amount;
   checkAchievements(player);
 }
@@ -143,6 +148,7 @@ function claimChest(player){
   return { success:true, status:200 };
 }
 function claimAchievement(player, achId){
+  refreshDailyIfNeeded(player);
   const ach = ACHIEVEMENTS.find(a=>a.id===achId);
   if(!ach) return { success:false, status:404, message:'成就不存在' };
   const rec = (player.achievements||{})[achId];
@@ -153,13 +159,19 @@ function claimAchievement(player, achId){
   if(ach.reward.equipPool){
     const tpl = ach.reward.equipPool[Math.floor(_rand()*ach.reward.equipPool.length)];
     const item = createEquipItem(tpl, genUid());
-    if(item) player.equips.push(item);
+    if(item){
+      player.equips.push(item);
+      ensureQuestStats(player);
+      if(!player.questStats.seenEquipTemplates.includes(tpl)) player.questStats.seenEquipTemplates.push(tpl);
+    }
   }
   if(ach.reward.affixLevel){
     const pool = AFFIX_TREE[ach.reward.affixLevel] || [];
     if(pool.length){
       const aff = pool[Math.floor(_rand()*pool.length)];
-      // 直接发放为材料？按Spec“大师随机词条”可视为存入背包提示，暂发放金币替代：不额外落库，仅日志
+      player.inventory.push({ name: aff.name, count:1, type:'affix', affixId: aff.id });
+      ensureQuestStats(player);
+      if(!player.questStats.affixSeen.includes(aff.id)) player.questStats.affixSeen.push(aff.id);
       player.logs.push({ time:getNow(), type:'achievement', text:`获得大师词条：${aff.name}` });
     }
   }
@@ -973,7 +985,7 @@ function calculateIdle(player) {
     }
 
     player.exp += expGain;
-    if (goldGain > 0) grantGold(player, goldGain); else if (!player.questStats) { player.questStats = { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] }; }
+    if (goldGain > 0) grantGold(player, goldGain);
     player.killCount = (player.killCount || 0) + 1;
     // BOSS 语义：仅 isBoss 标记的世界 BOSS 计入周榜（见 server/data.js），避免普通怪误计
     if (monster.isBoss) player.bossKills = (player.bossKills || 0) + 1;
@@ -994,8 +1006,7 @@ function calculateIdle(player) {
           if (item) {
             player.equips.push(item);
             drops.push(`${item.name} [${item.quality}]`);
-            if (!player.questStats) player.questStats = { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] };
-            if (!Array.isArray(player.questStats.seenEquipTemplates)) player.questStats.seenEquipTemplates = [];
+            ensureQuestStats(player);
             if (!player.questStats.seenEquipTemplates.includes(item.templateId)) player.questStats.seenEquipTemplates.push(item.templateId);
           }
         }
@@ -1152,7 +1163,7 @@ function equipAffix(player, affixId, slot) {
   // T-040 日常与收集
   refreshDailyIfNeeded(player);
   updateDailyProgress(player, 'affix1', 1);
-  if(!player.questStats) player.questStats={ totalGoldEarned:0, affixSeen:[], seenEquipTemplates:[] };
+  ensureQuestStats(player);
   if(!player.questStats.affixSeen.includes(affixId)) player.questStats.affixSeen.push(affixId);
   checkAchievements(player);
   return { success: true };
@@ -1191,8 +1202,7 @@ function equipItem(player, itemUid) {
   player.equipped[item.slot] = item;
   player.equips.splice(idx, 1);
   recalcMaxStats(player);
-  if (!player.questStats) player.questStats = { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] };
-  if (!Array.isArray(player.questStats.seenEquipTemplates)) player.questStats.seenEquipTemplates = [];
+  ensureQuestStats(player);
   if (item.templateId && !player.questStats.seenEquipTemplates.includes(item.templateId)) {
     player.questStats.seenEquipTemplates.push(item.templateId);
   }
@@ -1243,8 +1253,7 @@ function buyItem(player, itemId, count = 1) {
       const item = createEquipItem(itemId, genUid());
       if (item) {
         player.equips.push(item);
-        if (!player.questStats) player.questStats = { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] };
-        if (!Array.isArray(player.questStats.seenEquipTemplates)) player.questStats.seenEquipTemplates = [];
+        ensureQuestStats(player);
         if (!player.questStats.seenEquipTemplates.includes(item.templateId)) player.questStats.seenEquipTemplates.push(item.templateId);
       }
     }
@@ -1479,7 +1488,11 @@ function getPlayerView(player) {
   const chestView = { need: DAILY_CHEST.need, claimed: !!player.dailyChestClaimed, canClaim: claimedCount >= DAILY_CHEST.need && !player.dailyChestClaimed, reward: null };
   const achievementsView = ACHIEVEMENTS.map(a => {
     const rec = (player.achievements || {})[a.id] || { unlocked: false, claimed: false };
-    return { id: a.id, name: a.name, desc: a.desc, unlocked: !!rec.unlocked, claimed: !!rec.claimed, reward: a.reward, title: a.title };
+    let title = a.title;
+    if(a.id==='ascend'){
+      title = player.godhood==='god' ? '神灵' : '半神';
+    }
+    return { id: a.id, name: a.name, desc: a.desc, unlocked: !!rec.unlocked, claimed: !!rec.claimed, reward: a.reward, title };
   });
   const questView = { dailyQuests: dailyQuestsView, chest: chestView, achievements: achievementsView, titles: player.titles || [], currentTitle: player.currentTitle || null };
 

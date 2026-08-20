@@ -22,7 +22,7 @@
           <div class="quest-name">{{ q.name }}</div>
           <div class="quest-desc">{{ q.desc }}</div>
           <div class="bar quest-bar"><div class="bar-fill" :style="{ width: Math.min(100, Math.round(q.progress/q.target*100)) + '%' }"></div></div>
-          <div class="quest-progress">{{ q.progress }}/{{ q.target }} <span v-if="q.done" class="quest-done">可领取</span><span v-if="q.claimed" class="quest-claimed">已领取</span></div>
+          <div class="quest-progress">{{ q.progress }}/{{ q.target }} <span v-if="q.claimed" class="quest-claimed">已领取</span><span v-else-if="q.done" class="quest-done">可领取</span></div>
           <button class="btn btn-sm btn-primary quest-claim-btn" :class="{ 'btn-disabled': !q.done || q.claimed }" @click.stop="onClaimDaily(q.id)">{{ q.claimed ? '已领取' : (q.done ? '领取' : '未完成') }}</button>
         </div>
       </div>
@@ -148,5 +148,5 @@ async function onClaimAch(id){
 .qd-row{ display:flex; justify-content:space-between; font-size:0.78rem; padding:0.2rem 0; }
 .qd-label{ color:var(--muted); }
 .qd-val{ color:var(--accent); font-weight:600; }
-@media(max-width:600px){ .quest-grid{ grid-template-columns:repeat(2,1fr); } }
+
 </style>
