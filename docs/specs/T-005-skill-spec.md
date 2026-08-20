@@ -1,7 +1,7 @@
-# T-005 手动技能释放（主动词条实战） — Spec v3
+# T-005 手动技能释放（主动词条实战） — Spec v4
 
 > 优先级 🔴 高 · 难度 ★★★★ · 分支 `feat/T-005-skill` · 依赖 无 · 对应 `GAMEPLAY_GUIDE.html:2.2 T-005` / `GAMEPLAY_TASKS.md:2.2`
-> 本版修复 v2 剩余 2×P0 + 4×P1 + 1×P2（Exp 来源/伤害顺序/矩阵/金币语义/日志字段/defBonus/台账），其余沿用 v2
+> 本版修复 v3 剩余 3×P1（A2-04 复合/普攻回归/顺序断言）+ 回合顶部判定契约，其余沿用 v3
 
 ## 1. 背景与目标
 
@@ -12,7 +12,7 @@
 
 ## 2. 需求澄清
 
-- 触发：自动、回合顶层判定一次 `shouldTriggerActiveSkill(round, cd) = round % cd === 0`（`1-indexed`），`cd = ACTIVE_SKILL_CD[level]`。随机分支下线。本版技能为**追加**而非替代，且在**本回合第一条普通攻击后**追加（符合指南“普通攻击后追加 `ATK×mult`”），若怪物先手则怪物行动后仍在同一回合内追加；若首攻已击杀则本回合不再追加。
+- 触发：自动、**回合顶部判定一次** `shouldTrigger = activeAffix && shouldTriggerActiveSkill(round, cd)`（`round % cd === 0`，`1-indexed`），结果存 `roundShouldTrigger`，普攻后仅执行已确定的触发，不再重复判定。随机分支 `pickPlayerSkill` 彻底下线，普通攻击统一走 `doPlayerNormalAction`（见 §4.2）。本版技能为**追加**而非替代，且在**本回合第一条 player 普通攻击后**追加（符合指南“普通攻击后追加 `ATK×mult`”），若怪物先手则怪物首动后仍在同一回合内于首条 player 普通后追加；若首攻已击杀则本回合不再追加。
 - CD 映射：`1→5, 2→4, 3→3, 4→2`（`data.js` 单一数据源）。
 - 效果矩阵（唯一归一化，不自相矛盾）：
 
@@ -25,7 +25,7 @@
 | agi_buff | `agi_buff` | `combat.agi = floor(combat.agi*(1+value))` 持续 `turns`（**不**重算 `effAgi/curPActions`，显式不做） | 是（仅数值） |
 | gold_buff | `gold_buff` | `skillGoldBonus += value` 累加（每次 CD 触发 +10%，可叠） | 是（仅胜利） |
 
-其它 `type`（`crit_buff/all_buff/agi_atk_buff/atk_def_buff/def_regen_buff/burn/bleed/exp_gold_*` 等）**本版仅日志**：统一产 `type:'skill'` 日志但不改 `combat`、不入结算，避免越界。复合字段（如 `A2-04 damage+heal`、`A4-02 damage+heal`）按主 `type` 执行主路径，附带 `heal` 字段若存在则同时回血（唯一处理，见 §4.2）。对外不宣称 40 全生效。
+其它 `type`（`crit_buff/all_buff/agi_atk_buff/atk_def_buff/def_regen_buff/burn/bleed/exp_gold_*` 等）**本版仅日志**：统一产 `type:'skill'` 日志但不改 `combat`、不入结算，避免越界。复合字段**统一处理附带 `heal`**：主路径执行后，若 `eff.heal` 存在则额外 `pHp = min(maxHp, pHp+floor(maxHp*eff.heal))`（覆盖 `A2-04 def_buff+heal` 与 `A4-02 damage+heal` 等所有含 `heal` 的主动，§4.2 统一分支）。对外不宣称 40 全生效。
 
 - 前端：仅 `action.type==='skill'` 判别高亮（`action.skill` 字段普通行也有，不得以此判别）。
 - 不做：手动释放、打断/沉默、敌方 debuff 属性下调、AGI 重算行动数、EXP 类技能（见下）、音效/特效。
@@ -85,45 +85,83 @@ function simulateBattle(player, monster){
     }
     buffs = remain;
   }
+  function doPlayerNormalAction(){
+    // 统一普通攻击：保留现有被动（吸血 calcDamage 后回血），彻底移除 pickPlayerSkill 随机
+    const r = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
+    mCurHp -= r.value;
+    if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(r.value*combat.lifesteal));
+    actions.push({ actor:'player', skill:'普通攻击', damage:r.value, crit:r.isCrit, targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
+    return r;
+  }
+  function doMonsterNormalAction(){
+    if(_rand() < (combat.dodge||0)){
+      actions.push({ actor:'player', skill:'闪避!', dodge:true, targetHp:pHp, targetMaxHp:combat.maxHp });
+      return;
+    }
+    const mSkill = pickMonsterSkill(monster);
+    let mult=1, skillName='普通攻击';
+    if(mSkill){ mult=mSkill.mult; skillName=mSkill.name; }
+    const d = calcDamage(mAtk, combat.def, mult, 0, combat.defBonus, 0, 0, 0);
+    let dmg=d.value; if(combat.dmgTaken) dmg=Math.floor(dmg*(1+combat.dmgTaken));
+    pHp -= dmg;
+    if(combat.thorns>0) mCurHp -= Math.floor(dmg*combat.thorns);
+    if(combat.regen>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.regen));
+    actions.push({ actor:'monster', skill:skillName, damage:dmg, targetHp:Math.max(0,pHp), targetMaxHp:combat.maxHp });
+  }
   // 校验指南：玩家技能不使用 defBonus，calcDamage 第5参传 0
   for(let round=1; round<=30; round++){
     expireBuffs(round);
+    const roundShouldTrigger = activeAffix && shouldTriggerActiveSkill(round, cd); // 回合顶部判定
     // 队列（curPActions/curMActions）按 effAgi snapshot 计算，AGI buff 本版不触发重算
-    // P0-顺序：先执行第一条普通攻击，再追加技能（若触发且存活）
     const queue = buildQueue(round, combat, effAgi); // 含 playerFirst 逻辑
-    let firstNormalDone = false;
+    let firstPlayerNormalIdx = -1; // 记录首条 player 普通在 actions 中的下标，用于顺序断言
     for(const actor of queue){
       if(pHp<=0 || mCurHp<=0) break;
-      if(actor==='player' && !firstNormalDone){
-        // 第一条普通攻击
-        const r = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
-        mCurHp -= r.value;
-        actions.push({ actor:'player', skill:'普通攻击', damage:r.value, crit:r.isCrit, targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
-        firstNormalDone = true;
-        // 追加技能（普攻后）
-        if(activeAffix && shouldTriggerActiveSkill(round, cd) && mCurHp>0 && pHp>0){
+      if(actor==='player' && firstPlayerNormalIdx===-1){
+        const beforeLen = actions.length;
+        doPlayerNormalAction();
+        firstPlayerNormalIdx = beforeLen;
+        // 追加技能（普攻后，复用顶部判定）
+        if(roundShouldTrigger && mCurHp>0 && pHp>0){
           const eff = activeAffix.effect;
+          let skillPushed = false;
           if(eff.type==='damage'){
             const d = calcDamage(combat.atk, mDef, eff.mult, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
             mCurHp -= d.value;
             if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(d.value*combat.lifesteal));
             actions.push({ actor:'player', skill:activeAffix.name, damage:d.value, crit:d.isCrit, type:'skill', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
-            if(eff.heal){ const h=Math.floor(combat.maxHp*eff.heal); pHp=Math.min(combat.maxHp,pHp+h); } // A2-04/A4-02 复合
+            skillPushed = true;
           } else if(eff.type==='heal'){
             const h=Math.floor(combat.maxHp*eff.value); pHp=Math.min(combat.maxHp,pHp+h);
             actions.push({ actor:'player', skill:activeAffix.name, heal:h, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+            skillPushed = true;
           } else if(['atk_buff','def_buff','agi_buff'].includes(eff.type)){
             const key=eff.type.split('_')[0]; applyBuff(key, eff.value, eff.turns, round);
             actions.push({ actor:'player', skill:activeAffix.name, buff:eff.value, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+            skillPushed = true;
           } else if(eff.type==='gold_buff'){
-            skillGoldBonus += eff.value; // 累加
+            skillGoldBonus += eff.value;
             actions.push({ actor:'player', skill:activeAffix.name, buff:eff.value, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+            skillPushed = true;
           } else {
             actions.push({ actor:'player', skill:activeAffix.name, type:'skill', note:eff.type, targetHp:pHp, targetMaxHp:combat.maxHp });
+            skillPushed = true;
+          }
+          // 统一处理附带 heal（覆盖 A2-04 def_buff+heal 与 A4-02 damage+heal 等所有含 heal 的主动）
+          if(skillPushed && eff.heal){
+            const h=Math.floor(combat.maxHp*eff.heal); pHp=Math.min(combat.maxHp,pHp+h);
+            // 将 heal 合并进最后一条 skill 日志（若已有 heal 则累加，否则追加 heal 字段）
+            const last = actions[actions.length-1];
+            if(last.heal) last.heal += h; else last.heal = h;
+            // 同步 targetHp
+            last.targetHp = pHp;
           }
         }
+      } else if(actor==='monster'){
+        doMonsterNormalAction();
       } else {
-        doNormal(actor); // 怪物或后续 player 普通攻击
+        // 后续 player 普通攻击（非首条，不追加技能）
+        doPlayerNormalAction();
       }
     }
     rounds.push({ round, actions, pHp:Math.max(0,pHp), mHp:Math.max(0,mCurHp), pActions:curPActions, mActions:curMActions });
@@ -172,7 +210,7 @@ if(battle.result==='win'){
 
 ```
 calculateIdle -> buildBattleMonster -> simulateBattle(round 1..30)
-  round: expireBuffs -> build queue -> firstNormal(1条) -> if shouldTrigger && alive -> skill追加(type:'skill', after normal) -> 剩余 queue
+  round: expireBuffs -> roundShouldTrigger=shouldTriggerActiveSkill(round,cd) (顶部) -> build queue -> firstPlayerNormal -> if roundShouldTrigger && alive -> skill追加(type:'skill', after first normal) -> 剩余 queue (doMonsterNormal/doPlayerNormal)
   -> return { battle, skillGoldBonus } -> calculateIdle win时 goldMult*=1+skillGoldBonus -> logs.push(battle)
 MapView: findLatestBattle().detail.flatMap(r=>r.actions).filter(a=>a.type==='skill') -> 紫色高亮（含 combo）
 ```
@@ -182,9 +220,9 @@ MapView: findLatestBattle().detail.flatMap(r=>r.actions).filter(a=>a.type==='ski
 
 ## 6. 验收标准
 
-- [ ] `CD`：`A1-01 5→5,10,15` 各一次，`B4-05 2→2,4,6...` 各一次，同回合仅一次
-- [ ] 顺序：同一回合技能在第一条普通攻击后追加（`actions[0]` 为普通，`actions[1]` 为 `type:'skill'` 的 damage），怪物先手时仍在首条 player 普通后
-- [ ] `damage`：`A1-01 ATK×1.2` 经 `calcDamage(..., defBonus=0)` 且不替代普攻；`A2-04/A4-02` 主 `damage` + 额外 `heal`
+- [ ] `CD`：`A1-01 5→5,10,15` 各一次，`B4-05 2→2,4,6...` 各一次，同回合仅一次（`shouldTrigger` 于回合顶部判定）
+- [ ] 顺序：player actions 中第一条普通攻击后紧邻 `type:'skill'`（`queue` 内 `firstPlayerNormalIdx` 的下一条即 skill），分别覆盖玩家先手（`actions` 首条为 player 普通）与怪物先手（首条为 monster，首条 player 普通后仍紧邻 skill），首攻击杀则不追加
+- [ ] `damage`：`A1-01 ATK×1.2` 经 `calcDamage(..., defBonus=0)` 且不替代普攻；所有含 `heal` 的主动（`A2-04 def_buff+heal`/`A4-02 damage+heal` 等）在主效果后统一回血
 - [ ] `buff`：`A1-04 10% 2回合` `5` 生效，`6` 保持，`7` 回退至 `before`
 - [ ] `gold_buff`：`A1-05` 每次累加，`5→+10%`，`10→+20%`，仅 `win` 的 `goldGain` 放大，`lose/timeout` 不产生金币
 - [ ] 日志：`type:'skill'` 均含 `targetHp/targetMaxHp`，`note` 行有兜底渲染，`combo` 行同高亮

@@ -133,7 +133,7 @@
 
 - 步骤：`calculateIdle` 每回合检查主动词条 → 按 `damage/heal/atk_buff/def_buff/agi_buff/gold_buff` 执行 → CD（初5/中4/高3/大师2）→ 日志 `type:'skill'` 前端特殊渲染
 - 状态：🟡 进行中
-- 分支：`feat/T-005-skill` · Spec：`docs/specs/T-005-skill-spec.md` v3（待审核）
+- 分支：`feat/T-005-skill` · Spec：`docs/specs/T-005-skill-spec.md` v4（待审核）
 
 #### T-006 BOSS 战与精英怪 — 🟡 中优先 · 难度 ★★★ · ⬜ 待办
 
