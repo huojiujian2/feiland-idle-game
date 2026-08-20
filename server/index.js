@@ -10,7 +10,7 @@ const {
   evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
   equipAffix, unequipAffix,
   getPowerScore, getTotalStats, getReadonlyPlayer, getStageFull,
-  maybeResetWeeklyBossKills, getCurrentWeekKey
+  maybeResetWeeklyBossKills
 } = require('./engine');
 
 const app = express();
@@ -98,6 +98,8 @@ app.post('/api/player/:username/create-character', (req, res) => {
 app.get('/api/player/:username', (req, res) => {
   const player = store.getPlayer(req.params.username);
   if (!player) return res.json({ success: false, message: '角色不存在' });
+  // 写入前原子切周，避免跨周丢 bossKills
+  maybeResetWeeklyBossKills(store);
   calculateIdle(player);
   store.setPlayer(player.username, player);
   res.json({ success: true, data: getPlayerView(player) });
@@ -453,23 +455,7 @@ app.post('/api/player/:username/reincarnate', (req, res) => {
   res.json({ success: true, data: getPlayerView(player) });
 });
 
-// ====== BOSS 击杀（为 BOSS 榜提供真实写入；每周重置，需战斗凭证） ======
-const bossKillCooldown = new Map(); // username -> timestamp
-app.post('/api/player/:username/boss-kill', (req, res) => {
-  const player = store.getPlayer(req.params.username);
-  if (!player) return res.json({ success: false, message: '角色不存在' });
-  // 基础凭证：需至少有一次普通击杀且近期有战斗记录，避免无凭证刷榜
-  if ((player.killCount || 0) < 1) return res.json({ success: false, message: '需先通过战斗获得击杀后再记录 BOSS 击杀' });
-  const now = Date.now();
-  const last = bossKillCooldown.get(player.username) || 0;
-  if (now - last < 10000) return res.json({ success: false, message: '操作过于频繁，请稍后再试' });
-  bossKillCooldown.set(player.username, now);
-  // 写入前原子切周，避免跨周丢数据
-  maybeResetWeeklyBossKills(store);
-  player.bossKills = (player.bossKills || 0) + 1;
-  store.setPlayer(player.username, player);
-  res.json({ success: true, data: getPlayerView(player) });
-});
+// BOSS 榜仅由权威战斗结算写入（engine.calculateIdle 判定 isBoss），不再提供公开计数入口，避免伪造
 
 // ====== 定时任务：每5秒计算所有玩家的挂机收益 ======
 setInterval(() => {

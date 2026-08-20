@@ -90,23 +90,16 @@ const page = ref(1)
 const pageSize = 12
 const currentUser = computed(() => props.currentUser || '')
 
-// 单一数据源：榜单元信息，避免多处 if 链重复
+// 单一数据源：榜单元信息（label/icon/value/sub），避免 BOARD_META 与 types 重复ID/label
 const BOARD_META = {
-  level: { label: '等级', value: (i) => `Lv.${i.level}`, sub: (i) => `${i.exp} exp` },
-  power: { label: '战力', value: (i) => i.power.toLocaleString(), sub: (i) => `ATK ${i.atk} · DEF ${i.def}` },
-  gold: { label: '金币', value: (i) => i.gold.toLocaleString(), sub: (i) => `Lv.${i.level}` },
-  kills: { label: '击杀数', value: (i) => `${i.killCount}`, sub: (i) => `Lv.${i.level}` },
-  reincarnation: { label: '转生', value: (i) => `${i.reincarnation}`, sub: (i) => `Lv.${i.level}` },
-  boss: { label: 'BOSS击杀', value: (i) => `${i.bossKills}`, sub: (i) => `Lv.${i.level}` }
+  level: { label: '等级', shortLabel: '等级', icon: '⬆️', value: (i) => `Lv.${i.level}`, sub: (i) => `${i.exp} exp` },
+  power: { label: '战力', shortLabel: '战力', icon: '⚔️', value: (i) => i.power.toLocaleString(), sub: (i) => `ATK ${i.atk} · DEF ${i.def}` },
+  gold: { label: '金币', shortLabel: '金币', icon: '💰', value: (i) => i.gold.toLocaleString(), sub: (i) => `Lv.${i.level}` },
+  kills: { label: '击杀数', shortLabel: '击杀', icon: '💀', value: (i) => `${i.killCount}`, sub: (i) => `Lv.${i.level}` },
+  reincarnation: { label: '转生', shortLabel: '转生', icon: '🔄', value: (i) => `${i.reincarnation}`, sub: (i) => `Lv.${i.level}` },
+  boss: { label: 'BOSS击杀', shortLabel: 'BOSS', icon: '👹', value: (i) => `${i.bossKills}`, sub: (i) => `Lv.${i.level}` }
 }
-const types = [
-  { id: 'level', label: '等级', icon: '⬆️' },
-  { id: 'power', label: '战力', icon: '⚔️' },
-  { id: 'gold', label: '金币', icon: '💰' },
-  { id: 'kills', label: '击杀', icon: '💀' },
-  { id: 'reincarnation', label: '转生', icon: '🔄' },
-  { id: 'boss', label: 'BOSS', icon: '👹' }
-]
+const types = Object.entries(BOARD_META).map(([id, m]) => ({ id, label: m.shortLabel, icon: m.icon }))
 
 const valueLabel = computed(() => BOARD_META[activeType.value]?.label || '')
 const totalPages = computed(() => Math.max(1, Math.ceil(list.value.length / pageSize)))

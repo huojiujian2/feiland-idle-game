@@ -7,8 +7,6 @@ const {
   AFFIX_LEVELS, AFFIX_TREE,
   getStage, expToNext, createEquipItem
 } = require('./data');
-// store 在运行时按需加载，避免启动时循环依赖
-function getStore() { try { return require('./store'); } catch { return null; } }
 
 // ====== 工具：按ID查找词条 ======
 function findAffix(affixId) {
@@ -756,14 +754,9 @@ function calculateIdle(player) {
 
     player.exp += expGain;
     player.gold += goldGain;
-    // 跨周不丢数据：写入前原子切周
-    const s = getStore();
-    if (s) maybeResetWeeklyBossKills(s);
     player.killCount = (player.killCount || 0) + 1;
-    // BOSS 语义：仅世界 BOSS 计入周榜，避免普通怪误计
-    const BOSS_SET = new Set(['深渊领主', '深渊领主·完全体', '虚空支配者', '混沌魔神', '堕落神灵', '神罚执行者', '太古巨神']);
-    const isBoss = BOSS_SET.has(monster.name);
-    if (isBoss) player.bossKills = (player.bossKills || 0) + 1;
+    // BOSS 语义：仅 isBoss 标记的世界 BOSS 计入周榜（见 server/data.js），避免普通怪误计
+    if (monster.isBoss) player.bossKills = (player.bossKills || 0) + 1;
 
     if (player.godhood) {
       player.faith += Math.floor(monster.exp * 0.1);
