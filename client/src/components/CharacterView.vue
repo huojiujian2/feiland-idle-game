@@ -48,7 +48,7 @@
     </div>
 
     <!-- 属性面板 -->
-    <div class="attrs-section card">
+    <div class="attrs-section card" data-tutorial="alloc-wrap">
       <div class="section-header">
         <span>属性</span>
         <span v-if="player.attrPoints > 0" class="pts-badge">可分配 {{ player.attrPoints }}</span>
@@ -61,7 +61,7 @@
           <div class="attr-controls" v-if="player.attrPoints > 0">
             <button class="adj-btn minus" v-if="pending[attr.key]" @click="adjust(attr.key, -1)">−</button>
             <span v-if="pending[attr.key]" class="pending-val">+{{ pending[attr.key] }}</span>
-            <button class="adj-btn plus" @click="adjust(attr.key, 1)">+</button>
+            <button class="adj-btn plus" data-alloc-available @click="adjust(attr.key, 1)">+</button>
           </div>
         </div>
       </div>
@@ -72,7 +72,7 @@
         <span class="cs-item" v-if="player.totalStats.crit">🎯 {{ (player.totalStats.crit * 100).toFixed(0) }}%</span>
         <span class="cs-item" v-if="player.totalStats.dodge">💨 {{ (player.totalStats.dodge * 100).toFixed(0) }}%</span>
       </div>
-      <button v-if="hasPending" class="btn btn-primary confirm-btn" @click="confirmAllocate">确认分配</button>
+      <button v-if="hasPending" class="btn btn-primary confirm-btn" data-alloc-available @click="confirmAllocate">确认分配</button>
     </div>
 
     <!-- 职业区块 -->

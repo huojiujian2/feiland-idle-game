@@ -54,6 +54,12 @@
   --quest-progress-bg: rgba(157,140,240,0.08);
   --quest-progress-fill: linear-gradient(90deg, var(--accent2), var(--accent));
 
+  /* 引导语义化 */
+  --tutorial-overlay-bg: rgba(0,0,0,0.6);
+  --tutorial-blur: blur(2px);
+  --tutorial-outline: 2px solid var(--accent);
+  --tutorial-z: 400;
+
   /* 排行榜语义化 */
   --lb-row-bg: rgba(20,22,42,0.4);
   --lb-row-hover: rgba(20,22,42,0.6);

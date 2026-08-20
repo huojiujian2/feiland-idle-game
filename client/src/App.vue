@@ -98,11 +98,12 @@
         </div>
       </transition>
     </main>
+    <TutorialOverlay v-if="player && typeof player.tutorialStep==='number' && player.tutorialStep<6" :player="player" @next="handleTutorialNext" @skip="handleTutorialSkip" />
 
     <!-- 底部 TabBar -->
     <nav class="tabbar">
       <div v-for="tab in tabs" :key="tab.id" class="tabbar-item"
-        :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id">
+        :class="{ active: activeTab === tab.id }" :data-tab="tab.id" @click="handleTabClick(tab.id)">
         <span class="tabbar-icon">{{ tab.icon }}</span>
         <span class="tabbar-text">{{ tab.label }}</span>
         <span v-if="tab.badge" class="tabbar-badge">{{ tab.badge }}</span>
@@ -182,6 +183,7 @@ import CodexView from './components/CodexView.vue'
 import EvolutionView from './components/EvolutionView.vue'
 import LeaderboardView from './components/LeaderboardView.vue'
 import QuestView from './components/QuestView.vue'
+import TutorialOverlay from './components/TutorialOverlay.vue'
 
 const player = ref(null)
 const areas = ref([])
@@ -325,8 +327,61 @@ async function startPolling() {
   }, 5000)
 }
 
+// ====== 引导（T-050） ======
+let tutorialRetrying = false
+async function updateTutorial(nextStep){
+  if(!player.value) return
+  const res = await api.updateTutorial(currentUser, nextStep)
+  if(res.success) player.value = res.data
+  else if(res.message) {/* 409/400 保持当前步 */}
+}
+function handleTabClick(tabId){
+  activeTab.value = tabId
+  const step = player.value?.tutorialStep
+  if(step===1 && tabId==='char') updateTutorial(2)
+  else if(step===3 && tabId==='map') updateTutorial(4)
+  else if(step===4 && tabId==='bag') updateTutorial(5)
+  else if(step===5 && tabId==='skill') updateTutorial(6)
+}
+function handleTutorialNext(){
+  const cur = player.value?.tutorialStep ?? 0
+  updateTutorial(cur+1)
+}
+function handleTutorialSkip(){ updateTutorial(6) }
+watch(()=>player.value?.tutorialStep, (step)=>{
+  if(step===0){
+    // 首次 hydrate 自动切图（仅当当前不在 map 时）
+    if(activeTab.value !== 'map') activeTab.value = 'map'
+  }
+})
+// 轮询补偿重试：allocate 成功后 alloc1.done 但教程仍在 2，需重试 2→3
+watch(()=>player.value?.questView?.dailyQuests, (list)=>{
+  if(!player.value || tutorialRetrying) return
+  if(player.value.tutorialStep===2){
+    const dq = list?.find(x=>x.id==='alloc1')
+    if(dq && dq.done){
+      tutorialRetrying = true
+      updateTutorial(3).finally(()=>{ tutorialRetrying=false })
+    }
+  }
+}, {deep:true})
+
 // ====== 操作处理 ======
-async function handleAllocate(a) { const r = await api.allocateAttributes(currentUser, a); if (r.success) player.value = r.data; else alert(r.message) }
+async function handleAllocate(a) {
+  const r = await api.allocateAttributes(currentUser, a)
+  if (r.success){
+    player.value = r.data
+    // 2→3 原子推进：读取 r.data.questView 而非旧 player
+    const done = r.data?.questView?.dailyQuests?.find(x=>x.id==='alloc1')?.done
+    if(player.value?.tutorialStep===2 && done){
+      const tr = await api.updateTutorial(currentUser, 3)
+      if(tr.success) player.value = tr.data
+      else if(tr.message && !tutorialRetrying){
+        // 409/网络失败，依赖轮询重试
+      }
+    }
+  } else alert(r.message)
+}
 async function handleAreaChange(id) { const r = await api.changeArea(currentUser, id); if (r.success) player.value = r.data; else alert(r.message) }
 async function handleChooseJob(p) { const r = await api.chooseJob(currentUser, p); if (r.success) { player.value = r.data; activeTab.value = 'char' } else alert(r.message) }
 async function handleEquipAffix(affixId, slot) { const r = await api.equipAffix(currentUser, affixId, slot); if (r.success) player.value = r.data; else alert(r.message) }
