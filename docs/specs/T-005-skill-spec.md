@@ -1,7 +1,7 @@
-# T-005 手动技能释放（主动词条实战） — Spec v5
+# T-005 手动技能释放（主动词条实战） — Spec v6
 
 > 优先级 🔴 高 · 难度 ★★★★ · 分支 `feat/T-005-skill` · 依赖 无 · 对应 `GAMEPLAY_GUIDE.html:2.2 T-005` / `GAMEPLAY_TASKS.md:2.2`
-> 本版修复 v4 剩余 1×P0 + 2×P1（返回结构/复合日志/旧机制保留）+ `dmgBonus` 一致性，其余沿用 v4
+> 本版修复 v5 剩余 3×P1（护盾/dodgeAtk/复合渲染）+ 顶部判定，其余沿用 v5
 
 ## 1. 背景与目标
 
@@ -52,7 +52,7 @@ module.exports = { ..., ACTIVE_SKILL_CD }
 
 ### 4.2 战斗落点（闭合 P0）
 
-- `getCombatStats` 不变。
+- `getCombatStats`：**补齐 `dodgeAtk` 透传**（`getTotalStats` 已有 `dodgeAtk`，`getCombatStats` 原未导出致 `combat.dodgeAtk===undefined`，本版修复；其余 `deathShield/revive` 等已透传，保持不变）。若不补齐则标注为基线缺陷，本 Spec 以补齐为准。
 - `simulateBattle(player, monster)`（伪代码为契约，最终代码以此为准）：
 
 ```js
@@ -60,11 +60,13 @@ function getActiveSkillCd(level){ return ACTIVE_SKILL_CD[level] || 5; }
 function shouldTriggerActiveSkill(round, cd){ return round % cd === 0; }
 
 function simulateBattle(player, monster){
-  const combat = getCombatStats(player);
+  const combat = getCombatStats(player); // 含 dodgeAtk 透传修复
   const activeAffix = player.affixes?.active ? findAffix(player.affixes.active) : null;
   const cd = activeAffix ? getActiveSkillCd(activeAffix.level) : null;
-  let skillGoldBonus = 0; // P0：仅金币，删除 skillExpBonus，避免无来源
+  let skillGoldBonus = 0; // 仅金币
   let buffs = []; // { key, value, before, expireRound }
+  let deathShield = combat.deathShield; // 局部可变护盾，触发后置零并打日志，避免重复
+  let revived = false;
   function applyBuff(key, value, turns, round){
     const expireRound = round + turns; // 5+2→7；5,6 生效，7 顶部回退
     const idx = buffs.findIndex(b=>b.key===key);
@@ -94,13 +96,13 @@ function simulateBattle(player, monster){
     return r;
   }
   function doMonsterNormalAction(){
-    // 完整保留旧战斗行为（闪避/反伤/regen/healBonus/dmgTaken/thorns/dodgeAtk/deathShield/revive 均不变）
+    // 完整保留旧行为：闪避/反伤/regen/healBonus/dmgTaken/thorns/dodgeAtk/deathShield/revive 均复用
     if(_rand() < (combat.dodge||0)){
       actions.push({ actor:'player', skill:'闪避!', dodge:true, targetHp:pHp, targetMaxHp:combat.maxHp });
-      // 保留：风行闪避反击（旧 engine.js:861）
       if(combat.dodgeAtk){
         const c = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, 1, combat.critDmg);
         mCurHp -= c.value;
+        actions.push({ actor:'player', skill:'闪避反击', damage:c.value, type:'skill', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
       }
       return;
     }
@@ -112,11 +114,12 @@ function simulateBattle(player, monster){
     pHp -= dmg;
     if(combat.thorns>0) mCurHp -= Math.floor(dmg*combat.thorns);
     if(combat.regen>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.regen));
-    if(combat.healBonus>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.healBonus*0.1)); // 保留 healBonus
-    // 保留：免死护盾（旧 897）
-    if(pHp<=0 && combat.deathShield>0){
-      pHp=Math.floor(combat.maxHp*combat.deathShield);
-      // 护盾消耗后置 0，由外层判定避免重复
+    if(combat.healBonus>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.healBonus*0.1));
+    // 护盾：使用局部 deathShield，触发后置零并追加日志（避免 combat.deathShield 重复触发）
+    if(pHp<=0 && deathShield>0){
+      pHp=Math.floor(combat.maxHp*deathShield);
+      actions.push({ actor:'player', skill:'免死护盾!', shield:true, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+      deathShield = 0;
     }
     actions.push({ actor:'monster', skill:skillName, damage:dmg, targetHp:Math.max(0,pHp), targetMaxHp:combat.maxHp });
   }
@@ -219,10 +222,10 @@ if(battle.result==='win'){
 ### 4.3 前端落点（字段闭合）
 
 - `MapView.vue`：
-  - `processActions()` 的 `combo` 分支保留 `type:'skill'` 时追加 `skill-action`（紫色高亮），不以 `skill` 字段判别；
-  - `actionClass(a)`：`a.type==='skill'`→`skill-action`；
-  - 日志字段：所有 `type:'skill'` 均含 `targetHp/targetMaxHp`（damage 取怪物，heal/buff 取玩家），复合 `damage+heal` 的 damage 行保留怪物 `targetHp`，另加 `heal/selfHp/healTargetHp` 字段，前端优先渲染 `damage` 的怪物血条、附带 `heal` 另行显示 `+HP`，不再覆盖；
-  - 仅日志的 `note` 行：模板增加 `v-else-if="a.note"` 兜底显示 `{{a.skill}}（{{a.note}}）`，避免空行。
+  - `processActions()`：`combo` 分支对 `actions` 中 `type:'skill'` 的聚合行保留 `skill-action` 高亮，且 `comboDamage` 外另渲染 `selfHeal/selfHp` 与 `shield/revive` 标记；不以 `skill` 字段判别；
+  - `actionClass(a)`：`a.type==='skill'`→`skill-action`（含 `damage+heal` 复合行）；
+  - 日志字段：`damage` 的 `targetHp` 始终为怪物，`heal/selfHeal` 另记 `selfHp/healTargetHp`；复合 `damage+heal`（如 `A4-02`）同时渲染 `damage` 数值与 `+heal HP`，`def_buff+heal`（如 `A2-04`）同时渲染 `buff` 与 `+heal`，避免 `v-else-if` 互斥导致一侧丢失；`note` 行 `v-else-if="a.note"` 兜底；
+  - 模板互斥修复：原 `v-else-if="a.heal"`/`v-else-if="a.buff"` 会吞掉复合第二效果，本版改为独立 `v-if="a.heal"` 叠加渲染或 `a.heal` 与 `a.buff` 并列展示。
 - `style.css`：`--skill-highlight/--skill-bg/--skill-border` 映射 `var(--accent2)` 等，组件仅 `var(--skill-*)`。
 
 ## 5. 交互与时序
