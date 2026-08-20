@@ -7,9 +7,10 @@ const {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
   chooseJob, equipItem, unequipItem, useConsumable, buyItem,
   sellMaterial, sellEquip,
-  evolveRace, enchantItem, learnLaw, attemptAscension,
+  evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
   equipAffix, unequipAffix,
-  getPowerScore, getTotalStats, getReadonlyPlayer, getStageFull
+  getPowerScore, getTotalStats, getReadonlyPlayer, getStageFull,
+  maybeResetWeeklyBossKills, getCurrentWeekKey
 } = require('./engine');
 
 const app = express();
@@ -19,6 +20,8 @@ app.use(cors());
 app.use(express.json());
 
 store.load();
+// 初始化周键（周一 0 点语义）
+maybeResetWeeklyBossKills(store);
 
 // ====== 账号相关 ======
 
@@ -400,8 +403,7 @@ app.get('/api/leaderboard', (req, res) => {
   if (!LEADERBOARD_CONFIG[type]) {
     return res.json({ success: false, message: '无效的排行类型' });
   }
-  // 每周一 0 点重置 BOSS 榜（按周维度）
-  store.maybeResetWeeklyBossKills();
+  // GET 保持无副作用：周重置由后台定时任务与写入前原子切周负责
   const players = store.getAllPlayers().map(p => {
     const rp = getReadonlyPlayer(p);
     const power = getPowerScore(rp);
@@ -445,25 +447,25 @@ app.get('/api/leaderboard', (req, res) => {
 app.post('/api/player/:username/reincarnate', (req, res) => {
   const player = store.getPlayer(req.params.username);
   if (!player) return res.json({ success: false, message: '角色不存在' });
-  if (player.level < 100) return res.json({ success: false, message: '需要 Lv.100 才能转生' });
-  player.reincarnation = (player.reincarnation || 0) + 1;
-  // 最小重置：等级/经验/属性点重置，保留装备/词条/金币/击杀等
-  player.level = 1;
-  player.exp = 0;
-  player.attrPoints = 0;
-  player.skillPoints = 0;
-  player.hp = player.maxHp;
-  player.mp = player.maxMp;
-  player.lastTick = Date.now();
+  const result = doReincarnate(player);
+  if (!result.success) return res.json({ success: false, message: result.message });
   store.setPlayer(player.username, player);
   res.json({ success: true, data: getPlayerView(player) });
 });
 
-// ====== BOSS 击杀（为 BOSS 榜提供真实写入；每周重置） ======
+// ====== BOSS 击杀（为 BOSS 榜提供真实写入；每周重置，需战斗凭证） ======
+const bossKillCooldown = new Map(); // username -> timestamp
 app.post('/api/player/:username/boss-kill', (req, res) => {
   const player = store.getPlayer(req.params.username);
   if (!player) return res.json({ success: false, message: '角色不存在' });
-  store.maybeResetWeeklyBossKills();
+  // 基础凭证：需至少有一次普通击杀且近期有战斗记录，避免无凭证刷榜
+  if ((player.killCount || 0) < 1) return res.json({ success: false, message: '需先通过战斗获得击杀后再记录 BOSS 击杀' });
+  const now = Date.now();
+  const last = bossKillCooldown.get(player.username) || 0;
+  if (now - last < 10000) return res.json({ success: false, message: '操作过于频繁，请稍后再试' });
+  bossKillCooldown.set(player.username, now);
+  // 写入前原子切周，避免跨周丢数据
+  maybeResetWeeklyBossKills(store);
   player.bossKills = (player.bossKills || 0) + 1;
   store.setPlayer(player.username, player);
   res.json({ success: true, data: getPlayerView(player) });
@@ -471,6 +473,8 @@ app.post('/api/player/:username/boss-kill', (req, res) => {
 
 // ====== 定时任务：每5秒计算所有玩家的挂机收益 ======
 setInterval(() => {
+  // 跨周不丢数据：写入前原子切周（全局）
+  maybeResetWeeklyBossKills(store);
   const players = store.getAllPlayers();
   for (const player of players) {
     calculateIdle(player);
@@ -479,6 +483,9 @@ setInterval(() => {
     store.save();
   }
 }, 5000);
+
+// ====== 后台周重置（兜底，避免 GET 需副作用） ======
+setInterval(() => maybeResetWeeklyBossKills(store), 60 * 1000);
 
 setInterval(() => store.save(), 30000);
 

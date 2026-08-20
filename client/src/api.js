@@ -64,5 +64,7 @@ export default {
   getLeaderboard(type, username) {
     const q = username ? `?type=${type}&username=${encodeURIComponent(username)}` : `?type=${type}`
     return request(`/leaderboard${q}`)
-  }
+  },
+  reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) },
+  bossKill(username) { return request(`/player/${username}/boss-kill`, { method: 'POST' }) }
 }

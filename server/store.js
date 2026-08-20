@@ -17,7 +17,8 @@ function load() {
   if (!data.accounts) data.accounts = {};
   if (!data.players) data.players = {};
   if (!data.meta) data.meta = {};
-  if (!data.meta.bossWeek) data.meta.bossWeek = getCurrentWeekKey();
+  // bossWeek 初始化由 engine 负责周一边界，此处仅保证存在
+  if (!data.meta.bossWeek) data.meta.bossWeek = null;
   // 迁移旧数据：如果有 players 但没有 accounts，把旧 player 当作 account
   const playerKeys = Object.keys(data.players);
   if (playerKeys.length > 0 && Object.keys(data.accounts).length === 0) {
@@ -52,27 +53,7 @@ function getPlayer(username) { return data.players[username]; }
 function setPlayer(username, player) { data.players[username] = player; markDirty(); }
 function getAllPlayers() { return Object.values(data.players); }
 
-function getCurrentWeekKey() {
-  const d = new Date();
-  const jan1 = new Date(d.getFullYear(), 0, 1);
-  const days = Math.floor((d - jan1) / 86400000);
-  const week = Math.ceil((days + jan1.getDay() + 1) / 7);
-  return `${d.getFullYear()}-W${week}`;
-}
-function maybeResetWeeklyBossKills() {
-  const cur = getCurrentWeekKey();
-  if (data.meta.bossWeek !== cur) {
-    let changed = false;
-    for (const p of Object.values(data.players)) {
-      if ((p.bossKills || 0) !== 0) { p.bossKills = 0; changed = true; }
-      if ((p.bossKillsWeekly || 0) !== 0) { p.bossKillsWeekly = 0; changed = true; }
-    }
-    data.meta.bossWeek = cur;
-    // 立即持久化，避免 GET 后文件仍为旧周
-    if (changed) save();
-    else markDirty();
-    console.log(`BOSS榜周重置: ${cur}`);
-  }
-}
+function getMeta() { return data.meta; }
+function setMeta(meta) { data.meta = meta; markDirty(); }
 
-module.exports = { load, save, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, maybeResetWeeklyBossKills, getCurrentWeekKey };
+module.exports = { load, save, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, getMeta, setMeta };
