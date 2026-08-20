@@ -7,6 +7,8 @@ const {
   AFFIX_LEVELS, AFFIX_TREE,
   getStage, expToNext, createEquipItem
 } = require('./data');
+// store 在运行时按需加载，避免启动时循环依赖
+function getStore() { try { return require('./store'); } catch { return null; } }
 
 // ====== 工具：按ID查找词条 ======
 function findAffix(affixId) {
@@ -120,6 +122,41 @@ function migratePlayer(player) {
   player.equips.forEach(addEnchantField);
   Object.values(player.equipped).forEach(addEnchantField);
   return player;
+}
+
+// ====== 周键（周一 0 点边界，ISO 周） ======
+function getCurrentWeekKey() {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const day = now.getDay(); // 0 Sun .. 6 Sat
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMonday);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, '0');
+  const d = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`; // 周一日期作为周键
+}
+function maybeResetWeeklyBossKills(store) {
+  const meta = store.getMeta();
+  const cur = getCurrentWeekKey();
+  if (!meta.bossWeek) {
+    meta.bossWeek = cur;
+    store.setMeta(meta);
+    return false;
+  }
+  if (meta.bossWeek !== cur) {
+    let changed = false;
+    for (const p of store.getAllPlayers()) {
+      if ((p.bossKills || 0) !== 0) { p.bossKills = 0; changed = true; }
+    }
+    meta.bossWeek = cur;
+    store.setMeta(meta);
+    if (changed) store.save();
+    console.log(`BOSS榜周重置: ${cur}`);
+    return true;
+  }
+  return false;
 }
 
 // ====== 力量等阶（含神格） ======
@@ -719,9 +756,13 @@ function calculateIdle(player) {
 
     player.exp += expGain;
     player.gold += goldGain;
+    // 跨周不丢数据：写入前原子切周
+    const s = getStore();
+    if (s) maybeResetWeeklyBossKills(s);
     player.killCount = (player.killCount || 0) + 1;
-    // BOSS 判定：深渊领主/虚空行者等高阶怪视为 BOSS，计入周榜
-    const isBoss = monster.name.includes('领主') || monster.name.includes('支配者') || monster.name.includes('魔神') || monster.hp >= 10000;
+    // BOSS 语义：仅世界 BOSS 计入周榜，避免普通怪误计
+    const BOSS_SET = new Set(['深渊领主', '深渊领主·完全体', '虚空支配者', '混沌魔神', '堕落神灵', '神罚执行者', '太古巨神']);
+    const isBoss = BOSS_SET.has(monster.name);
     if (isBoss) player.bossKills = (player.bossKills || 0) + 1;
 
     if (player.godhood) {
@@ -1042,6 +1083,25 @@ function learnLaw(player, lawId) {
   return { success: true };
 }
 
+// ====== 转生（为转生榜提供真实写入，最小可用；完整 T-010 后扩展） ======
+function doReincarnate(player) {
+  player = migratePlayer(player);
+  if (player.level < 100) return { success: false, message: '需要 Lv.100 才能转生' };
+  player.reincarnation = (player.reincarnation || 0) + 1;
+  player.level = 1;
+  player.exp = 0;
+  player.attrPoints = 0;
+  player.skillPoints = 0;
+  // 重置属性为初始值，避免 2580/1040 残留
+  player.attributes = { atk: 5, def: 4, hp: 5, agi: 8 };
+  recalcMaxStats(player);
+  player.hp = player.maxHp;
+  player.mp = player.maxMp;
+  player.lastTick = Date.now();
+  player.logs.push({ time: Date.now(), type: 'reincarnate', text: `转生成功！第 ${player.reincarnation} 次轮回，属性已重置，战力将重新成长` });
+  return { success: true };
+}
+
 // ====== 登神 ======
 function attemptAscension(player) {
   player = migratePlayer(player);
@@ -1171,7 +1231,8 @@ module.exports = {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
   migratePlayer, getReadonlyPlayer, chooseJob, equipItem, unequipItem,
   useConsumable, buyItem, recalcMaxStats, sellMaterial, sellEquip,
-  evolveRace, enchantItem, learnLaw, attemptAscension,
+  evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
   simulateBattle, getCombatStats, getTotalStats, getPowerScore, getStageFull,
+  getCurrentWeekKey, maybeResetWeeklyBossKills,
   equipAffix, unequipAffix, findAffix, getPassiveSlots, getJobStage
 };

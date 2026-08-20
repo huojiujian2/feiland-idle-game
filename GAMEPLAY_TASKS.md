@@ -239,13 +239,14 @@ Lv.100+ 可转生：等级重置 1，保留转生点，投入永久属性树。
 
 - 技术：`GET /api/leaderboard?type=level` 遍历排序取前100，每页12项底部翻页器；`LeaderboardView.vue`；TabBar「排行」；前三金银铜；等阶复用 `engine.js:getStageFull`
 - 战力口径：与指南一致采用“总属性之和” `atk+def+hp+agi`（`server/engine.js:getPowerScore`），如需权重需同步更新本表与接口文档
-- 榜单范围：已支持 6 类 `level/power/gold/kills/reincarnation/boss`，均具备真实写入与排序；`reincarnation` 通过 `POST /api/player/:username/reincarnate`（Lv.100+ 最小转生）累加，`boss` 通过 `POST /api/player/:username/boss-kill` 及战斗自动判定（`calculateIdle` 高阶怪计入）累加，并按周重置（`store.maybeResetWeeklyBossKills`）
+- 榜单范围：已支持 6 类 `level/power/gold/kills/reincarnation/boss`，均具备真实写入与排序；`reincarnation` 通过 `POST /api/player/:username/reincarnate`（Lv.100+ 原子转生）累加，`boss` 通过战斗自动判定（`BOSS_SET` 精确匹配世界 BOSS）及 `POST /boss-kill`（需击杀凭证+10s 冷却）累加，并按周一 0 点周重置
 - 榜单配置：后端 `LEADERBOARD_CONFIG` 单一数据源，分页截断与 `myRank`（含 100 名外）统一处理；`getReadonlyPlayer` 保证 GET 无副作用
+- 分层与周语义：周键 `engine.getCurrentWeekKey` 采用周一 0 点（`2026-08-23 Sun == 2026-08-22 Sat != 2026-08-24 Mon`），周重置逻辑归 `engine.maybeResetWeeklyBossKills`，`store` 仅持久化 `meta.bossWeek`；写入前原子切周（`calculateIdle`/`boss-kill` 前先 `maybeReset`），后台 60s 定时兜底，GET 不再触发重置
 - **完成记录**：
-  - 分支：`feat/leaderboard-T030`（2026-08-20，fix2: GET无副作用/6榜真实写入+周重置/CSS变量全量/失败清空/重复switch收敛）
-  - 后端：`server/engine.js` 新增 `killCount/reincarnation/bossKills`、`getPowerScore`（总属性之和）、`getStageFull`/`getReadonlyPlayer` 导出，`calculateIdle` 自动计 `bossKills`；`server/store.js` 新增 `meta.bossWeek` 周重置；`server/index.js` `LEADERBOARD_CONFIG` + `getReadonlyPlayer` + 周重置 + `POST /reincarnate`/`/boss-kill`
-  - 前端：`client/src/api.js` `getLeaderboard(type,username)`；`client/src/components/LeaderboardView.vue` 单一 `BOARD_META`、请求序号防竞态、失败清空旧数据、分页12/页、CSS变量全量 `var(--lb-*/--duration-*/--accent*)`、我的排名🏆 + 越页显示；`client/src/style.css` 新增 `--lb-*` 语义变量；`client/src/App.vue` TabBar
-  - 验证：空库/无效类型/六榜排序/100上限及100名外myRank/周重置/GET无副作用/构建 PASS；`git diff --check` 0
+  - 分支：`feat/leaderboard-T030`（2026-08-20，fix3: 周一边界/跨周不丢/转生重算/BOSS精确/分层/防刷/API封装）
+  - 后端：`server/engine.js` 新增 `killCount/reincarnation/bossKills`、`getPowerScore`（总属性之和）、`getStageFull`/`getReadonlyPlayer`/`getCurrentWeekKey`/`maybeResetWeeklyBossKills`/`doReincarnate`（重置属性 `atk5/def4/hp5/agi8` 并 `recalcMaxStats`），`calculateIdle` 写入前原子切周 + `BOSS_SET` 精确判定；`server/store.js` 仅 `meta.bossWeek` 持久化；`server/index.js` `LEADERBOARD_CONFIG` + 只读副本 + 周一语义 + 后台定时 + `POST /reincarnate` 原子转生 + `POST /boss-kill` 凭证冷却
+  - 前端：`client/src/api.js` `getLeaderboard`/`reincarnate`/`bossKill`（GUIDE:974）；`client/src/components/LeaderboardView.vue` 单一 `BOARD_META`、请求序号防竞态、失败清空旧数据、分页12/页、CSS变量全量 `var(--lb-*/--duration-*/--accent*)`、我的排名🏆 + 越页显示；`client/src/style.css` 新增 `--lb-*` 语义变量；`client/src/App.vue` TabBar
+  - 验证：GET无副作用（`equip`/`skills` 保留）、周一边界 `Sat==Sun!=Mon`、跨周 5→1 保留、转生 `2580→150` + 属性重置、BOSS `成年巨龙` 不计 `深渊领主` 计、六榜排序/100上限及100名外myRank/防刷冷却/构建 PASS；`git diff --check` 0
   - 状态：✅ 已完成（6 类均可排序，核心 4 类全量业务，转生/BOSS 最小可用+周重置已落地）
 
 #### T-031 PVP 竞技场 — 🔴 高优先 · 难度 ★★★★ · ⬜ 待办
