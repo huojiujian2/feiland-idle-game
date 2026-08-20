@@ -60,29 +60,42 @@ function updateRect(){
   let rect = null
   if(sel === '[data-tutorial=alloc-wrap]'){
     const wrap = document.querySelector('[data-tutorial=alloc-wrap]')
-    if(wrap){
-      const avail = wrap.querySelectorAll('[data-alloc-available]')
-      if(avail.length>0){
-        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity, found=false
-        avail.forEach(a=>{
-          const r=a.getBoundingClientRect()
-          if(r.width===0&&r.height===0) return
-          found=true
-          minX=Math.min(minX,r.left); minY=Math.min(minY,r.top); maxX=Math.max(maxX,r.right); maxY=Math.max(maxY,r.bottom)
-        })
-        if(found){
-          rect={left:minX,top:minY,right:maxX,bottom:maxY,width:maxX-minX,height:maxY-minY}
-          targetReady.value=true
-        } else {
-          targetReady.value=false
-        }
+    if(!wrap){
+      targetReady.value=false
+      cardStyle.value = { left:'50%', top:'50%', transform:'translate(-50%,-50%)' }
+      holeStyle.value = { display:'none' }
+      backdropTop.value = { display:'none' }
+      backdropBottom.value = { display:'none' }
+      backdropLeft.value = { display:'none' }
+      backdropRight.value = { display:'none' }
+      return
+    }
+    const avail = wrap.querySelectorAll('[data-alloc-available]')
+    if(avail.length>0){
+      let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity, found=false
+      avail.forEach(a=>{
+        const r=a.getBoundingClientRect()
+        if(r.width===0&&r.height===0) return
+        found=true
+        minX=Math.min(minX,r.left); minY=Math.min(minY,r.top); maxX=Math.max(maxX,r.right); maxY=Math.max(maxY,r.bottom)
+      })
+      if(found){
+        rect={left:minX,top:minY,right:maxX,bottom:maxY,width:maxX-minX,height:maxY-minY}
+        targetReady.value=true
       } else {
         targetReady.value=false
       }
-      if(!targetReady.value){
-        // fallbackCenter will handle
-        return
-      }
+    } else {
+      targetReady.value=false
+    }
+    if(!targetReady.value){
+      cardStyle.value = { left:'50%', top:'50%', transform:'translate(-50%,-50%)' }
+      holeStyle.value = { display:'none' }
+      backdropTop.value = { display:'none' }
+      backdropBottom.value = { display:'none' }
+      backdropLeft.value = { display:'none' }
+      backdropRight.value = { display:'none' }
+      return
     }
   } else {
     const el = document.querySelector(sel)
@@ -139,16 +152,11 @@ function startLoop(){
       return
     }
     updateRect()
-    // stop if targetReady and not waiting and not fallback
     if(targetReady.value && !waiting.value && !fallbackCenter.value){
-      // keep one more frame then stop, but continue if step changes
-      raf = requestAnimationFrame(()=>{
-        if(overlayVisible.value) raf = requestAnimationFrame(loop)
-        else running=false
-      })
-    } else {
-      raf = requestAnimationFrame(loop)
+      running=false
+      return
     }
+    raf = requestAnimationFrame(loop)
   }
   loop()
 }
@@ -174,8 +182,8 @@ function onBackdrop(){
 .tutorial-root{ position:fixed; inset:0; z-index:var(--tutorial-z); pointer-events:none; }
 .backdrop{ position:fixed; background:var(--tutorial-overlay-bg); backdrop-filter:var(--tutorial-blur); pointer-events:auto; }
 .backdrop.full{ inset:0; }
-.tutorial-hole{ position:fixed; border:var(--tutorial-outline); border-radius:8px; pointer-events:none; box-shadow:0 0 0 2px var(--tutorial-outline); transition:all var(--duration-normal) var(--ease-out); }
-.tutorial-card{ position:fixed; background:var(--bg2); border:1px solid var(--accent); border-radius:10px; padding:0.6rem 0.8rem; max-width:260px; z-index:calc(var(--tutorial-z) + 1); box-shadow:0 8px 24px rgba(0,0,0,0.4); pointer-events:auto; }
+.tutorial-hole{ position:fixed; border:var(--tutorial-outline); border-radius:var(--tutorial-hole-radius); pointer-events:none; box-shadow:var(--tutorial-hole-shadow); transition:all var(--duration-normal) var(--ease-out); }
+.tutorial-card{ position:fixed; background:var(--tutorial-card-bg); border:1px solid var(--tutorial-card-border); border-radius:var(--tutorial-card-radius); padding:0.6rem 0.8rem; max-width:260px; z-index:calc(var(--tutorial-z) + 1); box-shadow:var(--tutorial-card-shadow); pointer-events:auto; }
 .tutorial-step{ font-size:0.62rem; color:var(--dim); margin-bottom:0.2rem; }
 .tutorial-text{ font-size:0.78rem; color:var(--ink); line-height:1.4; margin-bottom:0.4rem; }
 .tutorial-actions{ display:flex; justify-content:space-between; align-items:center; gap:0.4rem; }

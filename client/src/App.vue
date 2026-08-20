@@ -347,8 +347,12 @@ function handleTabClick(tabId){
   const step = player.value?.tutorialStep
   if(step===1 && tabId==='char') updateTutorial(2)
   else if(step===3 && tabId==='map') updateTutorial(4)
-  else if(step===4 && tabId==='bag') updateTutorial(5)
-  else if(step===5 && tabId==='skill') updateTutorial(6)
+  else if(step===4 && tabId==='bag'){
+    if((player.value?.level ?? 0) >= 5) updateTutorial(5)
+  }
+  else if(step===5 && tabId==='skill'){
+    if(player.value?.jobPath) updateTutorial(6)
+  }
 }
 function handleTutorialNext(){
   const cur = player.value?.tutorialStep ?? 0
@@ -409,6 +413,7 @@ function logout() {
   player.value = null
   if (pollTimer) clearInterval(pollTimer)
   pollTimer = null
+  hasHydrated = false
   loginStep.value = 'login'
   usernameInput.value = ''
   passwordInput.value = ''

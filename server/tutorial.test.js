@@ -95,14 +95,13 @@ describe('T-050 tutorial', ()=>{
   })
 })
 
-describe('T-050 tutorial HTTP', ()=>{
+describe('T-050 tutorial HTTP (via app.handle)', ()=>{
   const http = require('node:http')
   const { PassThrough } = require('node:stream')
   const store = require('./store')
   const app = require('./index')
   const os = require('node:os')
   const path = require('node:path')
-  const fs = require('node:fs')
   const tmpDbPath = path.join(os.tmpdir(), `test-tutorial-http-${Date.now()}-${Math.random().toString(36).slice(2,6)}.json`)
   store.__setDbPath(tmpDbPath)
   store.__resetStore()
@@ -112,38 +111,99 @@ describe('T-050 tutorial HTTP', ()=>{
       const socket = new PassThrough()
       const req = new http.IncomingMessage(socket)
       req.method = method; req.url = url; req.headers = {}
-      if(body) req.body = body
+      if(body !== undefined){
+        req._body = true
+        req.body = body
+      }
       const res = new http.ServerResponse(req)
       const chunks=[]
       res.write = (c)=>{ if(c) chunks.push(Buffer.isBuffer(c)?c:Buffer.from(c)); return true }
       res.end = (c)=>{ if(c) chunks.push(Buffer.isBuffer(c)?c:Buffer.from(c)); const b=Buffer.concat(chunks).toString(); let d; try{ d=JSON.parse(b)}catch(e){d=b} resolve({status:res.statusCode,data:d}) }
       app.handle(req,res, (e)=>{ if(e) reject(e) })
       socket.end()
-      if(body){
-        // simulate json body already parsed: need to set req.body for handler, since express json middleware won't run without stream
-        req.body = body
-      }
     })
   }
-  // Use direct engine via app.handle needs body parsing; we set req.body manually and skip middleware by calling handler directly
-  // Instead, test via direct handler invocation for 400/404/409/200
-  it('POST /tutorial 400/404/409/200 via HTTP', async ()=>{
-    const p = engine.createCharacter('httpT','H')
-    store.setPlayer('httpT', p)
-    store.setAccount('httpT',{username:'httpT',password:'p',hasCharacter:true})
-    let r = await mockApp('POST','/api/player/httpT/tutorial')
-    // body missing -> 400
-    // Actually our mock will call handler with req.body undefined -> 400
-    // We need to pass body via req.body, but our mock sets req.body after, need to ensure handler reads it
-    // For simplicity, test via direct engine mapping already covered, here just verify route exists and returns 400 for illegal step
-    const p2 = engine.createCharacter('httpT2','H')
-    store.setPlayer('httpT2', p2)
-    store.setAccount('httpT2',{username:'httpT2',password:'p',hasCharacter:true})
-    // Use direct handler call to verify status mapping
-    const res = engine.updateTutorialStep(p2, 99)
-    assert.equal(res.status,400)
-    // 404 via HTTP with unknown user
-    const r404 = await mockApp('POST','/api/player/unknown/tutorial')
-    assert.equal(r404.status,404)
+  beforeEach(()=>{
+    engine.__resetSeams()
+    store.__resetStore()
+    store.__setDisableSave(true)
+  })
+  afterEach(()=>{
+    engine.__resetSeams()
+  })
+
+  it('404 when player not exist', async ()=>{
+    const r = await mockApp('POST','/api/player/nonexist/tutorial', {step:1})
+    assert.equal(r.status,404)
+    assert.equal(r.data.success,false)
+  })
+
+  it('400 when step missing/invalid via HTTP', async ()=>{
+    const p = engine.createCharacter('http400','H')
+    store.setPlayer('http400', p)
+    store.setAccount('http400',{username:'http400',password:'p',hasCharacter:true})
+    let r = await mockApp('POST','/api/player/http400/tutorial', {})
+    assert.equal(r.status,400)
+    r = await mockApp('POST','/api/player/http400/tutorial', {step:'a'})
+    assert.equal(r.status,400)
+    r = await mockApp('POST','/api/player/http400/tutorial', {step:99})
+    assert.equal(r.status,400)
+    r = await mockApp('POST','/api/player/http400/tutorial', {step:1.5})
+    assert.equal(r.status,400)
+  })
+
+  it('409 non-monotonic and condition, 200 progression via HTTP', async ()=>{
+    const p = engine.createCharacter('httpFlow','H')
+    store.setPlayer('httpFlow', p)
+    store.setAccount('httpFlow',{username:'httpFlow',password:'p',hasCharacter:true})
+    // skip 0->2 should 409
+    let r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:2})
+    assert.equal(r.status,409)
+    // 0->1 200
+    r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:1})
+    assert.equal(r.status,200)
+    assert.equal(r.data.data.tutorialStep,1)
+    // repeat 1 -> 409
+    r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:1})
+    assert.equal(r.status,409)
+    // 1->2 200
+    r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:2})
+    assert.equal(r.status,200)
+    // 2->3 without alloc1.done -> 409
+    r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:3})
+    assert.equal(r.status,409)
+    // make alloc1 done via direct engine (simulate allocate)
+    const cur = store.getPlayer('httpFlow')
+    const dq = cur.dailyQuests.find(q=>q.id==='alloc1')
+    dq.done = true
+    store.setPlayer('httpFlow', cur)
+    r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:3})
+    assert.equal(r.status,200)
+    // 3->4 200
+    r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:4})
+    assert.equal(r.status,200)
+    // 4->5 without level 5 -> 409
+    const p2 = store.getPlayer('httpFlow')
+    p2.level = 4
+    store.setPlayer('httpFlow', p2)
+    r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:5})
+    assert.equal(r.status,409)
+    p2.level = 5
+    store.setPlayer('httpFlow', p2)
+    r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:5})
+    assert.equal(r.status,200)
+    // 5->6 200
+    r = await mockApp('POST','/api/player/httpFlow/tutorial', {step:6})
+    assert.equal(r.status,200)
+    assert.equal(r.data.data.tutorialStep,6)
+    // 6 idempotent 200 from any (create fresh and skip)
+    const p3 = engine.createCharacter('httpSkip','S')
+    store.setPlayer('httpSkip', p3)
+    store.setAccount('httpSkip',{username:'httpSkip',password:'p',hasCharacter:true})
+    r = await mockApp('POST','/api/player/httpSkip/tutorial', {step:6})
+    assert.equal(r.status,200)
+    assert.equal(r.data.data.tutorialStep,6)
+    r = await mockApp('POST','/api/player/httpSkip/tutorial', {step:6})
+    assert.equal(r.status,200)
   })
 })

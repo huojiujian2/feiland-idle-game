@@ -59,6 +59,12 @@
   --tutorial-blur: blur(2px);
   --tutorial-outline: 2px solid var(--accent);
   --tutorial-z: 400;
+  --tutorial-hole-radius: 8px;
+  --tutorial-card-radius: 10px;
+  --tutorial-card-bg: var(--bg2);
+  --tutorial-card-border: var(--accent);
+  --tutorial-card-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  --tutorial-hole-shadow: 0 0 0 2px var(--accent);
 
   /* 排行榜语义化 */
   --lb-row-bg: rgba(20,22,42,0.4);
