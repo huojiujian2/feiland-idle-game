@@ -64,6 +64,8 @@ app.post('/api/login', (req, res) => {
   if (account.hasCharacter) {
     const player = store.getPlayer(username);
     if (player) {
+      // 写入前原子切周，避免登录旁路跨周丢 bossKills
+      maybeResetWeeklyBossKills(store);
       calculateIdle(player);
       store.setPlayer(username, player);
       return res.json({ success: true, hasCharacter: true, data: getPlayerView(player) });
