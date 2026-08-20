@@ -6,6 +6,7 @@ const {
   MONSTER_SKILLS,
   AFFIX_LEVELS, AFFIX_TREE,
   STRATEGIES, STRATEGY_CD_MS,
+  ACTIVE_SKILL_CD,
   INITIAL_MATERIAL_POOL, DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS,
   getStage, expToNext, createEquipItem
 } = require('./data');
@@ -32,6 +33,8 @@ function buildBattleMonster(monster, strategy) {
   if (atkBonus) return { ...monster, atk: Math.floor(monster.atk * (1 + atkBonus)) };
   return { ...monster };
 }
+function getActiveSkillCd(level){ return ACTIVE_SKILL_CD[level] || 5; }
+function shouldTriggerActiveSkill(round, cd){ return round % cd === 0; }
 
 // ====== T-040 日常（可持久化，每日0点重置） ======
 function getTodayKey(){
@@ -668,6 +671,7 @@ function getCombatStats(player) {
     goldBonus: total.goldBonus,
     firstTurnAgi: total.firstTurnAgi,
     stackAgi: total.stackAgi,
+    dodgeAtk: total.dodgeAtk,
     deathShield: total.deathShield,
     revive: total.revive,
     doubleKill: total.doubleKill,
@@ -733,7 +737,7 @@ function getActionCount(attackerAgi, defenderAgi) {
   return actions;
 }
 
-// ====== 回合制战斗模拟 ======
+// ====== 回合制战斗模拟（T-005 主动技能 CD 化，保留全部旧机制） ======
 function simulateBattle(player, monster) {
   const combat = getCombatStats(player);
   const mHp = monster.hp;
@@ -756,18 +760,77 @@ function simulateBattle(player, monster) {
   // 风行系无限叠加AGI
   let stackAgiBonus = 0;
 
-  // 免死护盾/复活
+  // 局部可变状态（避免重复触发）
   let deathShield = combat.deathShield;
   let revived = false;
+  let skillGoldBonus = 0;
+  let buffs = []; // { key, value, before, expireRound }
 
+  function applyBuff(key, value, turns, round){
+    const expireRound = round + turns;
+    const idx = buffs.findIndex(b=>b.key===key);
+    if(idx!==-1){
+      const old = buffs[idx];
+      combat[old.key] = old.before;
+      buffs.splice(idx,1);
+    }
+    const before = combat[key];
+    combat[key] = Math.floor(combat[key]*(1+value));
+    buffs.push({ key, value, before, expireRound });
+  }
+  function expireBuffs(round){
+    const remain=[];
+    for(const b of buffs){
+      if(round >= b.expireRound){ combat[b.key] = b.before; }
+      else remain.push(b);
+    }
+    buffs = remain;
+  }
+  function doPlayerNormalAction(actions){
+    const r = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
+    mCurHp -= r.value;
+    if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(r.value*combat.lifesteal));
+    actions.push({ actor:'player', skill:'普通攻击', damage:r.value, crit:r.isCrit, targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
+    return r;
+  }
+  function doMonsterNormalAction(actions){
+    if(_rand() < (combat.dodge||0)){
+      actions.push({ actor:'player', skill:'闪避!', dodge:true, targetHp:pHp, targetMaxHp:combat.maxHp });
+      if(combat.dodgeAtk){
+        const c = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, 1, combat.critDmg);
+        mCurHp -= c.value;
+        actions.push({ actor:'player', skill:'闪避反击', damage:c.value, type:'passive', source:'dodgeAtk', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
+      }
+      return;
+    }
+    const mSkill = pickMonsterSkill(monster);
+    let mult=1, skillName='普通攻击';
+    if(mSkill){ mult=mSkill.mult; skillName=mSkill.name; }
+    const d = calcDamage(mAtk, combat.def, mult, 0, combat.defBonus, 0, 0, 0);
+    let dmg=d.value; if(combat.dmgTaken) dmg=Math.floor(dmg*(1+combat.dmgTaken));
+    pHp -= dmg;
+    if(combat.thorns>0) mCurHp -= Math.floor(dmg*combat.thorns);
+    if(combat.regen>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.regen));
+    if(combat.healBonus>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.healBonus*0.1));
+    if(pHp<=0 && deathShield>0){
+      pHp=Math.floor(combat.maxHp*deathShield);
+      actions.push({ actor:'player', skill:'免死护盾!', shield:true, type:'passive', source:'deathShield', targetHp:pHp, targetMaxHp:combat.maxHp });
+      deathShield = 0;
+    }
+    actions.push({ actor:'monster', skill:skillName, damage:dmg, targetHp:Math.max(0,pHp), targetMaxHp:combat.maxHp });
+  }
+
+  const activeAffix = player.affixes?.active ? findAffix(player.affixes.active) : null;
+  const cd = activeAffix ? getActiveSkillCd(activeAffix.level) : null;
   const rounds = [];
   const maxRounds = 30;
   let result = 'timeout';
 
   for (let round = 1; round <= maxRounds; round++) {
     const actions = [];
+    expireBuffs(round);
+    const roundShouldTrigger = activeAffix && shouldTriggerActiveSkill(round, cd);
 
-    // 风行系每回合AGI额外+5%
     if (combat.stackAgi && round > 1) {
       stackAgiBonus += combat.stackAgi;
     }
@@ -775,140 +838,7 @@ function simulateBattle(player, monster) {
     const curMActions = getActionCount(mAgi, curAgi);
     const curPActions = getActionCount(curAgi, mAgi);
 
-    const doAction = (attacker) => {
-      if (pHp <= 0 || mCurHp <= 0) return;
-
-      if (attacker === 'player') {
-        const skill = pickPlayerSkill(combat);
-        let mult = 1;
-        let skillName = '普通攻击';
-        let isCrit = false;
-        let extraEffects = {};
-
-        if (skill) {
-          const eff = skill.effect;
-          skillName = skill.name;
-
-          if (eff.type === 'damage') {
-            mult = eff.mult || 1;
-            // 附加效果
-            if (eff.atk_buff) combat.atk = Math.floor(combat.atk * (1 + eff.atk_buff));
-            if (eff.agi_buff) combat.agi = Math.floor(combat.agi * (1 + eff.agi_buff));
-            if (eff.crit_buff) combat.crit += eff.crit_buff;
-          } else if (eff.type === 'heal') {
-            const heal = Math.floor(combat.maxHp * eff.value);
-            pHp = Math.min(combat.maxHp, pHp + heal);
-            actions.push({ actor: 'player', skill: skillName, heal, targetHp: pHp, targetMaxHp: combat.maxHp });
-            return;
-          } else if (eff.type === 'atk_buff') {
-            combat.atk = Math.floor(combat.atk * (1 + eff.value));
-            skillName = skillName + '(增益)';
-            actions.push({ actor: 'player', skill: skillName, buff: eff.value, targetHp: pHp, targetMaxHp: combat.maxHp });
-            return;
-          } else if (eff.type === 'def_buff') {
-            combat.def = Math.floor(combat.def * (1 + eff.value));
-            if (eff.heal) { pHp = Math.min(combat.maxHp, pHp + Math.floor(combat.maxHp * eff.heal)); }
-            if (eff.shield) { deathShield = Math.max(deathShield, eff.shield); }
-            skillName = skillName + '(防御)';
-            actions.push({ actor: 'player', skill: skillName, buff: eff.value, targetHp: pHp, targetMaxHp: combat.maxHp });
-            return;
-          } else if (eff.type === 'agi_buff') {
-            combat.agi = Math.floor(combat.agi * (1 + eff.value));
-            skillName = skillName + '(加速)';
-            actions.push({ actor: 'player', skill: skillName, buff: eff.value, targetHp: pHp, targetMaxHp: combat.maxHp });
-            return;
-          } else if (eff.type === 'gold_buff' || eff.type === 'all_buff' || eff.type === 'exp_gold_buff' || eff.type === 'exp_gold_kill') {
-            if (eff.atk) combat.atk = Math.floor(combat.atk * (1 + eff.atk));
-            if (eff.gold) combat.goldBonus = (combat.goldBonus || 0) + eff.gold;
-            if (eff.exp) combat.expBonus = (combat.expBonus || 0) + eff.exp;
-            skillName = skillName + '(增益)';
-            actions.push({ actor: 'player', skill: skillName, buff: true, targetHp: pHp, targetMaxHp: combat.maxHp });
-            return;
-          } else if (eff.type === 'burn') {
-            // 灼烧：直接扣怪HP
-            const burnDmg = Math.floor(mHp * eff.value);
-            mCurHp -= burnDmg;
-            skillName = skillName;
-            actions.push({ actor: 'player', skill: skillName, damage: burnDmg, targetHp: Math.max(0, mCurHp), targetMaxHp: mHp });
-            return;
-          } else if (eff.type === 'crit_buff') {
-            combat.crit += eff.value;
-            skillName = skillName + '(暴击)';
-            actions.push({ actor: 'player', skill: skillName, buff: eff.value, targetHp: pHp, targetMaxHp: combat.maxHp });
-            return;
-          }
-        }
-
-        const dmgResult = calcDamage(combat.atk, mDef, mult, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
-        mCurHp -= dmgResult.value;
-
-        // 吸血
-        if (combat.lifesteal > 0) {
-          pHp = Math.min(combat.maxHp, pHp + Math.floor(dmgResult.value * combat.lifesteal));
-        }
-
-        actions.push({
-          actor: 'player', skill: skillName, damage: dmgResult.value,
-          crit: dmgResult.isCrit,
-          targetHp: Math.max(0, mCurHp), targetMaxHp: mHp
-        });
-
-      } else {
-        // 怪物攻击
-        // 闪避判定
-        if (_rand() < (combat.dodge || 0)) {
-          actions.push({ actor: 'player', skill: '闪避!', dodge: true, targetHp: pHp, targetMaxHp: combat.maxHp });
-          // 风行系闪避反击
-          if (combat.dodgeAtk) {
-            const counterDmg = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, 1, combat.critDmg);
-            mCurHp -= counterDmg.value;
-          }
-          return;
-        }
-
-        const mSkill = pickMonsterSkill(monster);
-        let mult = 1;
-        let skillName = '普通攻击';
-        if (mSkill) {
-          mult = mSkill.mult;
-          skillName = mSkill.name;
-        }
-        const dmgResult = calcDamage(mAtk, combat.def, mult, 0, combat.defBonus, 0, 0, 0);
-        let dmg = dmgResult.value;
-
-        // 减伤
-        if (combat.dmgTaken) dmg = Math.floor(dmg * (1 + combat.dmgTaken));
-
-        pHp -= dmg;
-
-        // 反伤
-        if (combat.thorns > 0) {
-          mCurHp -= Math.floor(dmg * combat.thorns);
-        }
-
-        // 回血被动
-        if (combat.regen > 0 && pHp > 0) {
-          pHp = Math.min(combat.maxHp, pHp + Math.floor(combat.maxHp * combat.regen));
-        }
-        if (combat.healBonus > 0 && pHp > 0) {
-          pHp = Math.min(combat.maxHp, pHp + Math.floor(combat.maxHp * combat.healBonus * 0.1));
-        }
-
-        // 免死护盾
-        if (pHp <= 0 && deathShield > 0) {
-          pHp = Math.floor(combat.maxHp * deathShield);
-          deathShield = 0;
-          actions.push({ actor: 'player', skill: '免死护盾!', shield: true, targetHp: pHp, targetMaxHp: combat.maxHp });
-        }
-
-        actions.push({
-          actor: 'monster', skill: skillName, damage: dmg,
-          targetHp: Math.max(0, pHp), targetMaxHp: combat.maxHp
-        });
-      }
-    };
-
-    // 交替行动
+    // 交替行动队列（AGI buff 本版不重算 effAgi，仅影响 combat 数值）
     const queue = [];
     const maxLen = Math.max(curPActions, curMActions);
     const first = (round === 1) ? playerFirst : (curAgi >= mAgi);
@@ -921,20 +851,60 @@ function simulateBattle(player, monster) {
         if (i < curPActions) queue.push('player');
       }
     }
+    let firstPlayerNormalIdx = -1;
     for (const actor of queue) {
       if (pHp <= 0 || mCurHp <= 0) break;
-      doAction(actor);
+      if (actor==='player' && firstPlayerNormalIdx===-1){
+        const beforeLen = actions.length;
+        doPlayerNormalAction(actions);
+        firstPlayerNormalIdx = beforeLen;
+        if(roundShouldTrigger && mCurHp>0 && pHp>0){
+          const eff = activeAffix.effect;
+          let skillPushed = false;
+          if(eff.type==='damage'){
+            const d = calcDamage(combat.atk, mDef, eff.mult, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
+            mCurHp -= d.value;
+            if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(d.value*combat.lifesteal));
+            actions.push({ actor:'player', skill:activeAffix.name, damage:d.value, crit:d.isCrit, type:'skill', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
+            skillPushed = true;
+          } else if(eff.type==='heal'){
+            const h=Math.floor(combat.maxHp*eff.value); pHp=Math.min(combat.maxHp,pHp+h);
+            actions.push({ actor:'player', skill:activeAffix.name, heal:h, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp, healTargetHp:pHp });
+            skillPushed = true;
+          } else if(['atk_buff','def_buff','agi_buff'].includes(eff.type)){
+            const key=eff.type.split('_')[0]; applyBuff(key, eff.value, eff.turns, round);
+            actions.push({ actor:'player', skill:activeAffix.name, buff:eff.value, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+            skillPushed = true;
+          } else if(eff.type==='gold_buff'){
+            skillGoldBonus += eff.value;
+            actions.push({ actor:'player', skill:activeAffix.name, buff:eff.value, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+            skillPushed = true;
+          } else {
+            actions.push({ actor:'player', skill:activeAffix.name, type:'skill', note:eff.type, targetHp:pHp, targetMaxHp:combat.maxHp });
+            skillPushed = true;
+          }
+          if(skillPushed && eff.heal){
+            const h=Math.floor(combat.maxHp*eff.heal); pHp=Math.min(combat.maxHp,pHp+h);
+            const last = actions[actions.length-1];
+            if(last.heal) last.heal += h; else last.heal = h;
+            last.selfHeal = h; last.selfHp = pHp; last.healTargetHp = pHp;
+          }
+        }
+      } else if(actor==='monster'){
+        doMonsterNormalAction(actions);
+      } else {
+        doPlayerNormalAction(actions);
+      }
     }
 
-    rounds.push({ round, actions, pHp: Math.max(0, pHp), mHp: Math.max(0, mCurHp), pActions: curPActions, mActions: curMActions });
+    rounds.push({ round, actions, pHp:Math.max(0,pHp), mHp:Math.max(0,mCurHp), pActions:curPActions, mActions:curMActions });
 
     if (mCurHp <= 0) { result = 'win'; break; }
     if (pHp <= 0) {
-      // 光明系复活
-      if (combat.revive > 0 && !revived) {
+      if (combat.revive>0 && !revived) {
         pHp = Math.floor(combat.maxHp * combat.revive);
         revived = true;
-        rounds.push({ round, actions: [{ actor: 'player', skill: '圣光复生!', revive: true, targetHp: pHp, targetMaxHp: combat.maxHp }], pHp, mHp: mCurHp, pActions: 0, mActions: 0 });
+        rounds.push({ round, actions: [{ actor:'player', skill:'圣光复生!', revive:true, type:'passive', source:'revive', targetHp:pHp, targetMaxHp:combat.maxHp }], pHp, mHp:Math.max(0,mCurHp), pActions:0, mActions:0 });
       } else {
         result = 'lose';
         break;
@@ -954,7 +924,8 @@ function simulateBattle(player, monster) {
     monsterMaxHp: mHp,
     monsterName: monster.name,
     agiRatio: agiRatio.toFixed(2),
-    combatStats: { atk: combat.atk, def: combat.def, agi: combat.agi, crit: combat.crit, dodge: combat.dodge }
+    combatStats: { atk: combat.atk, def: combat.def, agi: combat.agi, crit: combat.crit, dodge: combat.dodge },
+    skillGoldBonus
   };
 }
 
@@ -998,6 +969,7 @@ function calculateIdle(player) {
   if (stratEff.gold) goldMult *= (1 + stratEff.gold);
 
   if (battle.result === 'win') {
+    if(battle.skillGoldBonus) goldMult *= (1 + battle.skillGoldBonus);
     expGain = Math.floor(monster.exp * expMult);
     goldGain = Math.floor(monster.gold * goldMult);
 
@@ -1579,7 +1551,7 @@ module.exports = {
   simulateBattle, getCombatStats, getTotalStats, getPowerScore, getStageFull,
   getCurrentWeekKey, maybeResetWeeklyBossKills,
   equipAffix, unequipAffix, findAffix, getPassiveSlots, getJobStage,
-  buildBattleMonster, shouldDrop,
+  buildBattleMonster, shouldDrop, getActiveSkillCd, shouldTriggerActiveSkill,
   getNow, __setNow, __setRandom, __setDropRandom, __resetSeams,
   createDailyQuests, refreshDailyIfNeeded, updateDailyProgress, grantGold, grantExpWithLevelUp, checkAchievements,
   claimDaily, claimChest, claimAchievement, getTodayKey,
