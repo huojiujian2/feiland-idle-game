@@ -92,6 +92,7 @@
           <CodexView v-else-if="activeTab === 'codex'" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend" />
+          <LeaderboardView v-else-if="activeTab === 'rank'" :currentUser="currentUserRef" />
         </div>
       </transition>
     </main>
@@ -177,6 +178,7 @@ import InventoryView from './components/InventoryView.vue'
 import MapView from './components/MapView.vue'
 import CodexView from './components/CodexView.vue'
 import EvolutionView from './components/EvolutionView.vue'
+import LeaderboardView from './components/LeaderboardView.vue'
 
 const player = ref(null)
 const areas = ref([])
@@ -201,6 +203,7 @@ const charNameInput = ref('')
 let pollTimer = null
 let prevLevel = 0
 let currentUser = ''
+const currentUserRef = ref('')
 
 const tabs = computed(() => [
   { id: 'char', label: '角色', icon: '👤', badge: player.value?.attrPoints > 0 ? player.value.attrPoints : null },
@@ -208,10 +211,11 @@ const tabs = computed(() => [
   { id: 'bag', label: '背包', icon: '🎒', badge: null },
   { id: 'map', label: '地图', icon: '🗺', badge: null },
   { id: 'codex', label: '图鉴', icon: '📖', badge: null },
-  { id: 'evo', label: '进阶', icon: '🧬', badge: player.value?.canEvolve ? '!' : null }
+  { id: 'evo', label: '进阶', icon: '🧬', badge: player.value?.canEvolve ? '!' : null },
+  { id: 'rank', label: '排行', icon: '🏆', badge: null }
 ])
 
-const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo']
+const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank']
 const transitionName = ref('slide-left')
 
 watch(activeTab, (newTab, oldTab) => {
@@ -252,6 +256,7 @@ async function handleLogin() {
   if (!res.success) { alert(res.message); return }
 
   currentUser = username
+  currentUserRef.value = username
   if (res.hasCharacter) {
     player.value = res.data
     prevLevel = res.data.level
@@ -288,6 +293,7 @@ async function handleCreateChar() {
 
   player.value = res.data
   prevLevel = res.data.level
+  currentUserRef.value = currentUser
   loadStaticData()
   startPolling()
 }
@@ -342,6 +348,7 @@ function logout() {
   passwordConfirm.value = ''
   charNameInput.value = ''
   currentUser = ''
+  currentUserRef.value = ''
 }
 
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })

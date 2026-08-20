@@ -63,6 +63,7 @@ function createCharacter(username, charName) {
     hp: 100, maxHp: 100,
     mp: 50, maxMp: 50,
     gold: 0,
+    killCount: 0,
     currentArea: 'gaomanshan',
     inventory: [],
     equips: [],
@@ -85,6 +86,7 @@ function migratePlayer(player) {
   if (player.faith === undefined) player.faith = 0;
   if (!player.laws) player.laws = [];
   if (!player.inventory) player.inventory = [];
+  if (player.killCount === undefined) player.killCount = 0;
 
   // 迁移旧5属性 → 新4属性
   if (player.attributes && player.attributes.strength !== undefined && player.attributes.atk === undefined) {
@@ -713,6 +715,7 @@ function calculateIdle(player) {
 
     player.exp += expGain;
     player.gold += goldGain;
+    player.killCount = (player.killCount || 0) + 1;
 
     if (player.godhood) {
       player.faith += Math.floor(monster.exp * 0.1);
@@ -1128,7 +1131,7 @@ function getPlayerView(player) {
     job: player.job, jobPath: player.jobPath, godhood: player.godhood, faith: player.faith,
     stage, attributes: player.attributes, attrPoints: player.attrPoints, skillPoints: player.skillPoints,
     hp: player.hp, maxHp: player.maxHp, mp: player.mp, maxMp: player.maxMp,
-    gold: player.gold, currentArea: player.currentArea, areaName: area ? area.name : '未知',
+    gold: player.gold, killCount: player.killCount || 0, powerScore: getPowerScore(player), currentArea: player.currentArea, areaName: area ? area.name : '未知',
     inventory: player.inventory, equips: player.equips, equipped: player.equipped,
     affixes: player.affixes, equippedAffixes, affixData, passiveSlots,
     totalStats: total, equipBonus: eqBonus,
@@ -1143,11 +1146,18 @@ function getPlayerView(player) {
   };
 }
 
+// ====== 战力评分（用于排行榜） ======
+function getPowerScore(player) {
+  const total = getTotalStats(player);
+  // 权重：ATK 3, DEF 2.5, HP/10, AGI 2, 附带 crit/dodge 额外权重
+  return Math.floor(total.atk * 3 + total.def * 2.5 + total.hp / 10 + total.agi * 2 + total.crit * 500 + total.dodge * 400);
+}
+
 module.exports = {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
   migratePlayer, chooseJob, equipItem, unequipItem,
   useConsumable, buyItem, recalcMaxStats, sellMaterial, sellEquip,
   evolveRace, enchantItem, learnLaw, attemptAscension,
-  simulateBattle, getCombatStats,
+  simulateBattle, getCombatStats, getTotalStats, getPowerScore,
   equipAffix, unequipAffix, findAffix, getPassiveSlots, getJobStage
 };
