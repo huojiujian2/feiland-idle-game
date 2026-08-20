@@ -9,7 +9,7 @@ const {
   sellMaterial, sellEquip,
   evolveRace, enchantItem, learnLaw, attemptAscension,
   equipAffix, unequipAffix,
-  getPowerScore, getTotalStats, migratePlayer
+  getPowerScore, getTotalStats, migratePlayer, getStageFull
 } = require('./engine');
 
 const app = express();
@@ -388,7 +388,7 @@ app.get('/api/codex', (req, res) => {
 // ====== 排行榜 ======
 app.get('/api/leaderboard', (req, res) => {
   const type = req.query.type || 'level';
-  const allowed = ['level', 'power', 'gold', 'kills'];
+  const allowed = ['level', 'power', 'gold', 'kills', 'reincarnation', 'boss'];
   if (!allowed.includes(type)) {
     return res.json({ success: false, message: '无效的排行类型' });
   }
@@ -396,6 +396,7 @@ app.get('/api/leaderboard', (req, res) => {
     migratePlayer(p);
     const power = getPowerScore(p);
     const total = getTotalStats(p);
+    const stageInfo = getStageFull(p.level, p.godhood);
     return {
       username: p.username,
       name: p.name,
@@ -404,10 +405,13 @@ app.get('/api/leaderboard', (req, res) => {
       exp: p.exp,
       gold: p.gold,
       killCount: p.killCount || 0,
+      reincarnation: p.reincarnation || 0,
+      bossKills: p.bossKills || 0,
       job: p.job,
       jobPath: p.jobPath,
       godhood: p.godhood || null,
-      stage: p.godhood === 'god' ? '神灵' : p.godhood === 'demigod' ? '半神' : (p.level <= 10 ? '凡人' : p.level <= 30 ? '正式阶' : p.level <= 60 ? '大师阶' : p.level <= 100 ? '英雄阶' : '传奇'),
+      stage: stageInfo.name,
+      stageColor: stageInfo.color,
       power,
       atk: total.atk,
       def: total.def,
@@ -425,10 +429,21 @@ app.get('/api/leaderboard', (req, res) => {
     sorted = players.sort((a, b) => b.gold - a.gold);
   } else if (type === 'kills') {
     sorted = players.sort((a, b) => b.killCount - a.killCount || b.level - a.level);
+  } else if (type === 'reincarnation') {
+    sorted = players.sort((a, b) => b.reincarnation - a.reincarnation || b.level - a.level);
+  } else if (type === 'boss') {
+    sorted = players.sort((a, b) => b.bossKills - a.bossKills || b.level - a.level);
   }
 
-  const ranked = sorted.slice(0, 100).map((p, idx) => ({ rank: idx + 1, ...p }));
-  res.json({ success: true, data: { type, total: players.length, list: ranked } });
+  const rankedFull = sorted.map((p, idx) => ({ rank: idx + 1, ...p }));
+  const ranked = rankedFull.slice(0, 100);
+  // 支持查询当前用户排名（即使在100名之外）
+  let myRank = null;
+  const queryUser = req.query.username;
+  if (queryUser) {
+    myRank = rankedFull.find(p => p.username === queryUser) || null;
+  }
+  res.json({ success: true, data: { type, total: players.length, list: ranked, myRank } });
 });
 
 // ====== 定时任务：每5秒计算所有玩家的挂机收益 ======

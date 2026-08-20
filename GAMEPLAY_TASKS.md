@@ -237,13 +237,15 @@ Lv.100+ 可转生：等级重置 1，保留转生点，投入永久属性树。
 | 转生排行 | reincarnation | 实时 |
 | BOSS 击杀 | BOSS 击杀数 | 每周重置 |
 
-- 技术：`GET /api/leaderboard?type=level` 遍历排序取前100；`LeaderboardView.vue`；TabBar「排行」；前三金银铜
+- 技术：`GET /api/leaderboard?type=level` 遍历排序取前100，每页12项底部翻页器；`LeaderboardView.vue`；TabBar「排行」；前三金银铜；等阶复用 `engine.js:getStageFull`
+- 战力口径：与指南一致采用“总属性之和” `atk+def+hp+agi`（`server/engine.js:getPowerScore`），如需权重需同步更新本表与接口文档
+- 榜单范围：已支持 6 类 `level/power/gold/kills/reincarnation/boss`，后两类为占位（`reincarnation`/`bossKills` 字段，待对应系统落地后有真实排序）
 - **完成记录**：
-  - 分支：`feat/leaderboard-T030`（2026-08-20）
-  - 后端：`server/engine.js` 新增 `killCount`、`getPowerScore`、`getPlayerView` 暴露；`server/index.js` 新增 `GET /api/leaderboard`
-  - 前端：`client/src/api.js` 新增 `getLeaderboard`；`client/src/components/LeaderboardView.vue` 新建；`client/src/App.vue` 接入 TabBar + `tabOrder`
-  - 验证：空库/无效类型/三账号排序/100上限/构建 PASS；查看 `git diff feat/leaderboard-T030`
-  - 状态：✅ 已完成
+  - 分支：`feat/leaderboard-T030`（2026-08-20，fix: 双请求竞态/分页/CSS变量/等阶复用/战力口径/尾随空格）
+  - 后端：`server/engine.js` 新增 `killCount/reincarnation/bossKills`、`getPowerScore`（总属性之和）、`getStageFull` 导出；`server/index.js` 新增 `GET /api/leaderboard` 支持 6 类型 + `?username` 返回 `myRank`（100名外亦可）、等阶复用
+  - 前端：`client/src/api.js` 新增 `getLeaderboard(type,username)`；`client/src/components/LeaderboardView.vue` 修复切榜竞态（请求序号）、分页12/页、CSS变量 `var(--duration-*/--ease-out/--accent*)`、我的排名🏆 + 越页显示；`client/src/App.vue` 接入 TabBar + `tabOrder`
+  - 验证：空库/无效类型/三账号六榜排序/100上限及100名外myRank/构建 PASS；`git diff feat/leaderboard-T030`
+  - 状态：✅ 已完成（验收 P1/P2 已修复）
 
 #### T-031 PVP 竞技场 — 🔴 高优先 · 难度 ★★★★ · ⬜ 待办
 
@@ -341,7 +343,7 @@ JWT + `express-rate-limit` + 二次确认 + bcrypt + 参数校验。
 
 ## 9. 完整任务清单（可追踪）
 
-> **状态图例**：✅ 已完成 · 🟡 进行中 · ⬜ 待办  
+> **状态图例**：✅ 已完成 · 🟡 进行中 · ⬜ 待办
 > **分支约定**：`feat/<T-ID>-<slug>`，如 `feat/T-030-leaderboard`、`feat/T-004-strategy`。每个大功能点新建分支，完成后更新本表并提交 PR。
 
 | ID | 任务 | 优先级 | 难度 | 依赖 | 状态 | 分支 | 完成时间 | 备注 |
