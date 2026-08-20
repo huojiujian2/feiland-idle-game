@@ -25,16 +25,14 @@ function resetStore() {
   // 保留 bossWeek 初始化逻辑，不强制清空
 }
 
-let _origSave
 beforeEach(() => {
   engine.__resetSeams()
   resetStore()
-  _origSave = store.save
-  store.save = () => {} // 隔离：避免污染 server/db.json（被 .gitignore 忽略）及全局周榜重置
+  store.__setDisableSave(true)
 })
 afterEach(() => {
   engine.__resetSeams()
-  store.save = _origSave
+  store.__setDisableSave(false)
 })
 
 async function postStrategy(username, strategy) {

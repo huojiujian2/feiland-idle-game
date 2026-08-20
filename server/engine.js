@@ -812,6 +812,8 @@ function calculateIdle(player) {
         } else if (drop.type === 'equip') {
           const item = createEquipItem(drop.template);
           if (item) {
+            // uid 由 engine 注入，确保 __setNow/__setRandom 可控（Spec §8），data.js 保持静态
+            item.uid = getNow() + '_' + _rand().toString(36).substr(2, 6);
             player.equips.push(item);
             drops.push(`${item.name} [${item.quality}]`);
           }

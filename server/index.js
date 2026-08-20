@@ -468,22 +468,24 @@ app.post('/api/player/:username/strategy', (req, res) => {
   if (typeof strategy !== 'string' || !Object.hasOwn(STRATEGIES, strategy)) {
     return res.json({ success: false, message: '策略不存在' });
   }
-  // 旧存档迁移至 Spec §4（仅合法请求后执行，确保缺失 strategy 时幂等正确）
+  // 计算迁移后有效值（不原地修改），用于幂等与 CD 判断，确保任意 A 失败无副作用
   const { migratePlayer } = require('./engine');
-  const beforeStrategy = player.strategy;
-  const beforeChangedAt = player.strategyChangedAt;
-  migratePlayer(player);
-  const migrated = (beforeStrategy !== player.strategy) || (beforeChangedAt !== player.strategyChangedAt);
-  // 幂等：同策略直接成功，绕过等级与 CD；若迁移产生变更需落盘
-  if (strategy === player.strategy) {
+  const effStrategy = (typeof player.strategy === 'string' && Object.hasOwn(STRATEGIES, player.strategy)) ? player.strategy : 'balanced';
+  const effChangedAt = Number.isFinite(player.strategyChangedAt) ? player.strategyChangedAt : 0;
+  // 幂等：同策略直接成功，绕过等级与 CD；若需迁移则落盘
+  if (strategy === effStrategy) {
+    const beforeS = player.strategy, beforeC = player.strategyChangedAt;
+    migratePlayer(player);
+    const migrated = (beforeS !== player.strategy) || (beforeC !== player.strategyChangedAt);
     if (migrated) { store.setPlayer(player.username, player); store.save(); }
     return res.json({ success: true, data: getPlayerView(player) });
   }
-  const strategyChangedAt = Number.isFinite(player.strategyChangedAt) ? player.strategyChangedAt : 0;
-  if (strategyChangedAt !== 0 && getNow() - strategyChangedAt < STRATEGY_CD_MS) {
-    const remain = Math.ceil((STRATEGY_CD_MS - (getNow() - strategyChangedAt)) / 1000);
+  if (effChangedAt !== 0 && getNow() - effChangedAt < STRATEGY_CD_MS) {
+    const remain = Math.ceil((STRATEGY_CD_MS - (getNow() - effChangedAt)) / 1000);
     return res.json({ success: false, message: `策略切换冷却中，剩余${remain}s` });
   }
+  // 全部 A 通过后再原地迁移（旧存档缺失字段、背包清理等），进入 B
+  migratePlayer(player);
 
   // B — 旧策略结算（按旧 strategy）
   maybeResetWeeklyBossKills(store);
