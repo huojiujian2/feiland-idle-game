@@ -90,6 +90,15 @@ const page = ref(1)
 const pageSize = 12
 const currentUser = computed(() => props.currentUser || '')
 
+// 单一数据源：榜单元信息，避免多处 if 链重复
+const BOARD_META = {
+  level: { label: '等级', value: (i) => `Lv.${i.level}`, sub: (i) => `${i.exp} exp` },
+  power: { label: '战力', value: (i) => i.power.toLocaleString(), sub: (i) => `ATK ${i.atk} · DEF ${i.def}` },
+  gold: { label: '金币', value: (i) => i.gold.toLocaleString(), sub: (i) => `Lv.${i.level}` },
+  kills: { label: '击杀数', value: (i) => `${i.killCount}`, sub: (i) => `Lv.${i.level}` },
+  reincarnation: { label: '转生', value: (i) => `${i.reincarnation}`, sub: (i) => `Lv.${i.level}` },
+  boss: { label: 'BOSS击杀', value: (i) => `${i.bossKills}`, sub: (i) => `Lv.${i.level}` }
+}
 const types = [
   { id: 'level', label: '等级', icon: '⬆️' },
   { id: 'power', label: '战力', icon: '⚔️' },
@@ -99,11 +108,7 @@ const types = [
   { id: 'boss', label: 'BOSS', icon: '👹' }
 ]
 
-const valueLabel = computed(() => {
-  const map = { level: '等级', power: '战力', gold: '金币', kills: '击杀数', reincarnation: '转生', boss: 'BOSS击杀' }
-  return map[activeType.value] || ''
-})
-
+const valueLabel = computed(() => BOARD_META[activeType.value]?.label || '')
 const totalPages = computed(() => Math.max(1, Math.ceil(list.value.length / pageSize)))
 const pagedList = computed(() => list.value.slice((page.value - 1) * pageSize, page.value * pageSize))
 
@@ -113,26 +118,8 @@ function rankClass(rank) {
   if (rank === 3) return 'rank-3'
   return ''
 }
-
-function formatValue(item) {
-  if (activeType.value === 'level') return `Lv.${item.level}`
-  if (activeType.value === 'power') return item.power.toLocaleString()
-  if (activeType.value === 'gold') return item.gold.toLocaleString()
-  if (activeType.value === 'kills') return `${item.killCount}`
-  if (activeType.value === 'reincarnation') return `${item.reincarnation}`
-  if (activeType.value === 'boss') return `${item.bossKills}`
-  return ''
-}
-
-function valueSub(item) {
-  if (activeType.value === 'level') return `${item.exp} exp`
-  if (activeType.value === 'power') return `ATK ${item.atk} · DEF ${item.def}`
-  if (activeType.value === 'gold') return `Lv.${item.level}`
-  if (activeType.value === 'kills') return `Lv.${item.level}`
-  if (activeType.value === 'reincarnation') return `Lv.${item.level}`
-  if (activeType.value === 'boss') return `Lv.${item.level}`
-  return ''
-}
+function formatValue(item) { return BOARD_META[activeType.value]?.value(item) || '' }
+function valueSub(item) { return BOARD_META[activeType.value]?.sub(item) || '' }
 
 // 请求序号避免竞态：旧响应丢弃
 let reqSeq = 0
@@ -147,10 +134,17 @@ async function fetchBoard() {
       list.value = res.data.list || []
       total.value = res.data.total || 0
       myRank.value = res.data.myRank || null
+    } else {
+      list.value = []
+      total.value = 0
+      myRank.value = null
     }
   } catch (e) {
     if (curSeq !== reqSeq) return
     console.error('排行榜加载失败', e)
+    list.value = []
+    total.value = 0
+    myRank.value = null
   } finally {
     if (curSeq === reqSeq) loading.value = false
   }
@@ -178,12 +172,12 @@ defineExpose({ refresh: fetchBoard })
 .lb-head-row .col-value { width: 110px; text-align: right; }
 
 .lb-list { display: flex; flex-direction: column; gap: 0.25rem; }
-.lb-row { display: flex; align-items: center; padding: 0.45rem 0.4rem; border-radius: 8px; background: rgba(20,22,42,0.4); border: 1px solid transparent; transition: all var(--duration-normal) var(--ease-out); }
-.lb-row:hover { background: rgba(20,22,42,0.6); border-color: var(--accent2); }
-.lb-row.rank-1 { background: linear-gradient(135deg, rgba(212,175,94,0.12), rgba(212,175,94,0.04)); border-color: var(--accent); }
-.lb-row.rank-2 { background: linear-gradient(135deg, rgba(180,180,200,0.10), rgba(180,180,200,0.03)); border-color: var(--muted); }
-.lb-row.rank-3 { background: linear-gradient(135deg, rgba(205,127,50,0.10), rgba(205,127,50,0.03)); border-color: #cd7f32; }
-.lb-row.self { border-color: var(--accent2); box-shadow: 0 0 0 1px var(--accent2); }
+.lb-row { display: flex; align-items: center; padding: 0.45rem 0.4rem; border-radius: 8px; background: var(--lb-row-bg); border: 1px solid transparent; transition: all var(--duration-normal) var(--ease-out); }
+.lb-row:hover { background: var(--lb-row-hover); border-color: var(--accent2); }
+.lb-row.rank-1 { background: linear-gradient(135deg, var(--lb-gold-bg), var(--lb-gold-bg-soft)); border-color: var(--accent); }
+.lb-row.rank-2 { background: linear-gradient(135deg, var(--lb-silver-bg), var(--lb-silver-bg-soft)); border-color: var(--muted); }
+.lb-row.rank-3 { background: linear-gradient(135deg, var(--lb-bronze-bg), var(--lb-bronze-bg-soft)); border-color: var(--lb-bronze-border); }
+.lb-row.self { border-color: var(--accent2); box-shadow: 0 0 0 1px var(--lb-self-shadow); }
 
 .col-rank { width: 52px; text-align: center; flex-shrink: 0; }
 .rank-medal { font-size: 1.1rem; }
@@ -193,10 +187,10 @@ defineExpose({ refresh: fetchBoard })
 .col-player { flex: 1; min-width: 0; }
 .player-main { display: flex; align-items: center; gap: 0.3rem; }
 .player-name { font-size: 0.82rem; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.self-tag { font-size: 0.6rem; color: var(--accent2); background: rgba(157,140,240,0.15); padding: 0.05rem 0.3rem; border-radius: 3px; font-weight: 600; }
+.self-tag { font-size: 0.6rem; color: var(--accent2); background: var(--lb-self-tag-bg); padding: 0.05rem 0.3rem; border-radius: 3px; font-weight: 600; }
 .god-tag { font-size: 0.6rem; font-weight: 700; padding: 0.05rem 0.3rem; border-radius: 3px; }
-.god-tag.god { color: #ffd700; background: rgba(255,215,0,0.12); }
-.god-tag.demi { color: #ff9d5e; background: rgba(255,157,94,0.12); }
+.god-tag.god { color: var(--lb-god-gold); background: var(--lb-god-gold-bg); }
+.god-tag.demi { color: var(--lb-god-demi); background: var(--lb-god-demi-bg); }
 .player-sub { display: flex; gap: 0.3rem; font-size: 0.62rem; color: var(--dim); margin-top: 0.1rem; }
 .player-race { color: var(--accent2); }
 .player-level { color: var(--muted); }
@@ -207,14 +201,14 @@ defineExpose({ refresh: fetchBoard })
 .value-sub { font-size: 0.6rem; color: var(--dim); }
 
 .lb-pager { display: flex; justify-content: center; align-items: center; gap: 0.5rem; padding: 0.4rem 0 0.1rem; }
-.pager-btn { padding: 0.2rem 0.6rem; border: 1px solid var(--rule); border-radius: 6px; background: rgba(20,22,42,0.5); color: var(--ink); font-size: 0.75rem; cursor: pointer; transition: all var(--duration-normal) var(--ease-out); }
+.pager-btn { padding: 0.2rem 0.6rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--lb-pager-bg); color: var(--ink); font-size: 0.75rem; cursor: pointer; transition: all var(--duration-normal) var(--ease-out); }
 .pager-btn:hover:not(:disabled) { border-color: var(--accent2); }
 .pager-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .pager-info { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
 
 .lb-footer { text-align: center; padding: 0.4rem 0 0.1rem; font-size: 0.65rem; color: var(--dim); }
 
-.my-rank-card { padding: 0.6rem 0.8rem; border-color: var(--accent2); background: rgba(157,140,240,0.06); }
+.my-rank-card { padding: 0.6rem 0.8rem; border-color: var(--accent2); background: var(--lb-rank-bg); }
 .my-rank-title { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.2rem; }
 .my-rank-row { display: flex; align-items: center; gap: 0.5rem; }
 .my-rank-num { font-size: 0.9rem; font-weight: 800; color: var(--accent); font-family: monospace; }
