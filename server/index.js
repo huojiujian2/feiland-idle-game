@@ -8,7 +8,8 @@ const {
   chooseJob, equipItem, unequipItem, useConsumable, buyItem,
   sellMaterial, sellEquip,
   evolveRace, enchantItem, learnLaw, attemptAscension,
-  equipAffix, unequipAffix
+  equipAffix, unequipAffix,
+  getPowerScore, getTotalStats, migratePlayer
 } = require('./engine');
 
 const app = express();
@@ -382,6 +383,52 @@ app.get('/api/codex', (req, res) => {
   }
 
   res.json({ success: true, data: { materials, equips, consumables, monsters } });
+});
+
+// ====== 排行榜 ======
+app.get('/api/leaderboard', (req, res) => {
+  const type = req.query.type || 'level';
+  const allowed = ['level', 'power', 'gold', 'kills'];
+  if (!allowed.includes(type)) {
+    return res.json({ success: false, message: '无效的排行类型' });
+  }
+  const players = store.getAllPlayers().map(p => {
+    migratePlayer(p);
+    const power = getPowerScore(p);
+    const total = getTotalStats(p);
+    return {
+      username: p.username,
+      name: p.name,
+      race: p.race,
+      level: p.level,
+      exp: p.exp,
+      gold: p.gold,
+      killCount: p.killCount || 0,
+      job: p.job,
+      jobPath: p.jobPath,
+      godhood: p.godhood || null,
+      stage: p.godhood === 'god' ? '神灵' : p.godhood === 'demigod' ? '半神' : (p.level <= 10 ? '凡人' : p.level <= 30 ? '正式阶' : p.level <= 60 ? '大师阶' : p.level <= 100 ? '英雄阶' : '传奇'),
+      power,
+      atk: total.atk,
+      def: total.def,
+      hp: total.hp,
+      agi: total.agi
+    };
+  });
+
+  let sorted = [];
+  if (type === 'level') {
+    sorted = players.sort((a, b) => b.level - a.level || b.exp - a.exp || b.gold - a.gold);
+  } else if (type === 'power') {
+    sorted = players.sort((a, b) => b.power - a.power);
+  } else if (type === 'gold') {
+    sorted = players.sort((a, b) => b.gold - a.gold);
+  } else if (type === 'kills') {
+    sorted = players.sort((a, b) => b.killCount - a.killCount || b.level - a.level);
+  }
+
+  const ranked = sorted.slice(0, 100).map((p, idx) => ({ rank: idx + 1, ...p }));
+  res.json({ success: true, data: { type, total: players.length, list: ranked } });
 });
 
 // ====== 定时任务：每5秒计算所有玩家的挂机收益 ======
