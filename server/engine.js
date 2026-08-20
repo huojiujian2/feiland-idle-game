@@ -77,7 +77,7 @@ function createCharacter(username, charName) {
   };
 }
 
-// ====== 数据迁移 ======
+// ====== 数据迁移（注意：会原地修改传入对象，含 inventory/equips 清理） ======
 function migratePlayer(player) {
   if (!player.equips) player.equips = [];
   if (!player.equipped) player.equipped = { weapon: null, armor: null, accessory: null };
@@ -720,6 +720,9 @@ function calculateIdle(player) {
     player.exp += expGain;
     player.gold += goldGain;
     player.killCount = (player.killCount || 0) + 1;
+    // BOSS 判定：深渊领主/虚空行者等高阶怪视为 BOSS，计入周榜
+    const isBoss = monster.name.includes('领主') || monster.name.includes('支配者') || monster.name.includes('魔神') || monster.hp >= 10000;
+    if (isBoss) player.bossKills = (player.bossKills || 0) + 1;
 
     if (player.godhood) {
       player.faith += Math.floor(monster.exp * 0.1);
@@ -1158,9 +1161,15 @@ function getPowerScore(player) {
   return Math.floor(total.atk + total.def + total.hp + total.agi);
 }
 
+// 只读规范化：深拷贝后迁移，不污染原存档（供排行榜等 GET 使用）
+function getReadonlyPlayer(player) {
+  const clone = JSON.parse(JSON.stringify(player));
+  return migratePlayer(clone);
+}
+
 module.exports = {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
-  migratePlayer, chooseJob, equipItem, unequipItem,
+  migratePlayer, getReadonlyPlayer, chooseJob, equipItem, unequipItem,
   useConsumable, buyItem, recalcMaxStats, sellMaterial, sellEquip,
   evolveRace, enchantItem, learnLaw, attemptAscension,
   simulateBattle, getCombatStats, getTotalStats, getPowerScore, getStageFull,
