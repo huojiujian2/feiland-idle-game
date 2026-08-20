@@ -1,12 +1,31 @@
-// 游戏引擎 v0.5 - 词条系统 + 新属性体系
+// 游戏引擎 v0.6 - 词条系统 + 新属性体系 + T-004 策略
 const {
   AREAS, EQUIP_TEMPLATES, JOB_TREE, SHOP_ITEMS,
   MATERIAL_PRICES, EQUIP_SELL_PRICES,
   RACE_EVOLUTION, ENCHANT_RECIPES, MAX_ENCHANT_SLOTS, LAWS, ASCENSION,
   MONSTER_SKILLS,
   AFFIX_LEVELS, AFFIX_TREE,
+  STRATEGIES, STRATEGY_CD_MS,
   getStage, expToNext, createEquipItem
 } = require('./data');
+
+// ====== 可注入时钟与随机（测试 seam） ======
+let _now = () => Date.now();
+let _rand = Math.random;
+let _dropRand = Math.random;
+function getNow() { return _now(); }
+function __setNow(fn) { _now = fn; }
+function __setRandom(fn) { _rand = fn; }
+function __setDropRandom(fn) { _dropRand = fn; }
+function __resetSeams() { _now = () => Date.now(); _rand = Math.random; _dropRand = Math.random; }
+function shouldDrop(rate, strategy) {
+  const eff = rate * (strategy === 'greedy' ? 1.05 : 1);
+  return _dropRand() < eff;
+}
+function buildBattleMonster(monster, strategy) {
+  if (strategy === 'training') return { ...monster, atk: Math.floor(monster.atk * 1.20) };
+  return { ...monster };
+}
 
 // ====== 工具：按ID查找词条 ======
 function findAffix(affixId) {
@@ -72,8 +91,10 @@ function createCharacter(username, charName) {
     equipped: { weapon: null, armor: null, accessory: null },
     laws: [],
     logs: [],
-    lastTick: Date.now(),
-    createdAt: Date.now()
+    lastTick: getNow(),
+    createdAt: getNow(),
+    strategy: 'balanced',
+    strategyChangedAt: 0
   };
 }
 
@@ -91,6 +112,8 @@ function migratePlayer(player) {
   if (player.killCount === undefined) player.killCount = 0;
   if (player.reincarnation === undefined) player.reincarnation = 0;
   if (player.bossKills === undefined) player.bossKills = 0;
+  if (typeof player.strategy !== 'string' || !Object.hasOwn(STRATEGIES, player.strategy)) player.strategy = 'balanced';
+  if (!Number.isFinite(player.strategyChangedAt)) player.strategyChangedAt = 0;
 
   // 迁移旧5属性 → 新4属性
   if (player.attributes && player.attributes.strength !== undefined && player.attributes.atk === undefined) {
@@ -124,7 +147,7 @@ function migratePlayer(player) {
 
 // ====== 周键（周一 0 点边界，ISO 周） ======
 function getCurrentWeekKey() {
-  const now = new Date();
+  const now = new Date(getNow());
   now.setHours(0, 0, 0, 0);
   const day = now.getDay(); // 0 Sun .. 6 Sat
   const diffToMonday = day === 0 ? -6 : 1 - day;
@@ -333,9 +356,15 @@ function getTotalStats(player) {
   const baseHp = (100 + (player.level - 1) * 20 + base.hp * 10 + eq.hp + (raceBonus.con || 0) * 5 + (godBonus.hp || 0) * 5);
   const baseAgi = (10 + (player.level - 1) * 2 + base.agi * 1 + eq.agi + (raceBonus.agi || 0) + (godBonus.agi || 0));
 
-  // 词条百分比加成
-  const atkTotal = Math.floor(baseAtk * (1 + affix.atk) * allAttrMult);
-  const defTotal = Math.floor(baseDef * (1 + affix.def) * allAttrMult);
+  // 策略百分比加成（战斗向，仅 atk/def/regen）
+  const strat = STRATEGIES[player.strategy] || STRATEGIES.balanced;
+  const sAtk = strat.effects.atk || 0;
+  const sDef = strat.effects.def || 0;
+  const sRegen = strat.effects.regen || 0;
+
+  // 词条+策略百分比加成
+  const atkTotal = Math.floor(baseAtk * (1 + affix.atk) * (1 + sAtk) * allAttrMult);
+  const defTotal = Math.floor(baseDef * (1 + affix.def) * (1 + sDef) * allAttrMult);
   const hpTotal = Math.floor(baseHp * (1 + affix.hp) * allAttrMult);
   const agiTotal = Math.floor(baseAgi * (1 + affix.agi) * allAttrMult);
 
@@ -343,7 +372,7 @@ function getTotalStats(player) {
   const crit = affix.crit + (talents.crit || 0) + (mechanics.crit || 0);
   const critDmg = affix.critDmg + (talents.critDmg || 0) + (mechanics.critDmg || 0) + 0.5; // 基础暴击伤害150%
   const dodge = affix.dodge + (talents.dodge || 0) + (mechanics.dodge || 0);
-  const regen = affix.regen + (mechanics.regen || 0);
+  const regen = (affix.regen + (mechanics.regen || 0)) * (1 + sRegen);
   const dmgTaken = affix.dmgTaken + (talents.dmgTaken || 0);
   const expBonus = eq.exp + affix.exp + (getJobGrowth(player).exp || 0);
   const goldBonus = eq.gold + affix.gold + (getJobGrowth(player).gold || 0) + (talents.goldGain || 0) + (mechanics.goldGain || 0);
@@ -378,11 +407,13 @@ function getCombatStats(player) {
   const lawBonus = getLawBonus(player);
   const activeAffix = player.affixes?.active ? findAffix(player.affixes.active) : null;
 
-  // 低血量加成
+  // 低血量加成（战斗开始时快照，非每回合重算）
   const hpRatio = player.hp / player.maxHp;
   let bonusAtk = 0, bonusDef = 0;
   if (total.lowHpAtk && hpRatio < 0.5) bonusAtk += total.lowHpAtk;
   if (total.lowHpDef && hpRatio < 0.5) bonusDef += total.lowHpDef;
+  // T-004 背水一战：额外低血加成（与词条相加后统一 floor）
+  if (player.strategy === 'desperate' && hpRatio < 0.30) bonusAtk += 0.20;
 
   return {
     atk: Math.floor(total.atk * (1 + bonusAtk)),
@@ -420,7 +451,7 @@ function getCombatStats(player) {
 // ====== 选择玩家战斗技能（使用主动词条） ======
 function pickPlayerSkill(combat, isCounter = false) {
   if (!combat.activeSkill) return null;
-  if (Math.random() < (isCounter ? 0.35 : 0.6)) {
+  if (_rand() < (isCounter ? 0.35 : 0.6)) {
     return combat.activeSkill;
   }
   return null;
@@ -432,7 +463,7 @@ function pickMonsterSkill(monster) {
   for (const skillId of monster.skills) {
     const sk = MONSTER_SKILLS[skillId];
     if (!sk) continue;
-    if (Math.random() < sk.chance) return sk;
+    if (_rand() < sk.chance) return sk;
   }
   return null;
 }
@@ -447,12 +478,12 @@ function calcDamage(atk, def, mult, dmgBonus, defBonus, ignoreDef, crit, critDmg
   if (dmgBonus) dmg *= (1 + dmgBonus);
   // 暴击
   let isCrit = false;
-  if (crit && Math.random() < crit) {
+  if (crit && _rand() < crit) {
     dmg *= (1 + (critDmg || 0.5));
     isCrit = true;
   }
   // 随机浮动 ±15%
-  dmg *= (0.85 + Math.random() * 0.3);
+  dmg *= (0.85 + _rand() * 0.3);
   return { value: Math.max(1, Math.floor(dmg)), isCrit };
 }
 
@@ -462,7 +493,7 @@ function getActionCount(attackerAgi, defenderAgi) {
   let actions = 1;
   let remaining = ratio - 1;
   while (remaining > 0 && actions < 5) {
-    if (Math.random() < Math.min(1, remaining)) {
+    if (_rand() < Math.min(1, remaining)) {
       actions++;
       remaining -= 1;
     } else {
@@ -595,7 +626,7 @@ function simulateBattle(player, monster) {
       } else {
         // 怪物攻击
         // 闪避判定
-        if (Math.random() < (combat.dodge || 0)) {
+        if (_rand() < (combat.dodge || 0)) {
           actions.push({ actor: 'player', skill: '闪避!', dodge: true, targetHp: pHp, targetMaxHp: combat.maxHp });
           // 风行系闪避反击
           if (combat.dodgeAtk) {
@@ -703,14 +734,15 @@ function calculateIdle(player) {
   const area = AREAS[player.currentArea];
   if (!area) return null;
 
-  const now = Date.now();
+  const now = getNow();
   const elapsed = now - player.lastTick;
   if (elapsed < 3000) return null;
 
   recalcMaxStats(player);
 
-  const monster = area.monsters[Math.floor(Math.random() * area.monsters.length)];
-  const battle = simulateBattle(player, monster);
+  const monster = area.monsters[Math.floor(_rand() * area.monsters.length)];
+  const battleMonster = buildBattleMonster(monster, player.strategy);
+  const battle = simulateBattle(player, battleMonster);
 
   player.hp = battle.playerHp;
   player.mp = battle.playerMp;
@@ -725,13 +757,16 @@ function calculateIdle(player) {
   let goldGain = 0;
   let drops = [];
 
+  // 基础倍率（保留现有回归项）
+  let expMult = 1 + total.expBonus + lawBonus.exp + (raceBonus.exp || 0);
+  let goldMult = 1 + total.goldBonus + lawBonus.gold;
+  if (player.godhood === 'demigod') expMult *= 1.5;
+  if (player.godhood === 'god') expMult *= 2;
+  // 策略收益倍率（插入点固定，见 Spec v5 §5.3）
+  if (player.strategy === 'greedy') { expMult *= 0.80; goldMult *= 1.30; }
+  if (player.strategy === 'training') { expMult *= 1.50; goldMult *= 0.50; }
+
   if (battle.result === 'win') {
-    let expMult = 1 + total.expBonus + lawBonus.exp + (raceBonus.exp || 0);
-    let goldMult = 1 + total.goldBonus + lawBonus.gold;
-
-    if (player.godhood === 'demigod') expMult *= 1.5;
-    if (player.godhood === 'god') expMult *= 2;
-
     expGain = Math.floor(monster.exp * expMult);
     goldGain = Math.floor(monster.gold * goldMult);
 
@@ -746,7 +781,7 @@ function calculateIdle(player) {
     if (total.killGold) goldGain += Math.floor(monster.gold * total.killGold);
     if (total.flatExp) expGain += total.flatExp;
 
-    // 炼金系4阶双倍
+    // 炼金系4阶双倍（仅 win）
     if (total.doubleKill) {
       expGain *= 2;
       goldGain *= 2;
@@ -763,7 +798,7 @@ function calculateIdle(player) {
     }
 
     for (const drop of area.drops) {
-      if (Math.random() < drop.rate) {
+      if (shouldDrop(drop.rate, player.strategy)) {
         if (drop.type === 'material') {
           drops.push(drop.name);
           const existing = player.inventory.find(i => i.name === drop.name);
@@ -779,11 +814,11 @@ function calculateIdle(player) {
       }
     }
   } else if (battle.result === 'lose') {
-    expGain = Math.floor(monster.exp * 0.1);
+    expGain = Math.floor(monster.exp * 0.1 * expMult);
     player.exp += expGain;
     player.hp = Math.max(1, Math.floor(player.maxHp * 0.1));
   } else {
-    expGain = Math.floor(monster.exp * 0.3);
+    expGain = Math.floor(monster.exp * 0.3 * expMult);
     player.exp += expGain;
   }
 
@@ -796,7 +831,9 @@ function calculateIdle(player) {
 
   const logEntry = {
     time: now, type: 'battle',
-    monster: { name: monster.name, hp: monster.hp, atk: monster.atk, def: monster.def, agi: monster.agi },
+    monster: { name: monster.name, hp: monster.hp, atk: battleMonster.atk, def: monster.def, agi: monster.agi },
+    monsterBaseAtk: monster.atk,
+    strategy: player.strategy,
     result: battle.result,
     rounds: battle.rounds.length,
     agiRatio: battle.agiRatio,
@@ -883,7 +920,7 @@ function chooseJob(player, jobPath) {
   if (!JOB_TREE[jobPath]) return { success: false, message: '职业不存在' };
   player.jobPath = jobPath;
   player.job = JOB_TREE[jobPath].stages[0].name;
-  player.logs.push({ time: Date.now(), type: 'job', text: `${JOB_TREE[jobPath].stages[0].desc}，职业：${player.job}！解锁2个被动词条槽位` });
+  player.logs.push({ time: getNow(), type: 'job', text: `${JOB_TREE[jobPath].stages[0].desc}，职业：${player.job}！解锁2个被动词条槽位` });
   return { success: true };
 }
 
@@ -900,14 +937,14 @@ function equipAffix(player, affixId, slot) {
   if (affix.slot === 'active') {
     // 装备主动词条（只能装1个）
     player.affixes.active = affixId;
-    player.logs.push({ time: Date.now(), type: 'affix', text: `装备主动词条：${affix.name}` });
+    player.logs.push({ time: getNow(), type: 'affix', text: `装备主动词条：${affix.name}` });
   } else {
     // 装备被动词条
     const maxSlots = getPassiveSlots(player);
     if (player.affixes.passive.length >= maxSlots) return { success: false, message: `被动词条槽位已满（${maxSlots}个）` };
     if (player.affixes.passive.includes(affixId)) return { success: false, message: '已装备此词条' };
     player.affixes.passive.push(affixId);
-    player.logs.push({ time: Date.now(), type: 'affix', text: `装备被动词条：${affix.name}` });
+    player.logs.push({ time: getNow(), type: 'affix', text: `装备被动词条：${affix.name}` });
   }
   recalcMaxStats(player);
   return { success: true };
@@ -1028,7 +1065,7 @@ function evolveRace(player) {
   player.race = next.name;
   player.raceStage = next.stage;
   recalcMaxStats(player);
-  player.logs.push({ time: Date.now(), type: 'evolve', text: `种族进化！你已蜕变为 ${next.name}！${next.bonusText}` });
+  player.logs.push({ time: getNow(), type: 'evolve', text: `种族进化！你已蜕变为 ${next.name}！${next.bonusText}` });
   return { success: true };
 }
 
@@ -1056,7 +1093,7 @@ function enchantItem(player, itemUid, recipeId) {
   }
   item.enchants.push(recipeId);
   recalcMaxStats(player);
-  player.logs.push({ time: Date.now(), type: 'enchant', text: `附魔成功！${item.name} 获得 ${recipe.name}效果` });
+  player.logs.push({ time: getNow(), type: 'enchant', text: `附魔成功！${item.name} 获得 ${recipe.name}效果` });
   return { success: true };
 }
 
@@ -1072,7 +1109,7 @@ function learnLaw(player, lawId) {
   mat.count -= law.cost.count;
   if (mat.count <= 0) player.inventory = player.inventory.filter(i => i !== mat);
   player.laws.push(lawId);
-  player.logs.push({ time: Date.now(), type: 'law', text: `领悟了 ${law.name}！${law.desc}` });
+  player.logs.push({ time: getNow(), type: 'law', text: `领悟了 ${law.name}！${law.desc}` });
   return { success: true };
 }
 
@@ -1090,8 +1127,8 @@ function doReincarnate(player) {
   recalcMaxStats(player);
   player.hp = player.maxHp;
   player.mp = player.maxMp;
-  player.lastTick = Date.now();
-  player.logs.push({ time: Date.now(), type: 'reincarnate', text: `转生成功！第 ${player.reincarnation} 次轮回，属性已重置，战力将重新成长` });
+  player.lastTick = getNow();
+  player.logs.push({ time: getNow(), type: 'reincarnate', text: `转生成功！第 ${player.reincarnation} 次轮回，属性已重置，战力将重新成长` });
   return { success: true };
 }
 
@@ -1117,7 +1154,7 @@ function attemptAscension(player) {
   recalcMaxStats(player);
   player.hp = player.maxHp;
   player.mp = player.maxMp;
-  player.logs.push({ time: Date.now(), type: 'ascend', text: `${asc.desc}！你已登临${asc.name}之位！${asc.bonusText}` });
+  player.logs.push({ time: getNow(), type: 'ascend', text: `${asc.desc}！你已登临${asc.name}之位！${asc.bonusText}` });
   return { success: true };
 }
 
@@ -1185,6 +1222,15 @@ function getPlayerView(player) {
     currentReq: player.godhood === null ? ASCENSION.demigod : ASCENSION.god
   };
 
+  const strategy = player.strategy || 'balanced';
+  const strategyChangedAt = Number.isFinite(player.strategyChangedAt) ? player.strategyChangedAt : 0;
+  const strategyCdRemaining = strategyChangedAt === 0 ? 0 : Math.max(0, STRATEGY_CD_MS - (getNow() - strategyChangedAt));
+  const strategies = Object.entries(STRATEGIES).map(([id, cfg]) => ({
+    id, name: cfg.name, desc: cfg.desc, reqLevel: cfg.reqLevel,
+    unlocked: player.level >= cfg.reqLevel,
+    active: id === strategy
+  }));
+
   return {
     username: player.username, name: player.name, race: player.race, raceStage: player.raceStage,
     level: player.level, exp: player.exp, expNeeded: expToNext(player.level),
@@ -1202,7 +1248,8 @@ function getPlayerView(player) {
     logs: player.logs.slice(-20).reverse(), lastTick: player.lastTick,
     canChooseJob: player.level >= 11 && !player.jobPath,
     canEvolve: nextRace ? (player.level >= nextRace.reqLevel) : false,
-    jobInfo
+    jobInfo,
+    strategy, strategyChangedAt, strategyCdRemaining, strategies
   };
 }
 
@@ -1227,5 +1274,7 @@ module.exports = {
   evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
   simulateBattle, getCombatStats, getTotalStats, getPowerScore, getStageFull,
   getCurrentWeekKey, maybeResetWeeklyBossKills,
-  equipAffix, unequipAffix, findAffix, getPassiveSlots, getJobStage
+  equipAffix, unequipAffix, findAffix, getPassiveSlots, getJobStage,
+  buildBattleMonster, shouldDrop,
+  getNow, __setNow, __setRandom, __setDropRandom, __resetSeams
 };

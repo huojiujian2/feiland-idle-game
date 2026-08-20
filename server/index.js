@@ -2,7 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const store = require('./store');
-const { AREAS, JOB_TREE, SHOP_ITEMS, EQUIP_TEMPLATES, QUALITY_COLORS, MATERIAL_PRICES, MONSTER_SKILLS, ENCHANT_RECIPES, RACE_EVOLUTION, LAWS, AFFIX_TREE, AFFIX_LEVELS } = require('./data');
+const { AREAS, JOB_TREE, SHOP_ITEMS, EQUIP_TEMPLATES, QUALITY_COLORS, MATERIAL_PRICES, MONSTER_SKILLS, ENCHANT_RECIPES, RACE_EVOLUTION, LAWS, AFFIX_TREE, AFFIX_LEVELS, STRATEGIES, STRATEGY_CD_MS } = require('./data');
 const {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
   chooseJob, equipItem, unequipItem, useConsumable, buyItem,
@@ -10,7 +10,8 @@ const {
   evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
   equipAffix, unequipAffix,
   getPowerScore, getTotalStats, getReadonlyPlayer, getStageFull,
-  maybeResetWeeklyBossKills
+  maybeResetWeeklyBossKills,
+  getNow
 } = require('./engine');
 
 const app = express();
@@ -41,7 +42,7 @@ app.post('/api/register', (req, res) => {
     username,
     password,
     hasCharacter: false,
-    createdAt: Date.now()
+    createdAt: getNow()
   });
   console.log(`新账号注册: ${username}`);
   res.json({ success: true, message: '注册成功' });
@@ -120,7 +121,7 @@ app.post('/api/player/:username/area', (req, res) => {
   }
 
   player.currentArea = areaId;
-  player.lastTick = Date.now();
+  player.lastTick = getNow();
   store.setPlayer(player.username, player);
   res.json({ success: true, data: getPlayerView(player) });
 });
@@ -454,6 +455,64 @@ app.post('/api/player/:username/reincarnate', (req, res) => {
   const result = doReincarnate(player);
   if (!result.success) return res.json({ success: false, message: result.message });
   store.setPlayer(player.username, player);
+  res.json({ success: true, data: getPlayerView(player) });
+});
+
+// ====== 战斗策略 ======
+app.post('/api/player/:username/strategy', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const { strategy } = req.body;
+
+  // A — 无副作用校验
+  if (typeof strategy !== 'string' || !Object.hasOwn(STRATEGIES, strategy)) {
+    return res.json({ success: false, message: '策略不存在' });
+  }
+  // 幂等：同策略直接成功，绕过等级与 CD
+  if (strategy === player.strategy) {
+    return res.json({ success: true, data: getPlayerView(player) });
+  }
+  const strategyChangedAt = Number.isFinite(player.strategyChangedAt) ? player.strategyChangedAt : 0;
+  if (strategyChangedAt !== 0 && getNow() - strategyChangedAt < STRATEGY_CD_MS) {
+    const remain = Math.ceil((STRATEGY_CD_MS - (getNow() - strategyChangedAt)) / 1000);
+    return res.json({ success: false, message: `策略切换冷却中，剩余${remain}s` });
+  }
+
+  // B — 旧策略结算（按旧 strategy）
+  maybeResetWeeklyBossKills(store);
+  const result = calculateIdle(player);
+  // C — 等级复核（以结算后等级为准）
+  if (player.level < STRATEGIES[strategy].reqLevel) {
+    // 保留 B 的结算结果并落盘
+    store.setPlayer(player.username, player);
+    // 关窗：若 B 无收益，显式推进 lastTick 避免 <3s 窗口追溯
+    if (result === null) {
+      player.lastTick = getNow();
+      store.setPlayer(player.username, player);
+    }
+    store.save();
+    return res.json({ success: false, message: `需要 Lv.${STRATEGIES[strategy].reqLevel} 才能使用该策略`, data: getPlayerView(player) });
+  }
+
+  // C2 — 写入新策略
+  const old = player.strategy;
+  player.strategy = strategy;
+  player.strategyChangedAt = getNow();
+  // 关窗：若 B 无收益，显式推进
+  if (result === null) {
+    player.lastTick = getNow();
+  }
+  player.logs.push({
+    time: getNow(),
+    type: 'strategy',
+    from: old,
+    to: strategy,
+    strategy,
+    text: `策略切换：${STRATEGIES[old].name}→${STRATEGIES[strategy].name}`
+  });
+  if (player.logs.length > 30) player.logs = player.logs.slice(-30);
+  store.setPlayer(player.username, player);
+  store.save();
   res.json({ success: true, data: getPlayerView(player) });
 });
 

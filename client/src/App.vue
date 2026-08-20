@@ -88,7 +88,7 @@
             @use="handleUseItem" @sellMaterial="handleSellMaterial"
             @sellEquip="handleSellEquip" @equip="handleEquip" @enchant="handleEnchant" />
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
-            @select="handleAreaChange" />
+            @select="handleAreaChange" @strategy-change="handleStrategyChange" />
           <CodexView v-else-if="activeTab === 'codex'" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend" />
@@ -337,6 +337,7 @@ async function handleEnchant(itemUid, recipeId) { const r = await api.enchant(cu
 async function handleEvolve() { const r = await api.evolve(currentUser); if (r.success) player.value = r.data; else alert(r.message) }
 async function handleLearnLaw(lawId) { const r = await api.learnLaw(currentUser, lawId); if (r.success) player.value = r.data; else alert(r.message) }
 async function handleAscend() { const r = await api.ascend(currentUser); if (r.success) player.value = r.data; else alert(r.message) }
+async function handleStrategyChange(strategy){ const r = await api.setStrategy(currentUser, strategy); if(r.success) player.value = r.data; else if(r.data) player.value = r.data; if(!r.success) alert(r.message) }
 
 function logout() {
   player.value = null

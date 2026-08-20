@@ -65,5 +65,8 @@ export default {
     const q = username ? `?type=${type}&username=${encodeURIComponent(username)}` : `?type=${type}`
     return request(`/leaderboard${q}`)
   },
-  reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) }
+  reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) },
+
+  // 战斗策略
+  setStrategy(username, strategy) { return request(`/player/${username}/strategy`, { method: 'POST', body: JSON.stringify({ strategy }) }) }
 }
