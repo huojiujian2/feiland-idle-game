@@ -1,4 +1,4 @@
-// 游戏引擎 v0.6 - 词条系统 + 新属性体系 + T-004 策略
+// 游戏引擎 v0.6 - 词条系统 + 新属性体系 + T-004 策略 + T-040 任务
 const {
   AREAS, EQUIP_TEMPLATES, JOB_TREE, SHOP_ITEMS,
   MATERIAL_PRICES, EQUIP_SELL_PRICES,
@@ -6,6 +6,7 @@ const {
   MONSTER_SKILLS,
   AFFIX_LEVELS, AFFIX_TREE,
   STRATEGIES, STRATEGY_CD_MS,
+  INITIAL_MATERIAL_POOL, DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS,
   getStage, expToNext, createEquipItem
 } = require('./data');
 
@@ -30,6 +31,165 @@ function buildBattleMonster(monster, strategy) {
   const atkBonus = (STRATEGIES[strategy]?.effects?.monsterAtk) || 0;
   if (atkBonus) return { ...monster, atk: Math.floor(monster.atk * (1 + atkBonus)) };
   return { ...monster };
+}
+
+// ====== T-040 日常（可持久化，每日0点重置） ======
+function getTodayKey(){
+  const d = new Date(getNow());
+  d.setHours(0,0,0,0);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const da = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function createDailyQuests(){
+  return DAILY_QUESTS.map(q=>({ id:q.id, progress:0, target:q.target, done:false, claimed:false }));
+}
+function refreshDailyIfNeeded(player){
+  const today = getTodayKey();
+  if(player.dailyResetAt !== today){
+    player.dailyQuests = createDailyQuests();
+    player.dailyChestClaimed = false;
+    player.dailyResetAt = today;
+  }
+}
+function updateDailyProgress(player, questId, inc=1){
+  refreshDailyIfNeeded(player);
+  const dq = (player.dailyQuests||[]).find(q=>q.id===questId);
+  if(!dq || dq.done) return;
+  dq.progress = Math.min(dq.target, (dq.progress||0)+inc);
+  if(dq.progress >= dq.target) dq.done = true;
+}
+function ensureQuestStats(player){
+  if(!player.questStats) player.questStats = { totalGoldEarned:0, affixSeen:[], seenEquipTemplates:[] };
+  if(!Array.isArray(player.questStats.affixSeen)) player.questStats.affixSeen = [];
+  if(!Array.isArray(player.questStats.seenEquipTemplates)) player.questStats.seenEquipTemplates = [];
+  if(!Number.isFinite(player.questStats.totalGoldEarned)) player.questStats.totalGoldEarned = 0;
+}
+function grantGold(player, amount){
+  if(!amount) return;
+  player.gold += amount;
+  ensureQuestStats(player);
+  player.questStats.totalGoldEarned += amount;
+  checkAchievements(player);
+}
+function grantExpWithLevelUp(player, exp){
+  if(!exp) return;
+  player.exp += exp;
+  const now = getNow();
+  while(player.exp >= expToNext(player.level)){
+    player.exp -= expToNext(player.level);
+    player.level++;
+    player.attrPoints += 3;
+    player.skillPoints += 1;
+    player.maxHp += 20;
+    player.maxMp += 10;
+    player.hp = player.maxHp;
+    player.mp = player.maxMp;
+    if(player.jobPath){
+      const tree = JOB_TREE[player.jobPath];
+      for(const stage of tree.stages){
+        if(stage.level===player.level){
+          player.job = stage.name;
+          player.logs.push({ time: now, type:'job', text:`${stage.desc}，职业进阶为：${stage.name}！被动词条槽位+1` });
+        }
+      }
+    }
+  }
+  if(exp>0) player.logs.push({ time: now, type:'levelup', level:player.level, text:`获得 ${exp} 经验` });
+  checkAchievements(player);
+}
+function checkAchievements(player){
+  if(!player.achievements) player.achievements = {};
+  const setUnlock = (id)=>{
+    if(!player.achievements[id]) player.achievements[id] = { unlocked:false, claimed:false, unlockAt:0 };
+    if(!player.achievements[id].unlocked){
+      player.achievements[id].unlocked = true;
+      player.achievements[id].unlockAt = getNow();
+    }
+  };
+  if(player.killCount>=100) setUnlock('kill100');
+  if(player.killCount>=1000) setUnlock('kill1000');
+  if(player.killCount>=10000) setUnlock('kill10000');
+  if(player.level>=100) setUnlock('lv100');
+  if(player.godhood) setUnlock('ascend');
+  if(player.reincarnation>=1) setUnlock('reinc1');
+  const seen = (player.questStats && player.questStats.affixSeen) || [];
+  if(seen.length>=50) setUnlock('affix50');
+  if((player.questStats && player.questStats.totalGoldEarned||0) >= 1000000) setUnlock('gold1m');
+  const seenEquips = (player.questStats && player.questStats.seenEquipTemplates) || [];
+  if(seenEquips.length>=10) setUnlock('collect10');
+  // first is unlocked at create/migrate
+}
+function claimDaily(player, questId){
+  refreshDailyIfNeeded(player);
+  const dq = (player.dailyQuests||[]).find(q=>q.id===questId);
+  if(!dq) return { success:false, status:404, message:'任务不存在' };
+  if(!dq.done) return { success:false, status:409, message:'未完成' };
+  if(dq.claimed) return { success:true, status:200, message:'已领取', already:true };
+  const tpl = DAILY_QUESTS.find(q=>q.id===questId);
+  if(tpl.reward.gold) grantGold(player, tpl.reward.gold);
+  if(tpl.reward.exp) grantExpWithLevelUp(player, tpl.reward.exp);
+  if(tpl.reward.materialPool){
+    const mat = tpl.reward.materialPool[Math.floor(_rand()*tpl.reward.materialPool.length)] || INITIAL_MATERIAL_POOL[0];
+    const c = tpl.reward.count||1;
+    const ex = player.inventory.find(i=>i.name===mat);
+    if(ex) ex.count+=c; else player.inventory.push({ name:mat, count:c, type:'material' });
+  }
+  dq.claimed = true;
+  return { success:true, status:200 };
+}
+function claimChest(player){
+  refreshDailyIfNeeded(player);
+  if(player.dailyChestClaimed) return { success:true, status:200, already:true };
+  const claimedCount = (player.dailyQuests||[]).filter(q=>q.claimed).length;
+  if(claimedCount < DAILY_CHEST.need) return { success:false, status:409, message:'需完成5项已领取' };
+  player.dailyChestClaimed = true;
+  return { success:true, status:200 };
+}
+function claimAchievement(player, achId){
+  refreshDailyIfNeeded(player);
+  const ach = ACHIEVEMENTS.find(a=>a.id===achId);
+  if(!ach) return { success:false, status:404, message:'成就不存在' };
+  const rec = (player.achievements||{})[achId];
+  if(!rec || !rec.unlocked) return { success:false, status:409, message:'未达成' };
+  if(rec.claimed) return { success:true, status:200, already:true };
+  // 发放
+  if(ach.reward.gold) grantGold(player, ach.reward.gold);
+  if(ach.reward.equipPool){
+    const tpl = ach.reward.equipPool[Math.floor(_rand()*ach.reward.equipPool.length)];
+    const item = createEquipItem(tpl, genUid());
+    if(item){
+      player.equips.push(item);
+      ensureQuestStats(player);
+      if(!player.questStats.seenEquipTemplates.includes(tpl)) player.questStats.seenEquipTemplates.push(tpl);
+    }
+  }
+  if(ach.reward.affixLevel){
+    const pool = AFFIX_TREE[ach.reward.affixLevel] || [];
+    if(pool.length){
+      const aff = pool[Math.floor(_rand()*pool.length)];
+      player.inventory.push({ name: aff.name, count:1, type:'affix', affixId: aff.id });
+      ensureQuestStats(player);
+      if(!player.questStats.affixSeen.includes(aff.id)) player.questStats.affixSeen.push(aff.id);
+      player.logs.push({ time:getNow(), type:'achievement', text:`获得大师词条：${aff.name}` });
+    }
+  }
+  if(ach.reward.reincPoints){
+    player.reincPoints = (player.reincPoints||0) + ach.reward.reincPoints;
+  }
+  rec.claimed = true;
+  let titleToGrant = ach.title;
+  if(achId === 'ascend'){
+    titleToGrant = player.godhood === 'god' ? '神灵' : '半神';
+  }
+  if(titleToGrant){
+    if(!player.titles) player.titles=[];
+    if(!player.titles.includes(titleToGrant)) player.titles.push(titleToGrant);
+    if(!player.currentTitle) player.currentTitle = titleToGrant;
+    rec.grantedTitle = titleToGrant;
+  }
+  return { success:true, status:200 };
 }
 
 // ====== 工具：按ID查找词条 ======
@@ -69,7 +229,8 @@ function getAvailableAffixLevels(player) {
 
 // ====== 创建新角色 ======
 function createCharacter(username, charName) {
-  return {
+  const now = getNow();
+  const p = {
     username,
     name: charName || username,
     race: '鹰人',
@@ -96,11 +257,22 @@ function createCharacter(username, charName) {
     equipped: { weapon: null, armor: null, accessory: null },
     laws: [],
     logs: [],
-    lastTick: getNow(),
-    createdAt: getNow(),
+    lastTick: now,
+    createdAt: now,
     strategy: 'balanced',
-    strategyChangedAt: 0
+    strategyChangedAt: 0,
+    dailyQuests: createDailyQuests(),
+    dailyResetAt: getTodayKey(),
+    dailyChestClaimed: false,
+    achievements: {},
+    questStats: { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] },
+    titles: [],
+    currentTitle: null,
+    reincPoints: 0
   };
+  // 初次冒险立即可领取
+  p.achievements['first'] = { unlocked: true, claimed: false, unlockAt: now };
+  return p;
 }
 
 // ====== 数据迁移（注意：会原地修改传入对象，含 inventory/equips 清理） ======
@@ -147,6 +319,25 @@ function migratePlayer(player) {
   const addEnchantField = (item) => { if (item && !item.enchants) item.enchants = []; };
   player.equips.forEach(addEnchantField);
   Object.values(player.equipped).forEach(addEnchantField);
+
+  // T-040 日常/成就迁移（可持久化）
+  if (!Array.isArray(player.dailyQuests)) player.dailyQuests = createDailyQuests();
+  if (typeof player.dailyResetAt !== 'string') player.dailyResetAt = getTodayKey();
+  if (typeof player.dailyChestClaimed !== 'boolean') player.dailyChestClaimed = false;
+  if (!player.achievements || typeof player.achievements !== 'object') player.achievements = {};
+  if (!player.questStats) player.questStats = { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] };
+  if (!Array.isArray(player.questStats.affixSeen)) player.questStats.affixSeen = [];
+  if (!Array.isArray(player.questStats.seenEquipTemplates)) player.questStats.seenEquipTemplates = [];
+  if (!Number.isFinite(player.questStats.totalGoldEarned)) player.questStats.totalGoldEarned = 0;
+  if (!Array.isArray(player.titles)) player.titles = [];
+  if (player.currentTitle !== null && typeof player.currentTitle !== 'string') player.currentTitle = null;
+  if (!Number.isFinite(player.reincPoints)) player.reincPoints = 0;
+  // 迁移旧数据兼容：若 achievements 空但已有角色，补初次冒险
+  if (!player.achievements['first']) {
+    player.achievements['first'] = { unlocked: true, claimed: false, unlockAt: player.createdAt || getNow() };
+  }
+  refreshDailyIfNeeded(player);
+  checkAchievements(player);
   return player;
 }
 
@@ -795,7 +986,7 @@ function calculateIdle(player) {
     }
 
     player.exp += expGain;
-    player.gold += goldGain;
+    if (goldGain > 0) grantGold(player, goldGain);
     player.killCount = (player.killCount || 0) + 1;
     // BOSS 语义：仅 isBoss 标记的世界 BOSS 计入周榜（见 server/data.js），避免普通怪误计
     if (monster.isBoss) player.bossKills = (player.bossKills || 0) + 1;
@@ -816,17 +1007,25 @@ function calculateIdle(player) {
           if (item) {
             player.equips.push(item);
             drops.push(`${item.name} [${item.quality}]`);
+            ensureQuestStats(player);
+            if (!player.questStats.seenEquipTemplates.includes(item.templateId)) player.questStats.seenEquipTemplates.push(item.templateId);
           }
         }
       }
     }
+    // 日常：击杀与战斗场次
+    updateDailyProgress(player, 'hunt50', 1);
+    updateDailyProgress(player, 'battle20', 1);
+    checkAchievements(player);
   } else if (battle.result === 'lose') {
     expGain = Math.floor(monster.exp * 0.1 * expMult);
     player.exp += expGain;
     player.hp = Math.max(1, Math.floor(player.maxHp * 0.1));
+    updateDailyProgress(player, 'battle20', 1);
   } else {
     expGain = Math.floor(monster.exp * 0.3 * expMult);
     player.exp += expGain;
+    updateDailyProgress(player, 'battle20', 1);
   }
 
   player.mp = Math.min(player.maxMp, player.mp + Math.ceil(player.maxMp * 0.05));
@@ -885,6 +1084,10 @@ function calculateIdle(player) {
   if (levelUps.length > 0) {
     const top = levelUps[levelUps.length - 1];
     player.logs.push({ time: now, type: 'levelup', level: top, text: `等级提升！Lv.${top}，+${levelUps.length * 3}属性 +${levelUps.length}技能点` });
+    checkAchievements(player);
+  } else if (expGain > 0) {
+    // 即使未升级也检查满级等
+    checkAchievements(player);
   }
 
   player.lastTick = now;
@@ -893,6 +1096,8 @@ function calculateIdle(player) {
 
 // ====== 分配属性点 ======
 function allocateAttributes(player, allocation) {
+  player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   const total = (allocation.atk || 0) + (allocation.def || 0) + (allocation.hp || 0) + (allocation.agi || 0);
   if (total > player.attrPoints) return { success: false, message: '属性点不足' };
   if (total < 1) return { success: false, message: '请至少分配1点' };
@@ -902,6 +1107,8 @@ function allocateAttributes(player, allocation) {
   player.attributes.agi += allocation.agi || 0;
   player.attrPoints -= total;
   recalcMaxStats(player);
+  updateDailyProgress(player, 'alloc1', 1);
+  checkAchievements(player);
   return { success: true };
 }
 
@@ -954,19 +1161,30 @@ function equipAffix(player, affixId, slot) {
     player.logs.push({ time: getNow(), type: 'affix', text: `装备被动词条：${affix.name}` });
   }
   recalcMaxStats(player);
+  // T-040 日常与收集
+  refreshDailyIfNeeded(player);
+  updateDailyProgress(player, 'affix1', 1);
+  ensureQuestStats(player);
+  if(!player.questStats.affixSeen.includes(affixId)) player.questStats.affixSeen.push(affixId);
+  checkAchievements(player);
   return { success: true };
 }
 
 function unequipAffix(player, affixId) {
   player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   if (player.affixes.active === affixId) {
     player.affixes.active = null;
+    updateDailyProgress(player, 'affix1', 1);
+    checkAchievements(player);
     return { success: true };
   }
   const idx = player.affixes.passive.indexOf(affixId);
   if (idx !== -1) {
     player.affixes.passive.splice(idx, 1);
     recalcMaxStats(player);
+    updateDailyProgress(player, 'affix1', 1);
+    checkAchievements(player);
     return { success: true };
   }
   return { success: false, message: '未装备此词条' };
@@ -975,6 +1193,7 @@ function unequipAffix(player, affixId) {
 // ====== 穿戴/卸下装备 ======
 function equipItem(player, itemUid) {
   player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   const idx = player.equips.findIndex(e => e.uid === itemUid);
   if (idx === -1) return { success: false, message: '装备不存在' };
   const item = player.equips[idx];
@@ -984,6 +1203,11 @@ function equipItem(player, itemUid) {
   player.equipped[item.slot] = item;
   player.equips.splice(idx, 1);
   recalcMaxStats(player);
+  ensureQuestStats(player);
+  if (item.templateId && !player.questStats.seenEquipTemplates.includes(item.templateId)) {
+    player.questStats.seenEquipTemplates.push(item.templateId);
+  }
+  checkAchievements(player);
   return { success: true };
 }
 
@@ -1014,6 +1238,8 @@ function useConsumable(player, itemId, count = 1) {
 
 // ====== 购买 ======
 function buyItem(player, itemId, count = 1) {
+  player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   const shopItem = SHOP_ITEMS.find(s => s.id === itemId);
   if (!shopItem) return { success: false, message: '物品不存在' };
   const totalCost = shopItem.price * count;
@@ -1026,19 +1252,27 @@ function buyItem(player, itemId, count = 1) {
   } else if (shopItem.type === 'equip') {
     for (let i = 0; i < count; i++) {
       const item = createEquipItem(itemId, genUid());
-      if (item) player.equips.push(item);
+      if (item) {
+        player.equips.push(item);
+        ensureQuestStats(player);
+        if (!player.questStats.seenEquipTemplates.includes(item.templateId)) player.questStats.seenEquipTemplates.push(item.templateId);
+      }
     }
+    checkAchievements(player);
   }
+  updateDailyProgress(player, 'buy1', 1);
   return { success: true };
 }
 
 // ====== 出售 ======
 function sellMaterial(player, itemName, count = 1) {
   player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   const invItem = player.inventory.find(i => i.name === itemName);
   if (!invItem || invItem.count < count) return { success: false, message: '数量不足' };
+  if (invItem.type && invItem.type !== 'material') return { success: false, message: '该物品不可出售' };
   const price = MATERIAL_PRICES[itemName] || 5;
-  player.gold += price * count;
+  grantGold(player, price * count);
   invItem.count -= count;
   if (invItem.count <= 0) player.inventory = player.inventory.filter(i => i !== invItem);
   return { success: true, gold: price * count };
@@ -1046,10 +1280,11 @@ function sellMaterial(player, itemName, count = 1) {
 
 function sellEquip(player, itemUid) {
   player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   const idx = player.equips.findIndex(e => e.uid === itemUid);
   if (idx === -1) return { success: false, message: '装备不存在' };
   const price = EQUIP_SELL_PRICES[player.equips[idx].quality] || 20;
-  player.gold += price;
+  grantGold(player, price);
   player.equips.splice(idx, 1);
   return { success: true, gold: price };
 }
@@ -1079,6 +1314,7 @@ function evolveRace(player) {
 // ====== 附魔装备 ======
 function enchantItem(player, itemUid, recipeId) {
   player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   const item = player.equips.find(e => e.uid === itemUid) || Object.values(player.equipped).find(e => e && e.uid === itemUid);
   if (!item) return { success: false, message: '装备不存在' };
   const recipe = ENCHANT_RECIPES.find(r => r.id === recipeId);
@@ -1101,6 +1337,8 @@ function enchantItem(player, itemUid, recipeId) {
   item.enchants.push(recipeId);
   recalcMaxStats(player);
   player.logs.push({ time: getNow(), type: 'enchant', text: `附魔成功！${item.name} 获得 ${recipe.name}效果` });
+  updateDailyProgress(player, 'enchant1', 1);
+  checkAchievements(player);
   return { success: true };
 }
 
@@ -1123,6 +1361,7 @@ function learnLaw(player, lawId) {
 // ====== 转生（为转生榜提供真实写入，最小可用；完整 T-010 后扩展） ======
 function doReincarnate(player) {
   player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   if (player.level < 100) return { success: false, message: '需要 Lv.100 才能转生' };
   player.reincarnation = (player.reincarnation || 0) + 1;
   player.level = 1;
@@ -1136,12 +1375,14 @@ function doReincarnate(player) {
   player.mp = player.maxMp;
   player.lastTick = getNow();
   player.logs.push({ time: getNow(), type: 'reincarnate', text: `转生成功！第 ${player.reincarnation} 次轮回，属性已重置，战力将重新成长` });
+  checkAchievements(player);
   return { success: true };
 }
 
 // ====== 登神 ======
 function attemptAscension(player) {
   player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   if (player.godhood === 'god') return { success: false, message: '已是神灵' };
 
   const target = player.godhood === null ? 'demigod' : 'god';
@@ -1162,12 +1403,14 @@ function attemptAscension(player) {
   player.hp = player.maxHp;
   player.mp = player.maxMp;
   player.logs.push({ time: getNow(), type: 'ascend', text: `${asc.desc}！你已登临${asc.name}之位！${asc.bonusText}` });
+  checkAchievements(player);
   return { success: true };
 }
 
 // ====== 获取角色完整信息 ======
 function getPlayerView(player) {
   player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
   const stage = getStageFull(player.level, player.godhood);
   const area = AREAS[player.currentArea];
   const total = getTotalStats(player);
@@ -1238,6 +1481,24 @@ function getPlayerView(player) {
     active: id === strategy
   }));
 
+  // T-040 questView
+  const dailyQuestsView = (player.dailyQuests || []).map(dq => {
+    const tpl = DAILY_QUESTS.find(q => q.id === dq.id) || {};
+    return { id: dq.id, name: tpl.name || dq.id, desc: tpl.desc || '', progress: dq.progress, target: dq.target, done: !!dq.done, claimed: !!dq.claimed, reward: tpl.reward || null };
+  });
+  const claimedCount = (player.dailyQuests || []).filter(q => q.claimed).length;
+  const chestView = { need: DAILY_CHEST.need, claimed: !!player.dailyChestClaimed, canClaim: claimedCount >= DAILY_CHEST.need && !player.dailyChestClaimed, reward: null };
+  const achievementsView = ACHIEVEMENTS.map(a => {
+    const rec = (player.achievements || {})[a.id] || { unlocked: false, claimed: false };
+    let title = a.title;
+    if(a.id==='ascend'){
+      title = rec.grantedTitle || (player.godhood==='god' ? '神灵' : '半神');
+      if(rec.claimed && !rec.grantedTitle) title = (player.titles||[]).includes('神灵') ? '神灵' : '半神';
+    }
+    return { id: a.id, name: a.name, desc: a.desc, unlocked: !!rec.unlocked, claimed: !!rec.claimed, reward: a.reward, title };
+  });
+  const questView = { dailyQuests: dailyQuestsView, chest: chestView, achievements: achievementsView, titles: player.titles || [], currentTitle: player.currentTitle || null };
+
   return {
     username: player.username, name: player.name, race: player.race, raceStage: player.raceStage,
     level: player.level, exp: player.exp, expNeeded: expToNext(player.level),
@@ -1256,7 +1517,9 @@ function getPlayerView(player) {
     canChooseJob: player.level >= 11 && !player.jobPath,
     canEvolve: nextRace ? (player.level >= nextRace.reqLevel) : false,
     jobInfo,
-    strategy, strategyChangedAt, strategyCdRemaining, strategies
+    strategy, strategyChangedAt, strategyCdRemaining, strategies,
+    titles: player.titles || [], currentTitle: player.currentTitle || null,
+    questView
   };
 }
 
@@ -1283,5 +1546,7 @@ module.exports = {
   getCurrentWeekKey, maybeResetWeeklyBossKills,
   equipAffix, unequipAffix, findAffix, getPassiveSlots, getJobStage,
   buildBattleMonster, shouldDrop,
-  getNow, __setNow, __setRandom, __setDropRandom, __resetSeams
+  getNow, __setNow, __setRandom, __setDropRandom, __resetSeams,
+  createDailyQuests, refreshDailyIfNeeded, updateDailyProgress, grantGold, grantExpWithLevelUp, checkAchievements,
+  claimDaily, claimChest, claimAchievement, getTodayKey
 };

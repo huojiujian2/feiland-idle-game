@@ -11,6 +11,7 @@ const {
   equipAffix, unequipAffix,
   getPowerScore, getTotalStats, getReadonlyPlayer, getStageFull,
   maybeResetWeeklyBossKills,
+  claimDaily, claimChest, claimAchievement,
   getNow
 } = require('./engine');
 
@@ -522,6 +523,32 @@ app.post('/api/player/:username/strategy', (req, res) => {
   if (player.logs.length > 30) player.logs = player.logs.slice(-30);
   store.setPlayer(player.username, player);
   store.save();
+  res.json({ success: true, data: getPlayerView(player) });
+});
+
+// ====== 任务/委托 ======
+app.post('/api/player/:username/quest/daily/:id/claim', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const result = claimDaily(player, req.params.id);
+  if (!result.success) return res.status(result.status).json({ success: false, message: result.message });
+  store.setPlayer(player.username, player);
+  res.json({ success: true, data: getPlayerView(player) });
+});
+app.post('/api/player/:username/quest/chest/claim', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const result = claimChest(player);
+  if (!result.success) return res.status(result.status).json({ success: false, message: result.message });
+  store.setPlayer(player.username, player);
+  res.json({ success: true, data: getPlayerView(player) });
+});
+app.post('/api/player/:username/quest/achievement/:id/claim', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const result = claimAchievement(player, req.params.id);
+  if (!result.success) return res.status(result.status).json({ success: false, message: result.message });
+  store.setPlayer(player.username, player);
   res.json({ success: true, data: getPlayerView(player) });
 });
 

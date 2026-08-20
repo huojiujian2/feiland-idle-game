@@ -68,5 +68,10 @@ export default {
   reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) },
 
   // 战斗策略
-  setStrategy(username, strategy) { return request(`/player/${username}/strategy`, { method: 'POST', body: JSON.stringify({ strategy }) }) }
+  setStrategy(username, strategy) { return request(`/player/${username}/strategy`, { method: 'POST', body: JSON.stringify({ strategy }) }) },
+
+  // 任务/委托
+  claimDaily(username, questId) { return request(`/player/${username}/quest/daily/${questId}/claim`, { method: 'POST' }) },
+  claimChest(username) { return request(`/player/${username}/quest/chest/claim`, { method: 'POST' }) },
+  claimAchievement(username, achId) { return request(`/player/${username}/quest/achievement/${achId}/claim`, { method: 'POST' }) }
 }
