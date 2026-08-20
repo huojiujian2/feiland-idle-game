@@ -330,15 +330,13 @@ function spawnDamageFromLog(log){
   const slice = actions.slice(-12)
   slice.forEach((a, idx)=>{
     const id = Date.now() + '_' + (dmgSeq++)
-    let kind = 'physical-dmg'
+    let kind = 'player-dmg'
     let value = a.damage
     let crit = !!a.crit
     if(a.heal !== undefined){ kind='heal'; value=a.heal }
     else if(a.dodge){ kind='miss'; value=0 }
-    else if(a.damageType === 'magical'){ kind='magical-dmg' }
-    else if(a.damageType === 'physical'){ kind='physical-dmg' }
-    else if(a.actor==='monster'){ kind='magical-dmg' }
-    else { kind='physical-dmg' }
+    else if(a.actor==='monster'){ kind='monster-dmg' }
+    else { kind='player-dmg' }
     const item = { id, kind, value, crit, x: 20 + Math.random()*60, y: 18 + Math.random()*42 }
     const delay = idx * 80
     const t = setTimeout(()=>{

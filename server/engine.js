@@ -605,7 +605,7 @@ function simulateBattle(player, monster) {
             const burnDmg = Math.floor(mHp * eff.value);
             mCurHp -= burnDmg;
             skillName = skillName;
-            actions.push({ actor: 'player', skill: skillName, damage: burnDmg, damageType: 'magical', targetHp: Math.max(0, mCurHp), targetMaxHp: mHp });
+            actions.push({ actor: 'player', skill: skillName, damage: burnDmg, targetHp: Math.max(0, mCurHp), targetMaxHp: mHp });
             return;
           } else if (eff.type === 'crit_buff') {
             combat.crit += eff.value;
@@ -625,7 +625,7 @@ function simulateBattle(player, monster) {
 
         actions.push({
           actor: 'player', skill: skillName, damage: dmgResult.value,
-          crit: dmgResult.isCrit, damageType: 'physical',
+          crit: dmgResult.isCrit,
           targetHp: Math.max(0, mCurHp), targetMaxHp: mHp
         });
 
@@ -679,7 +679,6 @@ function simulateBattle(player, monster) {
 
         actions.push({
           actor: 'monster', skill: skillName, damage: dmg,
-          damageType: mSkill ? 'magical' : 'physical',
           targetHp: Math.max(0, pHp), targetMaxHp: combat.maxHp
         });
       }
