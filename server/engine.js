@@ -191,6 +191,36 @@ function claimAchievement(player, achId){
   }
   return { success:true, status:200 };
 }
+function normalizeTutorialStep(v){
+  if(!Number.isFinite(v)) return 0;
+  let n = Math.floor(v);
+  if(n<0) return 0;
+  if(n>6) return 6;
+  return n;
+}
+function updateTutorialStep(player, nextStep){
+  player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
+  if(!Number.isInteger(nextStep) || nextStep<0 || nextStep>6) return { success:false, status:400, message:'step 非法' };
+  const cur = normalizeTutorialStep(player.tutorialStep);
+  if(nextStep===6){
+    if(cur===6) return { success:true, status:200, data: getPlayerView(player) };
+    player.tutorialStep = 6;
+    return { success:true, status:200, data: getPlayerView(player) };
+  }
+  if(nextStep===cur) return { success:false, status:409, message:'步骤不连续' };
+  if(nextStep !== cur+1) return { success:false, status:409, message:'步骤不连续' };
+  // 条件校验
+  if(cur===2 && nextStep===3){
+    const dq = (player.dailyQuests||[]).find(q=>q.id==='alloc1');
+    if(!dq || !dq.done) return { success:false, status:409, message:'条件未满足' };
+  }
+  if(cur===4 && nextStep===5){
+    if(player.level < 5) return { success:false, status:409, message:'条件未满足' };
+  }
+  player.tutorialStep = nextStep;
+  return { success:true, status:200, data: getPlayerView(player) };
+}
 
 // ====== 工具：按ID查找词条 ======
 function findAffix(affixId) {
@@ -268,7 +298,8 @@ function createCharacter(username, charName) {
     questStats: { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] },
     titles: [],
     currentTitle: null,
-    reincPoints: 0
+    reincPoints: 0,
+    tutorialStep: 0
   };
   // 初次冒险立即可领取
   p.achievements['first'] = { unlocked: true, claimed: false, unlockAt: now };
@@ -332,6 +363,8 @@ function migratePlayer(player) {
   if (!Array.isArray(player.titles)) player.titles = [];
   if (player.currentTitle !== null && typeof player.currentTitle !== 'string') player.currentTitle = null;
   if (!Number.isFinite(player.reincPoints)) player.reincPoints = 0;
+  if (!Number.isFinite(player.tutorialStep)) player.tutorialStep = 0;
+  player.tutorialStep = normalizeTutorialStep(player.tutorialStep);
   // 迁移旧数据兼容：若 achievements 空但已有角色，补初次冒险
   if (!player.achievements['first']) {
     player.achievements['first'] = { unlocked: true, claimed: false, unlockAt: player.createdAt || getNow() };
@@ -1519,7 +1552,8 @@ function getPlayerView(player) {
     jobInfo,
     strategy, strategyChangedAt, strategyCdRemaining, strategies,
     titles: player.titles || [], currentTitle: player.currentTitle || null,
-    questView
+    questView,
+    tutorialStep: normalizeTutorialStep(player.tutorialStep), tutorialDone: normalizeTutorialStep(player.tutorialStep)===6
   };
 }
 
@@ -1548,5 +1582,6 @@ module.exports = {
   buildBattleMonster, shouldDrop,
   getNow, __setNow, __setRandom, __setDropRandom, __resetSeams,
   createDailyQuests, refreshDailyIfNeeded, updateDailyProgress, grantGold, grantExpWithLevelUp, checkAchievements,
-  claimDaily, claimChest, claimAchievement, getTodayKey
+  claimDaily, claimChest, claimAchievement, getTodayKey,
+  normalizeTutorialStep, updateTutorialStep
 };

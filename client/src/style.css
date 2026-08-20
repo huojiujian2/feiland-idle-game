@@ -54,6 +54,21 @@
   --quest-progress-bg: rgba(157,140,240,0.08);
   --quest-progress-fill: linear-gradient(90deg, var(--accent2), var(--accent));
 
+  /* 引导语义化 */
+  --tutorial-overlay-bg: rgba(0,0,0,0.6);
+  --tutorial-blur: blur(2px);
+  --tutorial-outline: 2px solid var(--accent);
+  --tutorial-z: 400;
+  --tutorial-hole-radius: 8px;
+  --tutorial-card-radius: 10px;
+  --tutorial-card-bg: var(--bg2);
+  --tutorial-card-border: var(--accent);
+  --tutorial-card-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  --tutorial-hole-shadow: 0 0 0 2px var(--accent);
+  --tutorial-step: var(--dim);
+  --tutorial-text: var(--ink);
+  --tutorial-hint: var(--muted);
+
   /* 排行榜语义化 */
   --lb-row-bg: rgba(20,22,42,0.4);
   --lb-row-hover: rgba(20,22,42,0.6);

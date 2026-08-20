@@ -73,5 +73,8 @@ export default {
   // 任务/委托
   claimDaily(username, questId) { return request(`/player/${username}/quest/daily/${questId}/claim`, { method: 'POST' }) },
   claimChest(username) { return request(`/player/${username}/quest/chest/claim`, { method: 'POST' }) },
-  claimAchievement(username, achId) { return request(`/player/${username}/quest/achievement/${achId}/claim`, { method: 'POST' }) }
+  claimAchievement(username, achId) { return request(`/player/${username}/quest/achievement/${achId}/claim`, { method: 'POST' }) },
+
+  // 引导
+  updateTutorial(username, step) { return request(`/player/${username}/tutorial`, { method: 'POST', body: JSON.stringify({ step }) }) }
 }

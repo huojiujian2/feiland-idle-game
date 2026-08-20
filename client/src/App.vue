@@ -98,11 +98,12 @@
         </div>
       </transition>
     </main>
+    <TutorialOverlay v-if="player && typeof player.tutorialStep==='number' && player.tutorialStep<6" :player="player" @next="handleTutorialNext" @skip="handleTutorialSkip" />
 
     <!-- 底部 TabBar -->
     <nav class="tabbar">
       <div v-for="tab in tabs" :key="tab.id" class="tabbar-item"
-        :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id">
+        :class="{ active: activeTab === tab.id }" :data-tab="tab.id" @click="handleTabClick(tab.id)">
         <span class="tabbar-icon">{{ tab.icon }}</span>
         <span class="tabbar-text">{{ tab.label }}</span>
         <span v-if="tab.badge" class="tabbar-badge">{{ tab.badge }}</span>
@@ -182,6 +183,7 @@ import CodexView from './components/CodexView.vue'
 import EvolutionView from './components/EvolutionView.vue'
 import LeaderboardView from './components/LeaderboardView.vue'
 import QuestView from './components/QuestView.vue'
+import TutorialOverlay from './components/TutorialOverlay.vue'
 
 const player = ref(null)
 const areas = ref([])
@@ -325,8 +327,72 @@ async function startPolling() {
   }, 5000)
 }
 
+// ====== 引导（T-050） ======
+let tutorialRetrying = false
+async function updateTutorial(nextStep){
+  if(!player.value) return
+  if(tutorialRetrying) return
+  tutorialRetrying = true
+  try{
+    const res = await api.updateTutorial(currentUser, nextStep)
+    if(res && res.success) player.value = res.data
+  }catch(e){
+    // 网络异常，保留当前步，依赖轮询补偿
+  }finally{
+    tutorialRetrying = false
+  }
+}
+function handleTabClick(tabId){
+  activeTab.value = tabId
+  const step = player.value?.tutorialStep
+  if(step===1 && tabId==='char') updateTutorial(2)
+  else if(step===3 && tabId==='map') updateTutorial(4)
+  else if(step===4 && tabId==='bag'){
+    if((player.value?.level ?? 0) >= 5) updateTutorial(5)
+  }
+  else if(step===5 && tabId==='skill'){
+    if(player.value?.jobPath) updateTutorial(6)
+  }
+}
+function handleTutorialNext(){
+  const cur = player.value?.tutorialStep ?? 0
+  updateTutorial(cur+1)
+}
+function handleTutorialSkip(){ updateTutorial(6) }
+let hasHydrated = false
+watch(()=>player.value?.tutorialStep, (step)=>{
+  if(step===0 && !hasHydrated){
+    hasHydrated = true
+    if(activeTab.value !== 'map') activeTab.value = 'map'
+  }
+  if(step!==0) hasHydrated = true
+})
+// 补偿重试：allocate 成功后 alloc1.done 但教程仍在 2，需重试 2→3（仅轮询成功时触发一次）
+watch(()=>player.value?.questView?.dailyQuests, (list)=>{
+  if(!player.value || tutorialRetrying) return
+  if(player.value.tutorialStep!==2) return
+  const dq = list?.find(x=>x.id==='alloc1')
+  if(dq && dq.done){
+    updateTutorial(3)
+  }
+}, {deep:true})
+
 // ====== 操作处理 ======
-async function handleAllocate(a) { const r = await api.allocateAttributes(currentUser, a); if (r.success) player.value = r.data; else alert(r.message) }
+async function handleAllocate(a) {
+  try{
+    const r = await api.allocateAttributes(currentUser, a)
+    if (r.success){
+      player.value = r.data
+      // 2→3 补偿重试：读取 r.data.questView 而非旧 player，失败由轮询补偿
+      const done = r.data?.questView?.dailyQuests?.find(x=>x.id==='alloc1')?.done
+      if(player.value?.tutorialStep===2 && done){
+        updateTutorial(3)
+      }
+    } else alert(r.message)
+  }catch(e){
+    alert(e.message || '分配失败')
+  }
+}
 async function handleAreaChange(id) { const r = await api.changeArea(currentUser, id); if (r.success) player.value = r.data; else alert(r.message) }
 async function handleChooseJob(p) { const r = await api.chooseJob(currentUser, p); if (r.success) { player.value = r.data; activeTab.value = 'char' } else alert(r.message) }
 async function handleEquipAffix(affixId, slot) { const r = await api.equipAffix(currentUser, affixId, slot); if (r.success) player.value = r.data; else alert(r.message) }
@@ -347,6 +413,7 @@ function logout() {
   player.value = null
   if (pollTimer) clearInterval(pollTimer)
   pollTimer = null
+  hasHydrated = false
   loginStep.value = 'login'
   usernameInput.value = ''
   passwordInput.value = ''

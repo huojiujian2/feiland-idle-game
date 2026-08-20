@@ -12,6 +12,7 @@ const {
   getPowerScore, getTotalStats, getReadonlyPlayer, getStageFull,
   maybeResetWeeklyBossKills,
   claimDaily, claimChest, claimAchievement,
+  updateTutorialStep,
   getNow
 } = require('./engine');
 
@@ -550,6 +551,15 @@ app.post('/api/player/:username/quest/achievement/:id/claim', (req, res) => {
   if (!result.success) return res.status(result.status).json({ success: false, message: result.message });
   store.setPlayer(player.username, player);
   res.json({ success: true, data: getPlayerView(player) });
+});
+app.post('/api/player/:username/tutorial', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.status(404).json({ success: false, message: '角色不存在' });
+  const step = req.body && req.body.step;
+  const result = updateTutorialStep(player, step);
+  if (!result.success) return res.status(result.status).json({ success: false, message: result.message });
+  store.setPlayer(player.username, player);
+  res.json({ success: true, data: result.data });
 });
 
 // BOSS 榜仅由权威战斗结算写入（engine.calculateIdle 判定 isBoss），不再提供公开计数入口，避免伪造

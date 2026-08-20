@@ -54,7 +54,7 @@
     </div>
 
     <!-- 下半：战斗日志（含飘字 overlay） -->
-    <div class="log-section card">
+    <div class="log-section card" data-tutorial="log">
       <div class="log-header">
         <span>⚔ 战斗日志</span>
         <span class="countdown-timer">
