@@ -1,7 +1,7 @@
-# T-005 手动技能释放（主动词条实战） — Spec v6
+# T-005 手动技能释放（主动词条实战） — Spec v7
 
 > 优先级 🔴 高 · 难度 ★★★★ · 分支 `feat/T-005-skill` · 依赖 无 · 对应 `GAMEPLAY_GUIDE.html:2.2 T-005` / `GAMEPLAY_TASKS.md:2.2`
-> 本版修复 v5 剩余 3×P1（护盾/dodgeAtk/复合渲染）+ 顶部判定，其余沿用 v5
+> 本版修复 v6 剩余 1×P1 + 1×P2（类型语义/combo 边界）+ 复用，其余沿用 v6
 
 ## 1. 背景与目标
 
@@ -27,7 +27,7 @@
 
 其它 `type`（`crit_buff/all_buff/agi_atk_buff/atk_def_buff/def_regen_buff/burn/bleed/exp_gold_*` 等）**本版仅日志**：统一产 `type:'skill'` 日志但不改 `combat`、不入结算，避免越界。复合字段**统一处理附带 `heal`**：主路径执行后，若 `eff.heal` 存在则额外 `pHp = min(maxHp, pHp+floor(maxHp*eff.heal))`（覆盖 `A2-04 def_buff+heal` 与 `A4-02 damage+heal` 等所有含 `heal` 的主动，§4.2 统一分支）。对外不宣称 40 全生效。
 
-- 前端：仅 `action.type==='skill'` 判别高亮（`action.skill` 字段普通行也有，不得以此判别）。
+- 前端：仅**主动技能**的 `action.type==='skill'` 判别高亮（被动 `dodgeAtk`/`deathShield`/`revive` 另用独立类型，不计入主动 `skill` 统计；`action.skill` 字段普通行也有，不得以此判别）。
 - 不做：手动释放、打断/沉默、敌方 debuff 属性下调、AGI 重算行动数、EXP 类技能（见下）、音效/特效。
 
 ## 3. 涉及文件
@@ -102,7 +102,7 @@ function simulateBattle(player, monster){
       if(combat.dodgeAtk){
         const c = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, 1, combat.critDmg);
         mCurHp -= c.value;
-        actions.push({ actor:'player', skill:'闪避反击', damage:c.value, type:'skill', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
+        actions.push({ actor:'player', skill:'闪避反击', damage:c.value, type:'passive', source:'dodgeAtk', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
       }
       return;
     }
@@ -115,10 +115,10 @@ function simulateBattle(player, monster){
     if(combat.thorns>0) mCurHp -= Math.floor(dmg*combat.thorns);
     if(combat.regen>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.regen));
     if(combat.healBonus>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.healBonus*0.1));
-    // 护盾：使用局部 deathShield，触发后置零并追加日志（避免 combat.deathShield 重复触发）
+    // 护盾：使用局部 deathShield，触发后置零并追加日志（被动，不计入主动 skill 统计）
     if(pHp<=0 && deathShield>0){
       pHp=Math.floor(combat.maxHp*deathShield);
-      actions.push({ actor:'player', skill:'免死护盾!', shield:true, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+      actions.push({ actor:'player', skill:'免死护盾!', shield:true, type:'passive', source:'deathShield', targetHp:pHp, targetMaxHp:combat.maxHp });
       deathShield = 0;
     }
     actions.push({ actor:'monster', skill:skillName, damage:dmg, targetHp:Math.max(0,pHp), targetMaxHp:combat.maxHp });
@@ -181,10 +181,10 @@ function simulateBattle(player, monster){
     rounds.push({ round, actions, pHp:Math.max(0,pHp), mHp:Math.max(0,mCurHp), pActions:curPActions, mActions:curMActions });
     if(mCurHp<=0){ result='win'; break; }
     if(pHp<=0){
-      // 保留：光明系复活（旧 933-938），deathShield 已在 doMonsterNormalAction 处理
+      // 保留：光明系复活（旧 933-938），deathShield 已在 doMonsterNormalAction 处理；复活为被动
       if(combat.revive>0 && !revived){
         pHp=Math.floor(combat.maxHp*combat.revive); revived=true;
-        rounds.push({ round, actions:[{ actor:'player', skill:'圣光复生!', revive:true, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp }], pHp, mHp:Math.max(0,mCurHp), pActions:0, mActions:0 });
+        rounds.push({ round, actions:[{ actor:'player', skill:'圣光复生!', revive:true, type:'passive', source:'revive', targetHp:pHp, targetMaxHp:combat.maxHp }], pHp, mHp:Math.max(0,mCurHp), pActions:0, mActions:0 });
       } else { result='lose'; break; }
     }
   }
@@ -222,8 +222,8 @@ if(battle.result==='win'){
 ### 4.3 前端落点（字段闭合）
 
 - `MapView.vue`：
-  - `processActions()`：`combo` 分支对 `actions` 中 `type:'skill'` 的聚合行保留 `skill-action` 高亮，且 `comboDamage` 外另渲染 `selfHeal/selfHp` 与 `shield/revive` 标记；不以 `skill` 字段判别；
-  - `actionClass(a)`：`a.type==='skill'`→`skill-action`（含 `damage+heal` 复合行）；
+  - `processActions()`：`combo` 仅聚合 `damage` 类 `actions`（字段 `totalDamage`，非 `comboDamage`），聚焦数值合并；`type:'skill'` 的主动技能不与普通 `damage` 合并，或合并时保留 `skill-action` 高亮；`combo` 内另渲染 `selfHeal/selfHp`（主动复合），`shield/revive` 为独立 `type:'passive'` 行，不进入 `combo` 聚合，独立渲染；
+  - `actionClass(a)`：`a.type==='skill'`→`skill-action`（仅主动技能，含 `damage+heal` 复合），`type:'passive'` 另用 `passive-action`；
   - 日志字段：`damage` 的 `targetHp` 始终为怪物，`heal/selfHeal` 另记 `selfHp/healTargetHp`；复合 `damage+heal`（如 `A4-02`）同时渲染 `damage` 数值与 `+heal HP`，`def_buff+heal`（如 `A2-04`）同时渲染 `buff` 与 `+heal`，避免 `v-else-if` 互斥导致一侧丢失；`note` 行 `v-else-if="a.note"` 兜底；
   - 模板互斥修复：原 `v-else-if="a.heal"`/`v-else-if="a.buff"` 会吞掉复合第二效果，本版改为独立 `v-if="a.heal"` 叠加渲染或 `a.heal` 与 `a.buff` 并列展示。
 - `style.css`：`--skill-highlight/--skill-bg/--skill-border` 映射 `var(--accent2)` 等，组件仅 `var(--skill-*)`。
@@ -234,7 +234,7 @@ if(battle.result==='win'){
 calculateIdle -> buildBattleMonster -> simulateBattle(round 1..30)
   round: expireBuffs -> roundShouldTrigger=shouldTriggerActiveSkill(round,cd) (顶部) -> build queue -> firstPlayerNormal -> if roundShouldTrigger && alive -> skill追加(type:'skill', after first normal) -> 剩余 queue (doMonsterNormal/doPlayerNormal)
   -> return { battle, skillGoldBonus } -> calculateIdle win时 goldMult*=1+skillGoldBonus -> logs.push(battle)
-MapView: findLatestBattle().detail.flatMap(r=>r.actions).filter(a=>a.type==='skill') -> 紫色高亮（含 combo）
+MapView: findLatestBattle().detail.flatMap(r=>r.actions).filter(a=>a.type==='skill') -> 紫色高亮（仅主动，被动为 type:'passive' 不计入）
 ```
 
 - `detail slice(-6)`：早期 skill 可能截断，测试覆盖短场（≤6 回合）可见性，长场后续可改为全量。
@@ -248,7 +248,7 @@ MapView: findLatestBattle().detail.flatMap(r=>r.actions).filter(a=>a.type==='ski
 - [ ] `buff`：`A1-04 10% 2回合` `5` 生效，`6` 保持，`7` 回退至 `before`
 - [ ] `gold_buff`：`A1-05` 每次累加，`5→+10%`，`10→+20%`，仅 `win` 的 `goldGain` 放大，`lose/timeout` 不产生金币
 - [ ] 日志：`type:'skill'` 均含 `targetHp/targetMaxHp`，`note` 行有兜底渲染，`combo` 行同高亮
-- [ ] 无主动时无 `skill`，不报错；短场 skill 在 `detail` 可见
+- [ ] 无主动时无主动 `type:'skill'`（被动 `dodgeAtk/deathShield/revive` 仍可能产生 `type:'passive'`，不计入此断言），不报错；短场主动 `skill` 在 `detail` 可见；前端 `filter(a=>a.type==='skill')` 仅统计主动
 - [ ] `pnpm build`/`git diff --check 0`/`node --test server/**/*.test.js` 通过（`server/skill.test.js` 覆盖 CD/顺序/多行动/重叠/金币仅胜利/字段/切片）
 - [ ] 风格：仅 `var(--skill-*/--duration-*/--ease-*)`
 
