@@ -14,11 +14,13 @@ const {
 let _now = () => Date.now();
 let _rand = Math.random;
 let _dropRand = Math.random;
+let _uidSeq = 0;
 function getNow() { return _now(); }
 function __setNow(fn) { _now = fn; }
 function __setRandom(fn) { _rand = fn; }
 function __setDropRandom(fn) { _dropRand = fn; }
-function __resetSeams() { _now = () => Date.now(); _rand = Math.random; _dropRand = Math.random; }
+function __resetSeams() { _now = () => Date.now(); _rand = Math.random; _dropRand = Math.random; _uidSeq = 0; }
+function genUid(){ return getNow() + '_' + (_uidSeq++) + '_' + _rand().toString(36).substr(2, 6); }
 function shouldDrop(rate, strategy) {
   const dropBonus = (STRATEGIES[strategy]?.effects?.drop) || 0;
   const eff = rate * (1 + dropBonus);
@@ -810,10 +812,8 @@ function calculateIdle(player) {
           if (existing) existing.count++;
           else player.inventory.push({ name: drop.name, count: 1, type: 'material' });
         } else if (drop.type === 'equip') {
-          const item = createEquipItem(drop.template);
+          const item = createEquipItem(drop.template, genUid());
           if (item) {
-            // uid 由 engine 注入，确保 __setNow/__setRandom 可控（Spec §8），data.js 保持静态
-            item.uid = getNow() + '_' + _rand().toString(36).substr(2, 6);
             player.equips.push(item);
             drops.push(`${item.name} [${item.quality}]`);
           }
@@ -1025,7 +1025,7 @@ function buyItem(player, itemId, count = 1) {
     else player.inventory.push({ name: shopItem.name, count, type: 'consumable', itemId });
   } else if (shopItem.type === 'equip') {
     for (let i = 0; i < count; i++) {
-      const item = createEquipItem(itemId);
+      const item = createEquipItem(itemId, genUid());
       if (item) player.equips.push(item);
     }
   }

@@ -2,11 +2,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'db.json');
+let DB_PATH = path.join(__dirname, 'db.json');
 let data = { accounts: {}, players: {} };
 let saveTimer = null;
 let _disableSave = false;
 function __setDisableSave(v){ _disableSave = v; if(v && saveTimer){ clearTimeout(saveTimer); saveTimer=null; } }
+function __setDbPath(p){ DB_PATH = p; }
+function __resetStore(){ data = { accounts: {}, players: {}, meta: {} }; if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } }
 
 function load() {
   try {
@@ -60,4 +62,4 @@ function getAllPlayers() { return Object.values(data.players); }
 function getMeta() { return data.meta; }
 function setMeta(meta) { data.meta = meta; markDirty(); }
 
-module.exports = { load, save, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, getMeta, setMeta, __setDisableSave };
+module.exports = { load, save, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, getMeta, setMeta, __setDisableSave, __setDbPath, __resetStore };

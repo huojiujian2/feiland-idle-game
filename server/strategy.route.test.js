@@ -1,9 +1,18 @@
 const { describe, it, before, after, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert/strict')
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
 
 const engine = require('./engine')
 const data = require('./data')
 const store = require('./store')
+
+// 隔离：使用临时 DB 文件，避免污染真实 server/db.json（Spec P2）
+const tmpDbPath = path.join(os.tmpdir(), `test-feiland-${Date.now()}-${Math.random().toString(36).slice(2,6)}.json`)
+store.__setDbPath(tmpDbPath)
+store.__resetStore()
+store.__setDisableSave(true) // 默认禁用定时落盘，单测按需启用并显式 save
 const app = require('./index')
 
 let server, base
@@ -16,13 +25,16 @@ before(async () => {
     })
   })
 })
-after(() => new Promise(res => server.close(res)))
+after(() => new Promise(res => {
+  server.close(() => {
+    store.__setDisableSave(false)
+    try{ fs.unlinkSync(tmpDbPath) }catch(e){}
+    res()
+  })
+}))
 
 function resetStore() {
-  // 测试隔离：使用唯一用户名，避免清理全量 store（store 内 data 私有，清理易引入 undefined）
-  // 仅重置 meta 中的 bossWeek 以避免周重置干扰
-  const meta = store.getMeta()
-  // 保留 bossWeek 初始化逻辑，不强制清空
+  // 隔离：唯一用户名已足够，meta 清理交由 store.__resetStore 在需要时调用
 }
 
 beforeEach(() => {
@@ -121,7 +133,7 @@ describe('POST /strategy 路由事务', () => {
     assert.equal(res.data.strategy, 'greedy')
   })
 
-  it('C 失败仍落盘 B 的结算', async () => {
+  it('C 失败仍落盘 B 的结算（重启可恢复）', async () => {
     const now = 1_700_000_000_000
     engine.__setNow(() => now)
     engine.__setRandom(() => 0)
@@ -132,18 +144,33 @@ describe('POST /strategy 路由事务', () => {
     p.lastTick = now - 5000
     p.attributes = { atk:100, def:100, hp:100, agi:100 }
     engine.recalcMaxStats(p); p.hp = p.maxHp
+    // 启用落盘以验证持久化
+    store.__setDisableSave(false)
     store.setPlayer('u_fail', p)
     store.setAccount('u_fail', { username:'u_fail', password:'p', hasCharacter:true })
+    store.save()
     const beforeExp = store.getPlayer('u_fail').exp
     const res = await postStrategy('u_fail', 'greedy') // req 20
     assert.equal(res.success, false)
     assert.match(res.message, /Lv\.20/)
     assert.ok(res.data, 'C 失败应返回 data')
     const after = store.getPlayer('u_fail')
-    // B 已结算，exp 应增加（win 给 exp）
     assert.ok(after.exp > beforeExp)
     assert.equal(after.strategy, 'balanced')
-    assert.ok(after.lastTick === now || after.level > 10)
+    // 显式落盘并模拟重启
+    store.save()
+    const savedExp = after.exp
+    const savedTick = after.lastTick
+    // 清内存后重载
+    store.__resetStore()
+    store.load()
+    const reloaded = store.getPlayer('u_fail')
+    assert.ok(reloaded, '重启后应仍存在')
+    assert.equal(reloaded.exp, savedExp)
+    assert.equal(reloaded.lastTick, savedTick)
+    assert.equal(reloaded.strategy, 'balanced')
+    // 恢复禁用以免后续测试污染
+    store.__setDisableSave(true)
   })
 
   it('<3s 关窗：切换成功后 lastTick 推进', async () => {

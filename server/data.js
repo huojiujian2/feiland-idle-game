@@ -542,12 +542,12 @@ function expToNext(level) {
   return Math.floor(50 * Math.pow(level, 1.5));
 }
 
-// 生成一件装备实例（静态数据模块，不含可变状态；uid 由调用方保证唯一）
-function createEquipItem(templateId) {
+// 生成一件装备实例（静态数据模块，uid 由调用方注入以保持可测试性）
+function createEquipItem(templateId, uid) {
   const t = EQUIP_TEMPLATES[templateId];
   if (!t) return null;
   return {
-    uid: Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+    uid: uid || (Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
     templateId,
     name: t.name,
     slot: t.slot,
