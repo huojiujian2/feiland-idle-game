@@ -187,6 +187,7 @@ function claimAchievement(player, achId){
     if(!player.titles) player.titles=[];
     if(!player.titles.includes(titleToGrant)) player.titles.push(titleToGrant);
     if(!player.currentTitle) player.currentTitle = titleToGrant;
+    rec.grantedTitle = titleToGrant;
   }
   return { success:true, status:200 };
 }
@@ -1269,6 +1270,7 @@ function sellMaterial(player, itemName, count = 1) {
   refreshDailyIfNeeded(player);
   const invItem = player.inventory.find(i => i.name === itemName);
   if (!invItem || invItem.count < count) return { success: false, message: '数量不足' };
+  if (invItem.type && invItem.type !== 'material') return { success: false, message: '该物品不可出售' };
   const price = MATERIAL_PRICES[itemName] || 5;
   grantGold(player, price * count);
   invItem.count -= count;
@@ -1490,7 +1492,8 @@ function getPlayerView(player) {
     const rec = (player.achievements || {})[a.id] || { unlocked: false, claimed: false };
     let title = a.title;
     if(a.id==='ascend'){
-      title = player.godhood==='god' ? '神灵' : '半神';
+      title = rec.grantedTitle || (player.godhood==='god' ? '神灵' : '半神');
+      if(rec.claimed && !rec.grantedTitle) title = (player.titles||[]).includes('神灵') ? '神灵' : '半神';
     }
     return { id: a.id, name: a.name, desc: a.desc, unlocked: !!rec.unlocked, claimed: !!rec.claimed, reward: a.reward, title };
   });
