@@ -63,9 +63,9 @@ ACHIEVEMENTS = [{id:'first', name:'初次冒险', cond:{always:true}, reward:{go
 
 // player 扩展（migratePlayer 默认，全部可 JSON 持久化，字段名统一）
 dailyQuests: [{id, progress, target, done, claimed}], dailyResetAt: 'YYYY-MM-DD', dailyChestClaimed: false,
-achievements: { [id]: {unlocked:bool, claimed:bool, unlockAt:number, grantedTitle?:string} } // ascend 领取时写入半神/神灵，展示固定为领取时称号,
+achievements: { [id]: {unlocked:bool, claimed:bool, unlockAt:number, grantedTitle?:string} } // 所有称号领取时持久化，ascend 防漂移，展示固定为领取时称号,
 questStats: { totalGoldEarned:number, affixSeen: string[], seenEquipTemplates: string[] }, // 数组去重，非 Set
-titles: string[], currentTitle: string|null, reincPoints: number // grantedTitle 仅 ascend 需持久化，避免后续登神漂移
+titles: string[], currentTitle: string|null, reincPoints: number // grantedTitle 所有称号领取时持久化，ascend 防漂移
 ```
 
 - 每日重置：`getTodayKey(getNow())` 按服务器 0 点 `YYYY-MM-DD`，**所有会更新日常状态或领取奖励的入口** `migratePlayer/getPlayerView/calculateIdle/allocateAttributes/equipAffix/unequipAffix/enchantItem/buyItem/equipItem/sellMaterial/sellEquip/claimDaily/claimChest/claimAchievement` 均先执行 `refreshDailyIfNeeded(player)` 再更新进度，避免跨零点操作被重置覆盖；成就检查 `checkAchievements` 则在 `grantGold/equipItem/buyItem/sell*/attemptAscension/doReincarnate` 等状态变更后立即执行；重建时 `dailyQuests` 6项 `progress=0/done=false/claimed=false` 并 `dailyChestClaimed=false`，过期未领取不补发。
@@ -97,7 +97,7 @@ titles: string[], currentTitle: string|null, reincPoints: number // grantedTitle
 - [ ] 成就 10 项满足条件 `unlocked`，需手动领取后才发奖励/称号（`currentTitle` 必返回），重复领取 200 幂等；称号显示于角色名旁
 - [ ] `totalGoldEarned` 含战斗/出售/任务所有流入；`affixSeen` 数组持久化 50 去重；`seenEquipTemplates` 去重 10/20 判定收集（含掉落）；经验奖励触发升级
 - [ ] `QuestView.vue` 全屏替换，4 列 12/页、底部翻页器、遮罩关闭、`var(--*)` 动效与颜色
-- [ ] `pnpm build`/`git diff --check` 通过，单测 `server/quest.test.js`（日常重置/领取409/已领取200/跨日过期）与 `server/engine.quest.test.js`（奖励池/升级/收集10/20/API幂等/迁移补发）
+- [ ] `pnpm build`/`git diff --check` 通过，单测 `server/quest.test.js`（日常重置/领取409/已领取200/跨日过期）、`server/engine.quest.test.js`（奖励池/升级/收集10/20/迁移补发）与 `server/quest.route.test.js`（路由 404/409/200 via app.handle）
 
 ## 7. 风险与回退
 
