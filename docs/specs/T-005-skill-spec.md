@@ -1,7 +1,7 @@
-# T-005 手动技能释放（主动词条实战） — Spec v8
+# T-005 手动技能释放（主动词条实战） — Spec v9
 
 > 优先级 🔴 高 · 难度 ★★★★ · 分支 `feat/T-005-skill` · 依赖 无 · 对应 `GAMEPLAY_GUIDE.html:2.2 T-005` / `GAMEPLAY_TASKS.md:2.2`
-> 本版修复 v7 剩余 1×P1 + 1×P2（combo 唯一行为/样式落点），其余沿用 v7
+> 本版收口 v8 剩余 2×P2（totalDamage 命名/聚合条件与 passive 样式确定），其余沿用 v8，已可进入开发
 
 ## 1. 背景与目标
 
@@ -222,8 +222,8 @@ if(battle.result==='win'){
 ### 4.3 前端落点（字段闭合）
 
 - `MapView.vue`：
-  - `processActions()`：**唯一行为**：`type:'skill'` 的主动 `damage` **进入** `combo` 聚合（与普通 `damage` 同计 `totalDamage`），`type:'passive'` 的 `dodgeAtk/deathShield/revive` 不进入 `combo`；`combo` 聚合时保留 `hit.type==='skill'` 高亮（`skill-action`），并渲染 `hit.selfHeal/selfHp`（`damage+heal` 复合）；`hit.totalDamage` 仅累计 `combo` 内 `damage`；
-  - `actionClass(a)`：`a.type==='skill'`→`skill-action`（仅主动，含 `damage+heal` 复合），`type:'passive'`→复用既有 `shield/revive` 样式（本版不新增 `passive-action` 独立样式，复用 `MapView.vue:488` 既有 `player-shield/player-revive` 等类，或映射 `var(--accent)/var(--muted)`，`style.css` 仅补充 `--skill-*`）；
+  - `processActions()`：**唯一行为**：`type:'skill'` 的主动 `damage` **进入** `combo` 聚合（与普通 `damage` 同计 `item.totalDamage`，非 `hit.totalDamage`；`hit` 仅含 `damage/selfHeal/selfHp`），`type:'passive'` 的 `dodgeAtk/deathShield/revive` 不进入 `combo`；聚合条件 `act.actor==='player' && act.damage!==undefined && !act.dodge && act.type!=='passive'`；`combo` 内按 `hit.type==='skill'` 高亮（`skill-action`）并渲染 `hit.selfHeal/selfHp`，`item.totalDamage` 仅累计 `combo` 内 `damage`；
+  - `actionClass(a)` 优先级：先判 `a.type==='skill'`→`skill-action`（覆盖 `damage/heal/buff`），再判 `type:'passive'`；样式固定：`dodgeAtk→player-dmg`、`deathShield→player-shield`、`revive→player-revive`（复用 `MapView.vue:488` 既有类，`style.css` 仅补充 `--skill-*`，不新增 `passive-action`）；
   - 日志字段：`damage` 的 `targetHp` 始终为怪物，`heal/selfHeal` 另记 `selfHp/healTargetHp`；复合 `damage+heal`（如 `A4-02`）同时渲染 `damage` 数值与 `+heal HP`，`def_buff+heal`（如 `A2-04`）同时渲染 `buff` 与 `+heal`，避免 `v-else-if` 互斥导致一侧丢失；`note` 行 `v-else-if="a.note"` 兜底；
   - 模板互斥修复：原 `v-else-if="a.heal"`/`v-else-if="a.buff"` 会吞掉复合第二效果，本版改为独立 `v-if="a.heal"` 叠加渲染或 `a.heal` 与 `a.buff` 并列展示。
 - `style.css`：`--skill-highlight/--skill-bg/--skill-border` 映射 `var(--accent2)` 等，组件仅 `var(--skill-*)`。
