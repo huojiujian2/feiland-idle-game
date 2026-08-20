@@ -155,6 +155,36 @@ pnpm dev:client
 pnpm build      # 构建前端到 client/dist/
 ```
 
+### 端口配置
+
+本项目默认使用两个端口：
+
+| 服务 | 默认端口 | 配置文件 | 修改位置 |
+|------|----------|----------|----------|
+| 前端 (Vite) | 3000 | `vite.config.js` | `server.port: 3000` |
+| 后端 (Express) | 3001 | `server/index.js` | `const PORT = 3001` |
+
+**修改前端端口**：编辑 `vite.config.js`
+
+```js
+// vite.config.js
+server: {
+  port: 8080,  // ← 改成你想要的端口
+  proxy: {
+    '/api': 'http://localhost:3001'  // ← 指向后端端口
+  }
+}
+```
+
+**修改后端端口**：编辑 `server/index.js`
+
+```js
+// server/index.js
+const PORT = 3002;  // ← 改成你想要的端口
+```
+
+> **注意**：修改后端端口后，务必同步修改 `vite.config.js` 中 proxy 的 `/api` 目标地址，否则前端无法请求后端 API。
+
 ---
 
 ## 🎯 新手指南
