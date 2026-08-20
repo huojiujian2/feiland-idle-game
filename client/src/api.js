@@ -61,5 +61,8 @@ export default {
   getCodex() { return request('/codex') },
 
   // 排行榜
-  getLeaderboard(type) { return request(`/leaderboard?type=${type}`) }
+  getLeaderboard(type, username) {
+    const q = username ? `?type=${type}&username=${encodeURIComponent(username)}` : `?type=${type}`
+    return request(`/leaderboard${q}`)
+  }
 }
