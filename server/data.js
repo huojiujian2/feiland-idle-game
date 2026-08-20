@@ -542,17 +542,12 @@ function expToNext(level) {
   return Math.floor(50 * Math.pow(level, 1.5));
 }
 
-// 生成一件装备实例（uid 走可注入时钟/随机，便于测试 seam）
-let _dataNow = () => Date.now();
-let _dataRand = Math.random;
-function _setDataNow(fn){ _dataNow = fn; }
-function _setDataRand(fn){ _dataRand = fn; }
-function _resetDataSeams(){ _dataNow = () => Date.now(); _dataRand = Math.random; }
+// 生成一件装备实例（静态数据模块，不含可变状态；uid 由调用方保证唯一）
 function createEquipItem(templateId) {
   const t = EQUIP_TEMPLATES[templateId];
   if (!t) return null;
   return {
-    uid: _dataNow() + '_' + _dataRand().toString(36).substr(2, 6),
+    uid: Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     templateId,
     name: t.name,
     slot: t.slot,
@@ -694,6 +689,5 @@ module.exports = {
   MONSTER_SKILLS,
   AFFIX_LEVELS, AFFIX_TREE,
   STRATEGIES, STRATEGY_CD_MS,
-  getStage, expToNext, createEquipItem,
-  _setDataNow, _setDataRand, _resetDataSeams
+  getStage, expToNext, createEquipItem
 };

@@ -464,16 +464,19 @@ app.post('/api/player/:username/strategy', (req, res) => {
   if (!player) return res.json({ success: false, message: '角色不存在' });
   const { strategy } = req.body;
 
-  // 旧存档迁移至 Spec §4，确保缺失 strategy 时幂等正确（避免 balanced→balanced 误结算）
-  const { migratePlayer } = require('./engine');
-  migratePlayer(player);
-
-  // A — 无副作用校验
+  // A — 无副作用校验（必须在任何迁移/写盘前，避免 __proto__ 等非法请求污染存档）
   if (typeof strategy !== 'string' || !Object.hasOwn(STRATEGIES, strategy)) {
     return res.json({ success: false, message: '策略不存在' });
   }
-  // 幂等：同策略直接成功，绕过等级与 CD
+  // 旧存档迁移至 Spec §4（仅合法请求后执行，确保缺失 strategy 时幂等正确）
+  const { migratePlayer } = require('./engine');
+  const beforeStrategy = player.strategy;
+  const beforeChangedAt = player.strategyChangedAt;
+  migratePlayer(player);
+  const migrated = (beforeStrategy !== player.strategy) || (beforeChangedAt !== player.strategyChangedAt);
+  // 幂等：同策略直接成功，绕过等级与 CD；若迁移产生变更需落盘
   if (strategy === player.strategy) {
+    if (migrated) { store.setPlayer(player.username, player); store.save(); }
     return res.json({ success: true, data: getPlayerView(player) });
   }
   const strategyChangedAt = Number.isFinite(player.strategyChangedAt) ? player.strategyChangedAt : 0;
@@ -522,7 +525,7 @@ app.post('/api/player/:username/strategy', (req, res) => {
 
 // BOSS 榜仅由权威战斗结算写入（engine.calculateIdle 判定 isBoss），不再提供公开计数入口，避免伪造
 
-// ====== 定时任务：每5秒计算所有玩家的挂机收益 ======
+// ====== 定时任务（仅主进程，避免测试挂起） ======
 if (require.main === module) {
   setInterval(() => {
     // 跨周不丢数据：写入前原子切周（全局）
@@ -540,9 +543,7 @@ if (require.main === module) {
   setInterval(() => maybeResetWeeklyBossKills(store), 60 * 1000);
 
   setInterval(() => store.save(), 30000);
-}
 
-if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`\n========================================`);
     console.log(`  费兰德世界 - 挂机服务器已启动 v0.3`);

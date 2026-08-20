@@ -10,14 +10,15 @@ const {
 } = require('./data');
 
 // ====== 可注入时钟与随机（测试 seam） ======
+// data.js 保持静态，uid 生成由本模块通过 getNow/_rand 注入（Spec §8，边界约定）
 let _now = () => Date.now();
 let _rand = Math.random;
 let _dropRand = Math.random;
 function getNow() { return _now(); }
-function __setNow(fn) { _now = fn; try{ require('./data')._setDataNow(fn); }catch(e){} }
-function __setRandom(fn) { _rand = fn; try{ require('./data')._setDataRand(fn); }catch(e){} }
+function __setNow(fn) { _now = fn; }
+function __setRandom(fn) { _rand = fn; }
 function __setDropRandom(fn) { _dropRand = fn; }
-function __resetSeams() { _now = () => Date.now(); _rand = Math.random; _dropRand = Math.random; try{ const d=require('./data'); d._resetDataSeams(); }catch(e){} }
+function __resetSeams() { _now = () => Date.now(); _rand = Math.random; _dropRand = Math.random; }
 function shouldDrop(rate, strategy) {
   const dropBonus = (STRATEGIES[strategy]?.effects?.drop) || 0;
   const eff = rate * (1 + dropBonus);
@@ -414,9 +415,9 @@ function getCombatStats(player) {
   let bonusAtk = 0, bonusDef = 0;
   if (total.lowHpAtk && hpRatio < 0.5) bonusAtk += total.lowHpAtk;
   if (total.lowHpDef && hpRatio < 0.5) bonusDef += total.lowHpDef;
-  // T-004 背水一战：额外低血加成（与词条相加后统一 floor），阈值与数值读 STRATEGIES
-  const desEff = STRATEGIES.desperate?.effects || {};
-  if (player.strategy === 'desperate' && hpRatio < (desEff.hpThreshold ?? 0.30)) bonusAtk += (desEff.desperateAtk ?? 0.20);
+  // T-004 背水一战：额外低血加成（与词条相加后统一 floor），严格读单一数据源
+  const desEff = STRATEGIES.desperate.effects;
+  if (player.strategy === 'desperate' && hpRatio < desEff.hpThreshold) bonusAtk += desEff.desperateAtk;
 
   return {
     atk: Math.floor(total.atk * (1 + bonusAtk)),
