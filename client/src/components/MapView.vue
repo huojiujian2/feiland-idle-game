@@ -312,7 +312,7 @@ const currentAreaName = computed(() => props.areas.find(a => a.id === props.play
 const damageItems = ref([])
 const lastBattleTime = ref(null)
 let dmgSeq = 0
-let dmgTimers = []
+const dmgTimers = new Set()
 
 function spawnDamageFromLog(log){
   if(!log || log.type !== 'battle' || !Array.isArray(log.detail)) return
@@ -340,12 +340,16 @@ function spawnDamageFromLog(log){
     const item = { id, kind, value, crit, x: 20 + Math.random()*60, y: 18 + Math.random()*42 }
     const delay = idx * 80
     const t = setTimeout(()=>{
+      dmgTimers.delete(t)
       damageItems.value.push(item)
       if(damageItems.value.length>12) damageItems.value = damageItems.value.slice(-12)
-      const rm = setTimeout(()=>{ damageItems.value = damageItems.value.filter(x=>x.id!==id) }, 1650)
-      dmgTimers.push(rm)
+      const rm = setTimeout(()=>{
+        dmgTimers.delete(rm)
+        damageItems.value = damageItems.value.filter(x=>x.id!==id)
+      }, 1650)
+      dmgTimers.add(rm)
     }, delay)
-    dmgTimers.push(t)
+    dmgTimers.add(t)
   })
 }
 
@@ -378,7 +382,7 @@ watch(() => props.player.logs, () => {
 }, { deep: true })
 
 onUnmounted(() => { if (countdownTimer) clearInterval(countdownTimer) })
-onUnmounted(()=>{ dmgTimers.forEach(t=>clearTimeout(t)); dmgTimers=[] })
+onUnmounted(()=>{ dmgTimers.forEach(t=>clearTimeout(t)); dmgTimers.clear() })
 
 watch(() => props.player.logs, () => {
   nextTick(() => { if (logBody.value) logBody.value.scrollTop = 0 })
@@ -577,7 +581,7 @@ function dropQuality(name) {
 .dmg-float.monster-dmg, .dmg-float.magical-dmg { color: var(--accent2); }
 .dmg-float.heal { color: var(--success); }
 .dmg-float.miss { color: var(--muted); font-size: 0.78rem; font-weight: 600; animation: missFloat var(--duration-damage) var(--ease-out) forwards; }
-.dmg-float.crit { color: #ff6b3d; font-size: 1.15rem; transform: scale(1.15); animation: dmgFloat var(--duration-damage) var(--ease-out) forwards, critShake 0.15s 0.05s; }
+.dmg-float.crit { color: var(--dmg-crit); font-size: 1.15rem; transform: scale(1.15); animation: dmgFloat var(--duration-damage) var(--ease-out) forwards, critShake var(--crit-shake-duration) var(--crit-shake-delay); }
 .dmg-crit-tag { font-size: 0.58rem; margin-left: 0.15rem; vertical-align: super; }
 @keyframes dmgFloat { 0% { transform: translateY(0) scale(1); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(-60px) scale(1); opacity: 0; } }
 @keyframes missFloat { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(-32px); opacity: 0; } }
