@@ -18,7 +18,7 @@
 | 2 | 加点 | `2` | `targetReady` 为 false 时仍显示但居中降级（见下） | `App.handleAllocate` 成功（`POST /api/player/:username/attributes` 200 且 `r.data.questView.dailyQuests.find(x=>x.id==='alloc1').done===true`）后 `POST {3}`；若第二请求 409/网络异常（捕获 `catch`），下次 `GET /player` 成功轮询检测到 `alloc1.done && tutorialStep===2` 且无 `retrying` 标记时自动重试一次（置 `retrying=true` 防并发，请求 `finally` 清除标记；成功后 `tutorialStep!==2` 即停止，失败则清除标记允许下次成功轮询再次重试） | 包裹容器 `[data-tutorial=alloc-wrap]` |
 | 3 | 地图 | `3` | 恒真 | `App.handleTabClick('map')` 内 `POST {4}` | `[data-tab=map]` |
 | 4 | 背包 | `4` （`3→4` 无门槛） | `level>=5` 否则隐藏等待 | `App.handleTabClick('bag')` 内 `POST {5}` 需 `level>=5` 否则 409 | `[data-tab=bag]` |
-| 5 | 技能 | `5` （`4→5` 需 `level>=5`） | `jobPath!=null` 否则隐藏等待 | `App.handleTabClick('skill')` 内 `POST {6}` 需 `jobPath!=null` 否则 409 | `[data-tab=skill]` |
+| 5 | 技能 | `5` （`4→5` 需 `level>=5`） | `jobPath!=null` 否则隐藏等待 | `App.handleTabClick('skill')` 内 `POST {6}`（任意，`6` 跳过语义） | `[data-tab=skill]` |
 | 6 | 完成 | `6` | — | — | 遮罩消失 |
 
 - **三态分离（修复 v5 不可达）**：
@@ -41,7 +41,7 @@
 
 ## 3. 涉及文件（严格限定，v10）
 
-- `server/engine.js` — `migratePlayer` 追加 `tutorialStep:number`（0-6，`tutorialDone` 派生），`createCharacter` `0`，`getPlayerView` 暴露，`updateTutorialStep` 校验单调 + 条件（`4→5 level>=5`、`5→6 jobPath`、`2→3 alloc1.done`）。
+- `server/engine.js` — `migratePlayer` 追加 `tutorialStep:number`（0-6，`tutorialDone` 派生），`createCharacter` `0`，`getPlayerView` 暴露，`updateTutorialStep` 校验单调 + 条件（`4→5 level>=5`、`2→3 alloc1.done`（`5→6` 任意 `6` 跳过，无额外条件，`jobPath` 由显示等待保证））。
 - `server/index.js` — 固定 `POST /api/player/:username/tutorial`（400/404/409/200）。
 - `server/data.js` — 无。
 - `client/src/components/TutorialOverlay.vue` — 新建，`STEPS` 长度 6 索引 0-5，`overlayVisible/targetReady/waiting/fallbackCenter` 四态，`emit next/skip`，4 块镂空，`nextTick` + `requestAnimationFrame` 重算。
@@ -63,7 +63,7 @@ tutorialStep: number // 0-6 整数，派生 tutorialDone = step===6
 - `migratePlayer`：归一 `!Number.isFinite||<0→0`、`>6→6`、`Math.floor`；`tutorialDone` 派生；老存档统一 `0`。
 - `createCharacter`：`0`。
 - `getPlayerView`：返回 `tutorialStep` 与派生 `tutorialDone`。
-- `updateTutorialStep(player, nextStep)`：400 非整数/越界；`6` 任意 200 幂等；`current` 重复 409；`current+1` 时：`2→3` 校验 `player.dailyQuests.find(x=>x.id==='alloc1').done===true`（服务端路径）且视图路径 `r.data.questView.dailyQuests` 同步；`4→5` 校验 `level>=5`；`5→6` 校验 `jobPath!=null`；成功置 `step`。
+- `updateTutorialStep(player, nextStep)`：400 非整数/越界；`6` 任意 200 幂等；`current` 重复 409；`current+1` 时：`2→3` 校验 `player.dailyQuests.find(x=>x.id==='alloc1').done===true`（服务端路径）且视图路径 `r.data.questView.dailyQuests` 同步；`4→5` 校验 `level>=5`；`5→6` 任意（跳过语义，`jobPath` 由显示等待保证）；成功置 `step`。
 - `TutorialOverlay`：`baseVisible/overlayVisible/fallbackCenter` 如上，`querySelector('[data-tutorial=alloc-wrap]')` 内 `querySelectorAll('[data-alloc-available]')` 合并包裹 `boundingRect`，单一容器契约。
 
 ## 5. 交互时序（起点为 create-character，经 App 包装，含重试）

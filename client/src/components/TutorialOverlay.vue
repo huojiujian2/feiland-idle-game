@@ -1,6 +1,15 @@
 <template>
-  <div v-if="overlayVisible" class="tutorial-overlay" @click.self="onBackdrop">
-    <div class="tutorial-hole" :style="holeStyle"></div>
+  <div v-if="overlayVisible" class="tutorial-root">
+    <template v-if="!fallbackCenter">
+      <div class="backdrop top" :style="backdropTop" @click="onBackdrop"></div>
+      <div class="backdrop bottom" :style="backdropBottom" @click="onBackdrop"></div>
+      <div class="backdrop left" :style="backdropLeft" @click="onBackdrop"></div>
+      <div class="backdrop right" :style="backdropRight" @click="onBackdrop"></div>
+      <div class="tutorial-hole" :style="holeStyle"></div>
+    </template>
+    <template v-else>
+      <div class="backdrop full" @click="onBackdrop"></div>
+    </template>
     <div class="tutorial-card" :style="cardStyle">
       <div class="tutorial-step">步骤 {{ step + 1 }}/6</div>
       <div class="tutorial-text">{{ current.text }}</div>
@@ -34,33 +43,35 @@ const overlayVisible = computed(()=> baseVisible.value)
 const targetReady = ref(true)
 const holeStyle = ref({})
 const cardStyle = ref({})
+const backdropTop = ref({})
+const backdropBottom = ref({})
+const backdropLeft = ref({})
+const backdropRight = ref({})
 
 const current = computed(()=> STEPS[step.value] || STEPS[0])
+const fallbackCenter = computed(()=> baseVisible.value && step.value===2 && !targetReady.value)
 
 function updateRect(){
   if(!overlayVisible.value){
-    holeStyle.value = {}
-    cardStyle.value = {}
     targetReady.value = true
     return
   }
   const sel = current.value.target
-  let el = null
+  let rect = null
   if(sel === '[data-tutorial=alloc-wrap]'){
     const wrap = document.querySelector('[data-tutorial=alloc-wrap]')
     if(wrap){
       const avail = wrap.querySelectorAll('[data-alloc-available]')
       if(avail.length>0){
-        // merge rects
-        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity
+        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity, found=false
         avail.forEach(a=>{
           const r=a.getBoundingClientRect()
           if(r.width===0&&r.height===0) return
+          found=true
           minX=Math.min(minX,r.left); minY=Math.min(minY,r.top); maxX=Math.max(maxX,r.right); maxY=Math.max(maxY,r.bottom)
         })
-        if(isFinite(minX)){
-          const r={left:minX,top:minY,right:maxX,bottom:maxY,width:maxX-minX,height:maxY-minY}
-          el={getBoundingClientRect:()=>r}
+        if(found){
+          rect={left:minX,top:minY,right:maxX,bottom:maxY,width:maxX-minX,height:maxY-minY}
           targetReady.value=true
         } else {
           targetReady.value=false
@@ -69,56 +80,102 @@ function updateRect(){
         targetReady.value=false
       }
       if(!targetReady.value){
-        // fallback center
-        holeStyle.value = { display:'none' }
-        cardStyle.value = { left:'50%', top:'50%', transform:'translate(-50%,-50%)' }
+        // fallbackCenter will handle
         return
       }
     }
   } else {
-    el = document.querySelector(sel)
-    targetReady.value = !!el && el.getBoundingClientRect().width>0
-    if(!targetReady.value){
-      holeStyle.value = { display:'none' }
-      cardStyle.value = { left:'50%', top:'50%', transform:'translate(-50%,-50%)' }
+    const el = document.querySelector(sel)
+    if(el){
+      const r=el.getBoundingClientRect()
+      if(r.width>0||r.height>0){
+        rect=r
+        targetReady.value=true
+      } else {
+        targetReady.value=false
+        return
+      }
+    } else {
+      targetReady.value=false
       return
     }
   }
-  if(!el) return
-  const rect = el.getBoundingClientRect()
-  holeStyle.value = {
-    left: rect.left - 4 + 'px',
-    top: rect.top - 4 + 'px',
-    width: rect.width + 8 + 'px',
-    height: rect.height + 8 + 'px'
-  }
-  // card below target or centered
-  let top = rect.bottom + 10
-  let left = rect.left
-  if(top + 100 > window.innerHeight) top = rect.top - 80
+  if(!rect) return
+  const pad=4
+  const hole = { left: rect.left - pad, top: rect.top - pad, width: rect.width + pad*2, height: rect.height + pad*2 }
+  holeStyle.value = { left: hole.left+'px', top: hole.top+'px', width: hole.width+'px', height: hole.height+'px' }
+  // backdrops
+  backdropTop.value = { left:'0', top:'0', width:'100%', height: hole.top+'px' }
+  backdropBottom.value = { left:'0', top: (hole.top+hole.height)+'px', width:'100%', height: `calc(100% - ${hole.top+hole.height}px)` }
+  backdropLeft.value = { left:'0', top: hole.top+'px', width: hole.left+'px', height: hole.height+'px' }
+  backdropRight.value = { left: (hole.left+hole.width)+'px', top: hole.top+'px', width: `calc(100% - ${hole.left+hole.width}px)`, height: hole.height+'px' }
+  // card
+  let top = hole.top + hole.height + 10
+  let left = hole.left
+  if(top + 100 > window.innerHeight) top = hole.top - 80
   if(left + 260 > window.innerWidth) left = window.innerWidth - 270
-  cardStyle.value = { left: left + 'px', top: top + 'px' }
+  if(fallbackCenter.value){
+    cardStyle.value = { left:'50%', top:'50%', transform:'translate(-50%,-50%)' }
+  } else {
+    cardStyle.value = { left: left+'px', top: top+'px' }
+  }
+  if(fallbackCenter.value){
+    holeStyle.value = { display:'none' }
+    backdropTop.value = { display:'none' }
+    backdropBottom.value = { display:'none' }
+    backdropLeft.value = { display:'none' }
+    backdropRight.value = { display:'none' }
+  }
 }
 
 let raf = null
-function loop(){
-  updateRect()
-  raf = requestAnimationFrame(loop)
+let running = false
+function startLoop(){
+  if(running) return
+  running=true
+  function loop(){
+    if(!overlayVisible.value){
+      running=false
+      return
+    }
+    updateRect()
+    // stop if targetReady and not waiting and not fallback
+    if(targetReady.value && !waiting.value && !fallbackCenter.value){
+      // keep one more frame then stop, but continue if step changes
+      raf = requestAnimationFrame(()=>{
+        if(overlayVisible.value) raf = requestAnimationFrame(loop)
+        else running=false
+      })
+    } else {
+      raf = requestAnimationFrame(loop)
+    }
+  }
+  loop()
 }
-watch([step, level, jobPath], ()=> nextTick(updateRect), {immediate:true})
-onMounted(()=>{ nextTick(updateRect); raf=requestAnimationFrame(loop) })
-onUnmounted(()=>{ if(raf) cancelAnimationFrame(raf) })
+function stopLoop(){
+  if(raf) cancelAnimationFrame(raf)
+  raf=null
+  running=false
+}
+watch([step, level, jobPath], ()=> nextTick(()=>{ updateRect(); startLoop() }), {immediate:true})
+watch(overlayVisible, (v)=>{
+  if(v) startLoop()
+  else stopLoop()
+})
+onMounted(()=>{ nextTick(()=>{ updateRect(); startLoop() }) })
+onUnmounted(()=> stopLoop())
 
 function onBackdrop(){
-  // backdrop click does not advance, only target hole is click-through
+  // backdrop click does nothing, hole is transparent to clicks
 }
 </script>
 
 <style scoped>
-.tutorial-overlay{ position:fixed; inset:0; z-index:var(--tutorial-z); pointer-events:auto; }
-.tutorial-overlay::before{ content:''; position:fixed; inset:0; background:var(--tutorial-overlay-bg); backdrop-filter:var(--tutorial-blur); }
-.tutorial-hole{ position:fixed; border:var(--tutorial-outline); border-radius:8px; box-shadow:0 0 0 9999px var(--tutorial-overlay-bg); pointer-events:none; transition:all var(--duration-normal) var(--ease-out); }
-.tutorial-card{ position:fixed; background:var(--bg2); border:1px solid var(--accent); border-radius:10px; padding:0.6rem 0.8rem; max-width:260px; z-index:calc(var(--tutorial-z) + 1); box-shadow:0 8px 24px rgba(0,0,0,0.4); }
+.tutorial-root{ position:fixed; inset:0; z-index:var(--tutorial-z); pointer-events:none; }
+.backdrop{ position:fixed; background:var(--tutorial-overlay-bg); backdrop-filter:var(--tutorial-blur); pointer-events:auto; }
+.backdrop.full{ inset:0; }
+.tutorial-hole{ position:fixed; border:var(--tutorial-outline); border-radius:8px; pointer-events:none; box-shadow:0 0 0 2px var(--tutorial-outline); transition:all var(--duration-normal) var(--ease-out); }
+.tutorial-card{ position:fixed; background:var(--bg2); border:1px solid var(--accent); border-radius:10px; padding:0.6rem 0.8rem; max-width:260px; z-index:calc(var(--tutorial-z) + 1); box-shadow:0 8px 24px rgba(0,0,0,0.4); pointer-events:auto; }
 .tutorial-step{ font-size:0.62rem; color:var(--dim); margin-bottom:0.2rem; }
 .tutorial-text{ font-size:0.78rem; color:var(--ink); line-height:1.4; margin-bottom:0.4rem; }
 .tutorial-actions{ display:flex; justify-content:space-between; align-items:center; gap:0.4rem; }

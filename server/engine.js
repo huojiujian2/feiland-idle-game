@@ -205,7 +205,6 @@ function updateTutorialStep(player, nextStep){
   const cur = normalizeTutorialStep(player.tutorialStep);
   if(nextStep===6){
     if(cur===6) return { success:true, status:200, data: getPlayerView(player) };
-    if(cur===5 && !player.jobPath) return { success:false, status:409, message:'条件未满足' };
     player.tutorialStep = 6;
     return { success:true, status:200, data: getPlayerView(player) };
   }

@@ -331,9 +331,16 @@ async function startPolling() {
 let tutorialRetrying = false
 async function updateTutorial(nextStep){
   if(!player.value) return
-  const res = await api.updateTutorial(currentUser, nextStep)
-  if(res.success) player.value = res.data
-  else if(res.message) {/* 409/400 保持当前步 */}
+  if(tutorialRetrying) return
+  tutorialRetrying = true
+  try{
+    const res = await api.updateTutorial(currentUser, nextStep)
+    if(res && res.success) player.value = res.data
+  }catch(e){
+    // 网络异常，保留当前步，依赖轮询补偿
+  }finally{
+    tutorialRetrying = false
+  }
 }
 function handleTabClick(tabId){
   activeTab.value = tabId
@@ -348,39 +355,39 @@ function handleTutorialNext(){
   updateTutorial(cur+1)
 }
 function handleTutorialSkip(){ updateTutorial(6) }
+let hasHydrated = false
 watch(()=>player.value?.tutorialStep, (step)=>{
-  if(step===0){
-    // 首次 hydrate 自动切图（仅当当前不在 map 时）
+  if(step===0 && !hasHydrated){
+    hasHydrated = true
     if(activeTab.value !== 'map') activeTab.value = 'map'
   }
+  if(step!==0) hasHydrated = true
 })
-// 轮询补偿重试：allocate 成功后 alloc1.done 但教程仍在 2，需重试 2→3
+// 补偿重试：allocate 成功后 alloc1.done 但教程仍在 2，需重试 2→3（仅轮询成功时触发一次）
 watch(()=>player.value?.questView?.dailyQuests, (list)=>{
   if(!player.value || tutorialRetrying) return
-  if(player.value.tutorialStep===2){
-    const dq = list?.find(x=>x.id==='alloc1')
-    if(dq && dq.done){
-      tutorialRetrying = true
-      updateTutorial(3).finally(()=>{ tutorialRetrying=false })
-    }
+  if(player.value.tutorialStep!==2) return
+  const dq = list?.find(x=>x.id==='alloc1')
+  if(dq && dq.done){
+    updateTutorial(3)
   }
 }, {deep:true})
 
 // ====== 操作处理 ======
 async function handleAllocate(a) {
-  const r = await api.allocateAttributes(currentUser, a)
-  if (r.success){
-    player.value = r.data
-    // 2→3 原子推进：读取 r.data.questView 而非旧 player
-    const done = r.data?.questView?.dailyQuests?.find(x=>x.id==='alloc1')?.done
-    if(player.value?.tutorialStep===2 && done){
-      const tr = await api.updateTutorial(currentUser, 3)
-      if(tr.success) player.value = tr.data
-      else if(tr.message && !tutorialRetrying){
-        // 409/网络失败，依赖轮询重试
+  try{
+    const r = await api.allocateAttributes(currentUser, a)
+    if (r.success){
+      player.value = r.data
+      // 2→3 补偿重试：读取 r.data.questView 而非旧 player，失败由轮询补偿
+      const done = r.data?.questView?.dailyQuests?.find(x=>x.id==='alloc1')?.done
+      if(player.value?.tutorialStep===2 && done){
+        updateTutorial(3)
       }
-    }
-  } else alert(r.message)
+    } else alert(r.message)
+  }catch(e){
+    alert(e.message || '分配失败')
+  }
 }
 async function handleAreaChange(id) { const r = await api.changeArea(currentUser, id); if (r.success) player.value = r.data; else alert(r.message) }
 async function handleChooseJob(p) { const r = await api.chooseJob(currentUser, p); if (r.success) { player.value = r.data; activeTab.value = 'char' } else alert(r.message) }
