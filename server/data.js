@@ -133,7 +133,7 @@ const AREAS = {
     desc: '世界的阴暗面，深渊魔物涌出的裂隙',
     monsters: [
       { name: '深渊魔物', exp: 2000, gold: 400, hp: 20000, atk: 180, def: 80, agi: 55, skills: ['dark_slash','void_tear'] },
-      { name: '深渊领主', exp: 5000, gold: 1000, hp: 50000, atk: 300, def: 120, agi: 70, skills: ['soul_drain','void_tear','dark_slash'] },
+      { name: '深渊领主', exp: 5000, gold: 1000, hp: 50000, atk: 300, def: 120, agi: 70, skills: ['soul_drain','void_tear','dark_slash'], isBoss: true },
       { name: '虚空行者', exp: 3000, gold: 600, hp: 30000, atk: 220, def: 90, agi: 80, skills: ['void_tear','dark_slash'] }
     ],
     drops: [
