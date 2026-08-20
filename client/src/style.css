@@ -48,6 +48,12 @@
   /* 飘字语义化 */
   --dmg-crit: #ff6b3d;
 
+  /* 任务语义化（复用排行榜令牌，仅新增语义别名） */
+  --quest-card-bg: rgba(20,22,42,0.4);
+  --quest-card-hover: rgba(20,22,42,0.6);
+  --quest-progress-bg: rgba(157,140,240,0.08);
+  --quest-progress-fill: linear-gradient(90deg, var(--accent2), var(--accent));
+
   /* 排行榜语义化 */
   --lb-row-bg: rgba(20,22,42,0.4);
   --lb-row-hover: rgba(20,22,42,0.6);

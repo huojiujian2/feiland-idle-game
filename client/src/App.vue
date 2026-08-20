@@ -60,6 +60,7 @@
       <div class="header-left">
         <span class="header-name">{{ player.name }}</span>
         <span class="header-race">{{ player.race }}</span>
+        <span v-if="player.currentTitle" class="header-race" style="color:var(--accent)">{{ player.currentTitle }}</span>
         <span class="header-level" :style="{ color: player.stage.color }">Lv.{{ player.level }}</span>
         <span class="header-job" v-if="player.job !== '无'">{{ player.job }}</span>
         <span class="header-godhood" v-if="player.godhood === 'demigod'">半神</span>
@@ -93,6 +94,7 @@
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend" />
           <LeaderboardView v-else-if="activeTab === 'rank'" :currentUser="currentUserRef" />
+          <QuestView v-else-if="activeTab === 'quest'" :player="player" :currentUser="currentUserRef" @refresh="player = $event" />
         </div>
       </transition>
     </main>
@@ -179,6 +181,7 @@ import MapView from './components/MapView.vue'
 import CodexView from './components/CodexView.vue'
 import EvolutionView from './components/EvolutionView.vue'
 import LeaderboardView from './components/LeaderboardView.vue'
+import QuestView from './components/QuestView.vue'
 
 const player = ref(null)
 const areas = ref([])
@@ -212,10 +215,11 @@ const tabs = computed(() => [
   { id: 'map', label: '地图', icon: '🗺', badge: null },
   { id: 'codex', label: '图鉴', icon: '📖', badge: null },
   { id: 'evo', label: '进阶', icon: '🧬', badge: player.value?.canEvolve ? '!' : null },
-  { id: 'rank', label: '排行', icon: '🏆', badge: null }
+  { id: 'rank', label: '排行', icon: '🏆', badge: null },
+  { id: 'quest', label: '任务', icon: '📜', badge: (()=>{ const q=player.value?.questView; if(!q) return null; const c=q.dailyQuests?.filter(x=>x.done&&!x.claimed).length||0; const a=q.achievements?.filter(x=>x.unlocked&&!x.claimed).length||0; const cc=q.chest?.canClaim?1:0; const tot=c+a+cc; return tot>0?tot:null })() }
 ])
 
-const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank']
+const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest']
 const transitionName = ref('slide-left')
 
 watch(activeTab, (newTab, oldTab) => {
