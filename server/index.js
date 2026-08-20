@@ -464,6 +464,10 @@ app.post('/api/player/:username/strategy', (req, res) => {
   if (!player) return res.json({ success: false, message: '角色不存在' });
   const { strategy } = req.body;
 
+  // 旧存档迁移至 Spec §4，确保缺失 strategy 时幂等正确（避免 balanced→balanced 误结算）
+  const { migratePlayer } = require('./engine');
+  migratePlayer(player);
+
   // A — 无副作用校验
   if (typeof strategy !== 'string' || !Object.hasOwn(STRATEGIES, strategy)) {
     return res.json({ success: false, message: '策略不存在' });
@@ -519,28 +523,33 @@ app.post('/api/player/:username/strategy', (req, res) => {
 // BOSS 榜仅由权威战斗结算写入（engine.calculateIdle 判定 isBoss），不再提供公开计数入口，避免伪造
 
 // ====== 定时任务：每5秒计算所有玩家的挂机收益 ======
-setInterval(() => {
-  // 跨周不丢数据：写入前原子切周（全局）
-  maybeResetWeeklyBossKills(store);
-  const players = store.getAllPlayers();
-  for (const player of players) {
-    calculateIdle(player);
-  }
-  if (players.length > 0) {
-    store.save();
-  }
-}, 5000);
+if (require.main === module) {
+  setInterval(() => {
+    // 跨周不丢数据：写入前原子切周（全局）
+    maybeResetWeeklyBossKills(store);
+    const players = store.getAllPlayers();
+    for (const player of players) {
+      calculateIdle(player);
+    }
+    if (players.length > 0) {
+      store.save();
+    }
+  }, 5000);
 
-// ====== 后台周重置（兜底，避免 GET 需副作用） ======
-setInterval(() => maybeResetWeeklyBossKills(store), 60 * 1000);
+  // ====== 后台周重置（兜底，避免 GET 需副作用） ======
+  setInterval(() => maybeResetWeeklyBossKills(store), 60 * 1000);
 
-setInterval(() => store.save(), 30000);
+  setInterval(() => store.save(), 30000);
+}
 
-app.listen(PORT, () => {
-  console.log(`\n========================================`);
-  console.log(`  费兰德世界 - 挂机服务器已启动 v0.3`);
-  console.log(`  API: http://localhost:${PORT}`);
-  console.log(`  前端: http://localhost:3000`);
-  console.log(`  系统: 账号密码/种族进化/附魔/法则/登神`);
-  console.log(`========================================\n`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n========================================`);
+    console.log(`  费兰德世界 - 挂机服务器已启动 v0.3`);
+    console.log(`  API: http://localhost:${PORT}`);
+    console.log(`  前端: http://localhost:3000`);
+    console.log(`  系统: 账号密码/种族进化/附魔/法则/登神`);
+    console.log(`========================================\n`);
+  });
+}
+module.exports = app;

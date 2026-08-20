@@ -29,7 +29,7 @@
         <button v-for="s in player.strategies" :key="s.id"
           class="strategy-btn"
           :class="{ active: s.active, locked: !s.unlocked && !s.active }"
-          :disabled="(!s.unlocked && !s.active) || (strategyCdRemaining>0 && !s.active) || strategyLoading"
+          :disabled="(!s.unlocked && !s.active) || (strategyCdRemaining>0 && !s.active)"
           :aria-pressed="s.active ? 'true' : 'false'"
           @click="$emit('strategy-change', s.id)">
           <span class="strategy-name">{{ s.name }}</span>
@@ -272,7 +272,6 @@ import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 const props = defineProps(['player', 'areas'])
 defineEmits(['select', 'strategy-change'])
 
-const strategyLoading = ref(false)
 const strategyCdRemaining = ref(0)
 let strategyCdTimer = null
 
@@ -649,14 +648,14 @@ function dropQuality(name) {
 .drop-chip.q-uncommon { color: var(--success); background: rgba(94,218,122,0.08); border: 1px solid rgba(94,218,122,0.2); }
 .drop-chip.q-common { color: var(--dim); background: rgba(157,155,184,0.08); }
 
-/* 战斗策略 */
+/* 战斗策略 — 4列网格（GAMEPLAY_TASKS:421）仅 var(--*) */
 .strategy-section { padding: 0.6rem 0.8rem; }
 .strategy-cd { font-size: 0.68rem; color: var(--accent); font-weight: 600; }
-.strategy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+.strategy-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; }
 @media (max-width: 480px){ .strategy-grid { grid-template-columns: repeat(2, 1fr); } }
-.strategy-btn { display:flex; flex-direction:column; gap:0.15rem; padding:0.45rem 0.5rem; border:1px solid rgba(157,140,240,0.12); border-radius:6px; background: rgba(20,22,42,0.5); cursor:pointer; transition: all var(--duration-normal) var(--ease-out); text-align:left; }
-.strategy-btn:hover:not(:disabled) { border-color: var(--accent2); background: rgba(157,140,240,0.08); }
-.strategy-btn.active { border-color: var(--accent); background: rgba(212,175,94,0.10); box-shadow: 0 0 0 1px var(--accent); }
+.strategy-btn { display:flex; flex-direction:column; gap:0.15rem; padding:0.45rem 0.5rem; border:1px solid var(--rule); border-radius:6px; background: var(--lb-row-bg); cursor:pointer; transition: all var(--duration-normal) var(--ease-out); text-align:left; }
+.strategy-btn:hover:not(:disabled) { border-color: var(--accent2); background: var(--lb-row-hover); }
+.strategy-btn.active { border-color: var(--accent); background: var(--lb-gold-bg); box-shadow: 0 0 0 1px var(--accent); }
 .strategy-btn.locked { opacity:0.5; cursor:not-allowed; }
 .strategy-btn:disabled { opacity:0.5; cursor:not-allowed; }
 .strategy-name { font-size:0.78rem; font-weight:700; color: var(--ink); }

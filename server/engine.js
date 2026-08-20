@@ -14,16 +14,18 @@ let _now = () => Date.now();
 let _rand = Math.random;
 let _dropRand = Math.random;
 function getNow() { return _now(); }
-function __setNow(fn) { _now = fn; }
-function __setRandom(fn) { _rand = fn; }
+function __setNow(fn) { _now = fn; try{ require('./data')._setDataNow(fn); }catch(e){} }
+function __setRandom(fn) { _rand = fn; try{ require('./data')._setDataRand(fn); }catch(e){} }
 function __setDropRandom(fn) { _dropRand = fn; }
-function __resetSeams() { _now = () => Date.now(); _rand = Math.random; _dropRand = Math.random; }
+function __resetSeams() { _now = () => Date.now(); _rand = Math.random; _dropRand = Math.random; try{ const d=require('./data'); d._resetDataSeams(); }catch(e){} }
 function shouldDrop(rate, strategy) {
-  const eff = rate * (strategy === 'greedy' ? 1.05 : 1);
+  const dropBonus = (STRATEGIES[strategy]?.effects?.drop) || 0;
+  const eff = rate * (1 + dropBonus);
   return _dropRand() < eff;
 }
 function buildBattleMonster(monster, strategy) {
-  if (strategy === 'training') return { ...monster, atk: Math.floor(monster.atk * 1.20) };
+  const atkBonus = (STRATEGIES[strategy]?.effects?.monsterAtk) || 0;
+  if (atkBonus) return { ...monster, atk: Math.floor(monster.atk * (1 + atkBonus)) };
   return { ...monster };
 }
 
@@ -412,8 +414,9 @@ function getCombatStats(player) {
   let bonusAtk = 0, bonusDef = 0;
   if (total.lowHpAtk && hpRatio < 0.5) bonusAtk += total.lowHpAtk;
   if (total.lowHpDef && hpRatio < 0.5) bonusDef += total.lowHpDef;
-  // T-004 背水一战：额外低血加成（与词条相加后统一 floor）
-  if (player.strategy === 'desperate' && hpRatio < 0.30) bonusAtk += 0.20;
+  // T-004 背水一战：额外低血加成（与词条相加后统一 floor），阈值与数值读 STRATEGIES
+  const desEff = STRATEGIES.desperate?.effects || {};
+  if (player.strategy === 'desperate' && hpRatio < (desEff.hpThreshold ?? 0.30)) bonusAtk += (desEff.desperateAtk ?? 0.20);
 
   return {
     atk: Math.floor(total.atk * (1 + bonusAtk)),
@@ -762,9 +765,10 @@ function calculateIdle(player) {
   let goldMult = 1 + total.goldBonus + lawBonus.gold;
   if (player.godhood === 'demigod') expMult *= 1.5;
   if (player.godhood === 'god') expMult *= 2;
-  // 策略收益倍率（插入点固定，见 Spec v5 §5.3）
-  if (player.strategy === 'greedy') { expMult *= 0.80; goldMult *= 1.30; }
-  if (player.strategy === 'training') { expMult *= 1.50; goldMult *= 0.50; }
+  // 策略收益倍率（插入点固定，读 STRATEGIES 单一数据源）
+  const stratEff = STRATEGIES[player.strategy]?.effects || {};
+  if (stratEff.exp) expMult *= (1 + stratEff.exp);
+  if (stratEff.gold) goldMult *= (1 + stratEff.gold);
 
   if (battle.result === 'win') {
     expGain = Math.floor(monster.exp * expMult);
