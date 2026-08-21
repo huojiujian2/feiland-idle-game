@@ -4,10 +4,7 @@
     <div class="map-section">
       <div class="section-header">
         <span>🗺 挂机区域</span>
-        <div class="map-header-right">
-          <button class="rank-entry-btn" @click="$emit('goRank')">🏆 排行榜 ›</button>
-          <span class="current-area" v-if="currentAreaName">{{ currentAreaName }}</span>
-        </div>
+        <span class="current-area" v-if="currentAreaName">当前: {{ currentAreaName }}</span>
       </div>
       <div class="area-list">
         <div v-for="area in areas" :key="area.id" class="area-item"
@@ -274,6 +271,21 @@
         </template>
       </div>
     </div>
+
+    <!-- 右侧折叠面板：排行 -->
+    <div class="side-panel" :class="{ expanded: sideOpen }">
+      <button class="side-toggle" @click="sideOpen = !sideOpen">
+        <span class="side-arrow">{{ sideOpen ? '›' : '‹' }}</span>
+      </button>
+      <transition name="side-slide">
+        <div v-if="sideOpen" class="side-tabs">
+          <div class="side-tab-item" @click="$emit('goRank')">
+            <span class="side-tab-icon">🏆</span>
+            <span class="side-tab-label">排行榜</span>
+          </div>
+        </div>
+      </transition>
+    </div>
   </div>
 </template>
 
@@ -284,6 +296,7 @@ const props = defineProps(['player', 'areas'])
 defineEmits(['select', 'strategy-change', 'goRank'])
 
 const strategyCdRemaining = ref(0)
+const sideOpen = ref(false)
 let strategyCdTimer = null
 
 function refreshStrategyCd(){
@@ -754,12 +767,41 @@ function dropQuality(name) {
 .expand-enter-from, .expand-leave-to { opacity: 0; max-height: 0; }
 .expand-enter-to, .expand-leave-from { opacity: 1; max-height: 1000px; }
 
-/* 排行入口按钮 */
-.map-header-right { display: flex; align-items: center; gap: 0.5rem; }
-.rank-entry-btn {
-  font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 6px;
-  border: 1px solid rgba(212,175,94,0.25); background: rgba(212,175,94,0.08);
-  color: var(--accent); cursor: pointer; transition: all 0.15s ease;
+/* 右侧折叠面板 */
+.side-panel {
+  position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+  z-index: 50; display: flex; align-items: center;
 }
-.rank-entry-btn:hover { background: rgba(212,175,94,0.15); border-color: var(--accent); }
+.side-toggle {
+  width: 24px; height: 44px; border: 1px solid var(--rule, #2a2b42);
+  border-right: none; border-radius: 8px 0 0 8px;
+  background: var(--bg2, #14162a); color: var(--muted, #9d9bb8);
+  cursor: pointer; font-size: 1rem; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+}
+.side-toggle:hover { color: var(--accent, #d4af5e); border-color: var(--accent, #d4af5e); }
+.side-tabs {
+  background: var(--bg2, #14162a); border: 1px solid var(--rule, #2a2b42);
+  border-right: none; border-radius: 10px 0 0 10px;
+  padding: 0.35rem; display: flex; flex-direction: column; gap: 0.25rem;
+  box-shadow: -4px 0 12px rgba(0,0,0,0.3);
+}
+.side-tab-item {
+  display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.7rem;
+  border-radius: 8px; cursor: pointer; white-space: nowrap;
+  transition: all 0.15s ease; color: var(--muted, #9d9bb8);
+}
+.side-tab-item:hover { background: rgba(157,140,240,0.08); color: var(--ink, #ece9f5); }
+.side-tab-icon { font-size: 1rem; }
+.side-tab-label { font-size: 0.72rem; font-weight: 600; }
+.side-tab-badge {
+  background: var(--danger, #e85d75); color: #fff; font-size: 0.58rem;
+  min-width: 14px; height: 14px; line-height: 14px; text-align: center;
+  border-radius: 7px; padding: 0 3px; margin-left: auto;
+}
+.side-slide-enter-active, .side-slide-leave-active {
+  transition: all var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+.side-slide-enter-from, .side-slide-leave-to { opacity: 0; transform: translateX(15px); }
 </style>
