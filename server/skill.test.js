@@ -137,28 +137,30 @@ describe('T-005 buff 过期与单层刷新', ()=>{
     const r10 = battle.rounds.find(r=>r.round===10);
     assert.ok(r10.actions.some(a=>a.type==='skill'), 'r10 should trigger again');
   });
-  it('同 key 刷新不叠乘（真实 buff A1-04）', ()=>{
+  it('同 key 刷新不叠乘（重叠分支，cd2+turns3 人工）', ()=>{
     engine.__setRandom(()=>0.99);
+    const data = require('./data');
+    const testId='TEST-ATK-OVERLAP';
+    data.AFFIX_TREE[1].push({ id:testId, level:1, slot:'active', group:'A', name:'测试ATK', desc:'重叠', category:'增益', effect:{ type:'atk_buff', value:0.10, turns:3 } });
+    const origCd = data.ACTIVE_SKILL_CD[1];
+    data.ACTIVE_SKILL_CD[1]=2; // 人工 cd2 使 2,4 重叠（2+3=5，4<5）
     const p = engine.createCharacter('b2','n');
-    p.level=31; p.attributes={ atk:5, def:4, hp:5, agi:8 }; engine.recalcMaxStats(p);
+    p.level=31; p.attributes={ atk:10, def:4, hp:5, agi:8 }; engine.recalcMaxStats(p);
     const baseAtk = engine.getCombatStats(p).atk;
-    p.affixes.active='A1-04'; // atk+10% 2回合 cd5
-    p.hp=p.maxHp;
-    const monster={ name:'桩', hp:80000, atk:5, def:80, agi:80, skills:[] };
+    p.affixes.active=testId; p.hp=p.maxHp;
+    const monster={ name:'桩', hp:120000, atk:1, def:100, agi:80, skills:[] };
     const battle = engine.simulateBattle(p, monster);
-    // 5 和 10 均触发，10 时 5 的 buff 已过期（5+2=7），不叠乘，atk 应为单层 1.1
-    const r5 = battle.rounds.find(r=>r.round===5);
-    const r6 = battle.rounds.find(r=>r.round===6);
-    const r10 = battle.rounds.find(r=>r.round===10);
-    assert.ok(r5.actions.some(a=>a.type==='skill' && a.buff===0.10), 'r5 buff');
-    assert.ok(!r6.actions.some(a=>a.type==='skill'), 'r6 no skill');
-    assert.ok(r10.actions.some(a=>a.type==='skill'), 'r10 refresh');
-    // 验证单层：若叠乘则 10 时 atk 为 base*1.21 ≈，单层为 *1.1，通过最终 combatStats 接近单层
-    // 直接测最终 atk 不应为 base*1.21（允许浮动，因有 lifesteal 等不影响 atk）
+    const r2 = battle.rounds.find(r=>r.round===2);
+    const r4 = battle.rounds.find(r=>r.round===4);
+    assert.ok(r2.actions.some(a=>a.type==='skill'), 'r2 trigger');
+    assert.ok(r4.actions.some(a=>a.type==='skill'), 'r4 overlap trigger');
     const finalAtk = battle.combatStats.atk;
     const single = Math.floor(baseAtk*1.1);
-    // 由于 buff 在结束时可能仍有效（若结束于 10 附近），允许 single 或 base
-    assert.ok(finalAtk===single || finalAtk===baseAtk, `finalAtk ${finalAtk} should be single ${single} or base ${baseAtk}`);
+    const double = Math.floor(Math.floor(baseAtk*1.1)*1.1);
+    assert.notEqual(finalAtk, double, `should not be double ${double}, got ${finalAtk}`);
+    assert.ok(finalAtk===single || finalAtk===baseAtk, `finalAtk ${finalAtk} single ${single}`);
+    data.ACTIVE_SKILL_CD[1]=origCd;
+    data.AFFIX_TREE[1] = data.AFFIX_TREE[1].filter(a=>a.id!==testId);
   });
 });
 
@@ -293,7 +295,7 @@ describe('T-005 日志字段与前台', ()=>{
 describe('T-005 前端 combo 与切片', ()=>{
   beforeEach(()=> engine.__resetSeams());
   afterEach(()=> engine.__resetSeams());
-  // 复刻 MapView.vue:462 的 processActions 聚合条件
+  // 为复用生产逻辑，测试 helper 与 MapView.vue 保持一致（防漂移由文件内容断言保障）
   function processActions(actions){
     const result=[]; let combo=[];
     function flush(){ if(!combo.length) return; if(combo.length>=2) result.push({ isCombo:true, hits:[...combo], totalDamage: combo.reduce((s,a)=>s+(a.damage||0),0)}); else result.push(combo[0]); combo=[]; }
@@ -302,6 +304,14 @@ describe('T-005 前端 combo 与切片', ()=>{
       else { flush(); result.push(act); }
     } flush(); return result;
   }
+  it('MapView.vue 生产逻辑与 helper 一致（防漂移）', ()=>{
+    const fs=require('fs'); const content=fs.readFileSync('client/src/components/MapView.vue','utf8');
+    assert.match(content, /act\.type\s*!==\s*'passive'/, 'processActions 应过滤 passive');
+    assert.match(content, /hit\.type\s*===\s*'skill'/, 'combo 应按 hit.type===skill 高亮');
+    assert.match(content, /selfHeal/, 'combo 应渲染 selfHeal');
+    assert.match(content, /selfHp/, 'combo 应渲染 selfHp');
+    assert.match(content, /totalDamage/, '应为 item.totalDamage 非 hit.totalDamage');
+  });
   it('processActions：主动 damage 进入 combo，被动 dodgeAtk 不进入', ()=>{
     const actions=[
       { actor:'player', skill:'普通攻击', damage:10 },
@@ -331,38 +341,44 @@ describe('T-005 前端 combo 与切片', ()=>{
     assert.equal(skillHit.selfHeal, 20);
     assert.equal(skillHit.selfHp, 150);
   });
-  it('detail slice(-6)：短场 skill 可见，长场早期被截断', ()=>{
+  it('detail slice(-6)：短场 skill 可见，长场早期被截断（真实 calculateIdle）', ()=>{
     engine.__setRandom(()=>0.99);
-    // 短场：5回合内 win，detail 应含 skill
+    engine.__setDropRandom(()=>1);
+    const data = require('./data');
+    const areaId='test_slice2'; data.AREAS[areaId]={ id:areaId, name:'切片场', minLevel:1, monsters:[{ name:'短怪', hp:3000, atk:5, def:80, agi:80, skills:[], exp:10, gold:10 }], drops:[] };
+    // 短场：win 于 5-10 回合，detail 来自 calculateIdle 的 logEntry.detail = rounds.slice(-6)
     const pShort = engine.createCharacter('s1','n');
     pShort.level=31; pShort.attributes={ atk:30, def:10, hp:10, agi:10 }; engine.recalcMaxStats(pShort);
-    pShort.affixes.active='A1-01'; pShort.hp=pShort.maxHp; pShort.lastTick=0; pShort.currentArea='gaomanshan';
-    // 用高敏低血怪快速结束于 5 回合左右
-    const data = require('./data');
-    const areaId='test_slice'; data.AREAS[areaId]={ id:areaId, name:'切片场', minLevel:1, monsters:[{ name:'短怪', hp:500, atk:5, def:5, agi:5, skills:[], exp:10, gold:10 }], drops:[] };
-    pShort.currentArea=areaId;
+    pShort.affixes.active='A1-01'; pShort.hp=pShort.maxHp; pShort.currentArea=areaId; pShort.lastTick=0;
     engine.__setNow(()=>1000000);
-    pShort.lastTick=0;
     const resShort = engine.calculateIdle(pShort);
-    // resShort 可能 win 于 <5 或 =5，若 win 于 5 前无 skill，改用坦克短场
-    // 直接测 simulateBattle 的 detail 长度
-    const bShort = engine.simulateBattle(pShort, { name:'短怪', hp:500, atk:5, def:5, agi:5, skills:[] });
-    // detail 在 calculateIdle 中 slice(-6)，simulateBattle 的 rounds 可能 1-2，detail 即 rounds.slice(-6) 应全保留
-    assert.ok(bShort.rounds.length <=6 || bShort.rounds.slice(-6).some(r=>r.actions.some(a=>a.type==='skill')) || true);
-    // 长场：30回合，早期 skill 在 detail 不可见
+    assert.ok(resShort && resShort.logEntry.detail, 'short should have detail');
+    assert.ok(resShort.logEntry.detail.length <=6, `detail <=6 got ${resShort.logEntry.detail.length}`);
+    // 若 win 于 >=5，detail 应含 skill
+    if(resShort.logEntry.rounds >=5){
+      const hasSkill = resShort.logEntry.detail.some(r=> (r.actions||[]).some(a=>a.type==='skill'));
+      assert.ok(hasSkill, `short detail should contain skill for rounds ${resShort.logEntry.rounds}`);
+    }
+    // 长场：30 回合 timeout，detail 仅后 6 轮，早期 5 的 skill 不在 detail
     const pLong = engine.createCharacter('s2','n');
     pLong.level=31; pLong.attributes={ atk:5, def:4, hp:20, agi:8 }; engine.recalcMaxStats(pLong);
     pLong.affixes.active='A1-01'; pLong.hp=pLong.maxHp;
-    const bLong = engine.simulateBattle(pLong, { name:'长桩', hp:100000, atk:1, def:100, agi:80, skills:[] });
-    assert.ok(bLong.rounds.length > 10, `long should >10 got ${bLong.rounds.length}`);
-    const detail = bLong.rounds.slice(-6);
-    // 早期 round2 的 skill（若有）不在 detail，但短场验证通过即可
-    assert.equal(detail.length, 6);
-    // 确保 detail 仍含至少一个 skill（因后 6 轮含 10,15...）
-    // 对于 A1-01 cd5，后 6 轮至少含 10,15 etc 中的一个若战斗够长
-    const hasSkillInDetail = detail.some(r=>r.actions.some(a=>a.type==='skill'));
-    // 若战斗 30 轮，detail 25-30 含 25,30
-    if(bLong.rounds.length===30) assert.ok(hasSkillInDetail, 'detail should have skill for 30-round');
+    // 直接 simulate 30 回合长桩
+    const bLong = engine.simulateBattle(pLong, { name:'长桩', hp:200000, atk:1, def:100, agi:80, skills:[] });
+    assert.equal(bLong.rounds.length, 30, `long should be 30 timeout, got ${bLong.rounds.length}`);
+    const detailLong = bLong.rounds.slice(-6);
+    assert.equal(detailLong.length, 6);
+    // 早期 5 的 skill 不在后 6 轮（25-30 含 25,30）
+    const earlyInDetail = detailLong.some(r=>r.round===5);
+    assert.equal(earlyInDetail, false, 'early 5 should be truncated');
+    const hasSkillInDetail = detailLong.some(r=> (r.actions||[]).some(a=>a.type==='skill'));
+    assert.ok(hasSkillInDetail, 'detail 25-30 should have 25/30 skill');
+    // calculateIdle 的 detail 同为 slice(-6)
+    pLong.currentArea=areaId; pLong.lastTick=0; engine.__setNow(()=>2000000);
+    // 临时把 area 怪换为长桩以复用 calculateIdle 长场
+    data.AREAS[areaId].monsters=[{ name:'长桩', hp:200000, atk:1, def:100, agi:80, skills:[], exp:10, gold:10 }];
+    const resLong = engine.calculateIdle(pLong);
+    assert.equal(resLong.logEntry.detail.length, 6);
     delete data.AREAS[areaId];
   });
 });

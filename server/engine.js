@@ -842,13 +842,12 @@ function simulateBattle(player, monster) {
         if (i < curPActions) queue.push('player');
       }
     }
-    let firstPlayerNormalIdx = -1;
+    let hasDoneFirstPlayerNormal = false;
     for (const actor of queue) {
       if (pHp <= 0 || mCurHp <= 0) break;
-      if (actor==='player' && firstPlayerNormalIdx===-1){
-        const beforeLen = actions.length;
+      if (actor==='player' && !hasDoneFirstPlayerNormal){
         doPlayerNormalAction(actions);
-        firstPlayerNormalIdx = beforeLen;
+        hasDoneFirstPlayerNormal = true;
         if(roundShouldTrigger && mCurHp>0 && pHp>0){
           const skillEffect = activeAffix.effect;
           let skillPushed = false;
