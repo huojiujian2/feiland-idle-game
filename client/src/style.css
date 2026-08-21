@@ -69,6 +69,12 @@
   --tutorial-text: var(--ink);
   --tutorial-hint: var(--muted);
 
+  /* 主动技能语义化 */
+  --skill-highlight: var(--accent2);
+  --skill-bg: rgba(157,140,240,0.12);
+  --skill-border: var(--accent2);
+  --skill-icon: var(--accent2);
+
   /* 排行榜语义化 */
   --lb-row-bg: rgba(20,22,42,0.4);
   --lb-row-hover: rgba(20,22,42,0.6);

@@ -136,25 +136,40 @@
 
                   <!-- 处理后的行动列表 -->
                   <template v-for="(item, ai) in processActions(r.actions)" :key="ai">
-                    <!-- 连击风暴 -->
+                     <!-- 连击风暴（T-005：skill 进入 combo，passive 不计） -->
                     <div v-if="item.isCombo" class="combo-block">
                       <div class="combo-header">⚡ 连击风暴！连续出手 {{ item.hits.length }} 次！</div>
-                      <div v-for="(hit, hi) in item.hits" :key="hi" class="combo-hit">
+                      <div v-for="(hit, hi) in item.hits" :key="hi" class="combo-hit" :class="{ 'skill-action': hit.type==='skill' }">
                         <span class="combo-num">{{ hi + 1 }}</span>
-                        <span class="combo-skill" :class="{ 'skill-used': hit.skill !== '普通攻击' }">{{ hit.skill }}</span>
+                        <span class="combo-skill" :class="{ 'skill-used': hit.type==='skill' }">{{ hit.skill }}</span>
                         <span class="combo-dmg" :class="{ crit: hit.crit }">{{ hit.damage }}</span>
                         <span v-if="hit.crit" class="crit-tag">暴击!</span>
+                        <span v-if="hit.heal !== undefined || hit.selfHeal !== undefined" class="combo-heal">+{{ hit.heal || hit.selfHeal }} HP</span>
+                        <span v-if="hit.selfHp !== undefined" class="combo-hp">→ HP {{ hit.selfHp }}/{{ hit.healTargetHp || hit.targetMaxHp }}</span>
                       </div>
                       <div class="combo-total">总伤害: {{ item.totalDamage }}</div>
                     </div>
 
-                    <!-- 单条行动 -->
+                     <!-- 单条行动（T-005：skill 优先，复合并列渲染） -->
                     <div v-else class="action-narrative" :class="actionClass(item)">
+                      <!-- 主动技能（优先，含 damage+heal/def_buff+heal 复合） -->
+                      <template v-if="item.type === 'skill'">
+                        <span class="act-icon">✦</span>
+                        <span class="act-text">你释放<strong class="skill-name">{{ item.skill }}</strong></span>
+                        <span v-if="item.damage !== undefined" class="act-dmg" :class="{ crit: item.crit }"> -{{ item.damage }}</span>
+                        <span v-if="item.heal !== undefined" class="act-heal"> +{{ item.heal }} HP</span>
+                        <span v-if="item.buff !== undefined" class="act-buff"> 增益</span>
+                        <span v-if="item.note" class="act-note">（{{ item.note }}）</span>
+                        <span v-if="item.damage !== undefined" class="act-hp">→ 怪物HP: {{ item.targetHp }}/{{ item.targetMaxHp }}</span>
+                        <span v-else class="act-hp">→ 你的HP: {{ item.targetHp }}/{{ item.targetMaxHp }}</span>
+                        <div v-if="item.crit" class="crit-highlight">⚡ 暴击！电光四溅！</div>
+                      </template>
                       <!-- 玩家伤害 -->
-                      <template v-if="item.actor === 'player' && item.damage !== undefined && !item.dodge">
+                      <template v-else-if="item.actor === 'player' && item.damage !== undefined && !item.dodge">
                         <span class="act-icon">🗡️</span>
                         <span class="act-text">你的<strong class="skill-name">{{ item.skill }}</strong>{{ getDamageVerb(item.damage, item.targetMaxHp, ai) }}敌人！造成</span>
                         <span class="act-dmg" :class="{ crit: item.crit }">{{ item.damage }}</span>
+                        <span v-if="item.heal !== undefined" class="act-heal"> +{{ item.heal }} HP</span>
                         <span class="act-hp">→ 怪物HP: {{ item.targetHp }}/{{ item.targetMaxHp }}</span>
                         <div v-if="item.crit" class="crit-highlight">⚡ 暴击！电光四溅！</div>
                       </template>
@@ -170,6 +185,7 @@
                       <template v-else-if="item.actor === 'player' && item.buff !== undefined">
                         <span class="act-icon">💪</span>
                         <span class="act-text">你释放<strong class="skill-name">{{ item.skill }}</strong>，战力提升！</span>
+                        <span v-if="item.heal !== undefined" class="act-heal"> +{{ item.heal }} HP</span>
                       </template>
 
                       <!-- 玩家闪避 -->
@@ -474,7 +490,7 @@ function ratingClass(log) { return 'rating-' + ratingLetter(log).toLowerCase() }
 
 function resultText(result) { return { win: '胜利', lose: '战败', timeout: '超时' }[result] || result }
 
-// ====== 连击处理 ======
+// ====== 连击处理（T-005：仅主动/普通 damage 进入 combo，passive 不计） ======
 function processActions(actions) {
   const result = []
   let combo = []
@@ -490,7 +506,7 @@ function processActions(actions) {
   }
 
   for (const act of actions) {
-    if (act.actor === 'player' && act.damage !== undefined && !act.dodge) {
+    if (act.actor === 'player' && act.damage !== undefined && !act.dodge && act.type !== 'passive') {
       combo.push(act)
     } else {
       flushCombo()
@@ -502,6 +518,14 @@ function processActions(actions) {
 }
 
 function actionClass(item) {
+  if (item.type === 'skill') return 'skill-action'
+  if (item.type === 'passive') {
+    if (item.source === 'dodgeAtk') return 'player-dmg'
+    if (item.source === 'deathShield') return 'player-shield'
+    if (item.source === 'revive') return 'player-revive'
+    if (item.shield) return 'player-shield'
+    if (item.revive) return 'player-revive'
+  }
   if (item.actor === 'player') {
     if (item.damage !== undefined && !item.dodge) return 'player-dmg'
     if (item.heal !== undefined) return 'player-heal'
@@ -689,6 +713,9 @@ function dropQuality(name) {
 
 /* 行动叙述 */
 .action-narrative { display: flex; align-items: baseline; gap: 0.2rem; font-size: 0.7rem; padding: 0.12rem 0.3rem; border-radius: 4px; margin-bottom: 0.08rem; flex-wrap: wrap; }
+.action-narrative.skill-action { background: var(--skill-bg); border-left: 2px solid var(--skill-border); }
+.action-narrative.skill-action .skill-name { color: var(--skill-icon); }
+.combo-hit.skill-action .combo-skill.skill-used { color: var(--skill-icon); }
 .action-narrative.player-dmg { background: rgba(157,140,240,0.06); }
 .action-narrative.player-heal { background: rgba(94,218,122,0.06); }
 .action-narrative.player-buff { background: rgba(212,175,94,0.06); }
@@ -712,15 +739,18 @@ function dropQuality(name) {
 .shield-highlight { font-size: 0.75rem; font-weight: 700; color: var(--accent2); padding: 0.15rem 0.3rem; background: rgba(157,140,240,0.1); border-radius: 4px; margin: 0.1rem 0; }
 .revive-highlight { font-size: 0.75rem; font-weight: 700; color: var(--accent); padding: 0.15rem 0.3rem; background: rgba(212,175,94,0.1); border-radius: 4px; margin: 0.1rem 0; }
 
-/* 连击风暴 */
-.combo-block { margin: 0.15rem 0; padding: 0.2rem 0.3rem; border-radius: 5px; background: rgba(157,140,240,0.08); border-left: 2px solid var(--accent2); }
-.combo-header { font-size: 0.72rem; font-weight: 700; color: var(--accent2); margin-bottom: 0.1rem; }
+/* 连击风暴（T-005：仅 var(--skill-*)） */
+.combo-block { margin: 0.15rem 0; padding: 0.2rem 0.3rem; border-radius: 5px; background: var(--skill-bg); border-left: 2px solid var(--skill-border); }
+.combo-header { font-size: 0.72rem; font-weight: 700; color: var(--skill-highlight); margin-bottom: 0.1rem; }
 .combo-hit { display: flex; align-items: center; gap: 0.2rem; font-size: 0.68rem; padding: 0.06rem 0.2rem; }
+.combo-hit.skill-action { background: var(--skill-bg); border-radius: 3px; }
 .combo-num { font-size: 0.6rem; color: var(--dim); width: 14px; }
 .combo-skill { color: var(--muted); flex: 1; }
-.combo-skill.skill-used { color: var(--accent2); font-weight: 600; }
+.combo-skill.skill-used { color: var(--skill-highlight); font-weight: 600; }
 .combo-dmg { font-weight: 700; color: var(--danger); }
 .combo-dmg.crit { color: #ff6b3d; font-size: 0.75rem; }
+.combo-heal { color: var(--success); font-weight: 600; }
+.combo-hp { color: var(--muted); font-size: 0.62rem; }
 .crit-tag { font-size: 0.6rem; color: #ff6b3d; font-weight: 600; }
 .combo-total { font-size: 0.68rem; font-weight: 700; color: var(--danger); margin-top: 0.05rem; }
 

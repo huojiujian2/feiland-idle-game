@@ -708,6 +708,8 @@ const ACHIEVEMENTS = [
   { id: 'collect10', name: '收集者', desc: '装备图鉴收集 10种', title: '收藏家', reward: { gold: 5000 } }
 ];
 
+const ACTIVE_SKILL_CD = { 1: 5, 2: 4, 3: 3, 4: 2 };
+
 module.exports = {
   AREAS, EQUIP_TEMPLATES, QUALITY_COLORS, JOB_TREE, SHOP_ITEMS,
   MATERIAL_PRICES, EQUIP_SELL_PRICES,
@@ -715,6 +717,7 @@ module.exports = {
   MONSTER_SKILLS,
   AFFIX_LEVELS, AFFIX_TREE,
   STRATEGIES, STRATEGY_CD_MS,
+  ACTIVE_SKILL_CD,
   INITIAL_MATERIAL_POOL, DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS,
   getStage, expToNext, createEquipItem
 };
