@@ -1,6 +1,8 @@
 // 服务器入口 v0.3 - 账号密码登录 + 种族进化/附魔/法则/登神
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const store = require('./store');
 const { AREAS, JOB_TREE, SHOP_ITEMS, EQUIP_TEMPLATES, QUALITY_COLORS, MATERIAL_PRICES, MONSTER_SKILLS, ENCHANT_RECIPES, RACE_EVOLUTION, LAWS, AFFIX_TREE, AFFIX_LEVELS, STRATEGIES, STRATEGY_CD_MS } = require('./data');
 const {
@@ -17,7 +19,7 @@ const {
 } = require('./engine');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -583,11 +585,22 @@ if (require.main === module) {
 
   setInterval(() => store.save(), 30000);
 
+  // ====== 生产模式：托管前端构建产物 ======
+  const distPath = path.join(__dirname, '..', 'client', 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(distPath, 'index.html'));
+      }
+    });
+    console.log(`  静态文件: ${distPath}`);
+  }
+
   app.listen(PORT, () => {
     console.log(`\n========================================`);
     console.log(`  费兰德世界 - 挂机服务器已启动 v0.3`);
-    console.log(`  API: http://localhost:${PORT}`);
-    console.log(`  前端: http://localhost:3000`);
+    console.log(`  访问: http://localhost:${PORT}`);
     console.log(`  系统: 账号密码/种族进化/附魔/法则/登神`);
     console.log(`========================================\n`);
   });

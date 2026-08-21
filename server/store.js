@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let DB_PATH = path.join(__dirname, 'db.json');
+let DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
 let data = { accounts: {}, players: {} };
 let saveTimer = null;
 let _disableSave = false;

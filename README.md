@@ -154,22 +154,90 @@ pnpm dev:client
 - 前端：http://localhost:3000
 - 后端 API：http://localhost:3001
 
-### 生产构建
+### 方法四：Docker 部署（推荐生产环境）
+
+> 适合服务器部署，一行命令构建+启动，数据自动持久化。
+
+#### 前提条件
+
+- 安装 [Docker](https://docs.docker.com/get-docker/) 和 [Docker Compose](https://docs.docker.com/compose/install/)
+
+#### 一键部署
+
+```bash
+# 构建并启动（后台运行）
+docker compose up -d --build
+
+# 查看运行状态
+docker compose ps
+
+# 查看实时日志
+docker compose logs -f
+```
+
+部署完成后，浏览器打开 **http://localhost:3001** 即可游玩。
+
+#### 自定义端口
+
+如果 3001 端口被占用，可以修改端口：
+
+```bash
+# 方法 1：创建 .env 文件
+cp .env.example .env
+# 编辑 .env，修改 PORT=8080
+docker compose up -d
+
+# 方法 2：命令行直接指定
+PORT=8080 docker compose up -d --build
+```
+
+#### 数据持久化
+
+游戏数据保存在 Docker 卷中，容器重启/重建后数据不丢失。
+
+```bash
+# 查看数据卷名称（前缀为项目目录名）
+docker volume ls | grep game
+
+# 查看数据卷存储位置
+docker volume inspect <卷名称>
+
+# 备份数据（将 <卷名称> 替换为上一步查到的名称）
+docker run --rm -v <卷名称>:/data -v ${PWD}:/backup alpine cp -r /data /backup/game-data-backup
+
+# 恢复数据
+docker run --rm -v <卷名称>:/data -v ${PWD}:/backup alpine cp -r /backup/game-data-backup /data
+```
+
+#### 常用管理命令
+
+```bash
+docker compose up -d --build   # 重新构建并启动
+docker compose down            # 停止并删除容器
+docker compose restart         # 重启服务
+docker compose logs -f         # 查看实时日志
+docker compose ps              # 查看运行状态
+```
+
+### 生产构建（不用 Docker）
 
 ```bash
 pnpm build      # 构建前端到 client/dist/
+node server/index.js   # 启动后端，自动托管前端静态文件
 ```
 
 ### 端口配置
 
 本项目默认使用两个端口：
 
-| 服务 | 默认端口 | 配置文件 | 修改位置 |
-|------|----------|----------|----------|
-| 前端 (Vite) | 3000 | `vite.config.js` | `server.port: 3000` |
-| 后端 (Express) | 3001 | `server/index.js` | `const PORT = 3001` |
+| 服务 | 默认端口 | 配置方式 | 说明 |
+|------|----------|----------|------|
+| 前端 (Vite) | 3000 | `vite.config.js` | 仅开发模式使用 |
+| 后端 (Express) | 3001 | 环境变量 `PORT` | 开发/生产通用 |
 
-**修改前端端口**：编辑 `vite.config.js`
+**开发模式修改端口**：
+
+修改前端端口 — 编辑 `vite.config.js`
 
 ```js
 // vite.config.js
@@ -181,14 +249,29 @@ server: {
 }
 ```
 
-**修改后端端口**：编辑 `server/index.js`
+修改后端端口 — 设置环境变量或直接运行
 
-```js
-// server/index.js
-const PORT = 3002;  // ← 改成你想要的端口
+```bash
+# 命令行指定
+PORT=3002 pnpm dev:server
+
+# 或编辑 server/index.js
+const PORT = process.env.PORT || 3002;
 ```
 
 > **注意**：修改后端端口后，务必同步修改 `vite.config.js` 中 proxy 的 `/api` 目标地址，否则前端无法请求后端 API。
+
+**Docker 模式修改端口**：
+
+```bash
+# 通过 .env 文件
+cp .env.example .env
+# 编辑 .env，设置 PORT=8080
+docker compose up -d
+
+# 或命令行直接指定
+PORT=8080 docker compose up -d --build
+```
 
 ---
 
@@ -235,6 +318,10 @@ game-mvp/
 │           └── TutorialOverlay.vue # 新手引导 (分步教程+高亮引导)
 ├── vite.config.js             # Vite 配置 (root: client)
 ├── package.json              # 项目依赖与脚本
+├── Dockerfile                # Docker 镜像构建（多阶段构建）
+├── docker-compose.yml        # Docker Compose 编排配置
+├── .dockerignore             # Docker 构建排除规则
+├── .env.example              # 环境变量示例
 ├── .gitignore
 └── 启动游戏.bat               # Windows 一键启动脚本
 ```
@@ -248,7 +335,7 @@ game-mvp/
 | **前端** | Vue 3.4 + Vite 5.2 | 组合式 API、响应式设计、HMR 热更新 |
 | **后端** | Node.js + Express | RESTful API、JSON 文件存储 |
 | **构建** | Vite | 极速构建、按需加载 |
-| **部署** | concurrently | 前后端同时开发/运行 |
+| **部署** | Docker Compose / concurrently | 生产环境 Docker 一键部署，开发模式 concurrently |
 | **存储** | JSON 文件 | MVP 阶段轻量存储，可平滑迁移至 MySQL |
 
 ---
@@ -318,7 +405,7 @@ game-mvp/
 - [ ] 世界 BOSS / 全服事件
 - [ ] 更多区域和怪物
 - [ ] MySQL 持久化存储
-- [ ] Docker 部署方案
+- [x] Docker 部署方案
 
 ---
 
