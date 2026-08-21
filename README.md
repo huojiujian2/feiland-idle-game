@@ -165,13 +165,17 @@ pnpm dev:client
 #### 一键部署
 
 ```bash
-# 构建并启动（后台运行）
+# 1. 拉取代码
+git clone https://github.com/huojiujian2/feiland-idle-game.git
+cd feiland-idle-game
+
+# 2. 一键构建并启动（后台运行）
 docker compose up -d --build
 
-# 查看运行状态
+# 3. 查看运行状态
 docker compose ps
 
-# 查看实时日志
+# 4. 查看实时日志
 docker compose logs -f
 ```
 
