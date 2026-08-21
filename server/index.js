@@ -597,10 +597,12 @@ if (require.main === module) {
     console.log(`  静态文件: ${distPath}`);
   }
 
-  app.listen(PORT, () => {
+  const HOST = process.env.HOST || '0.0.0.0';
+  app.listen(PORT, HOST, () => {
     console.log(`\n========================================`);
     console.log(`  费兰德世界 - 挂机服务器已启动 v0.3`);
     console.log(`  访问: http://localhost:${PORT}`);
+    console.log(`  监听: ${HOST}:${PORT}`);
     console.log(`  系统: 账号密码/种族进化/附魔/法则/登神`);
     console.log(`========================================\n`);
   });
