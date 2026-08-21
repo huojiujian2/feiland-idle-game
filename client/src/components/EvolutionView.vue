@@ -2,9 +2,15 @@
   <div class="view-container evo-view">
     <!-- 子标签 -->
     <div class="sub-tabs">
-      <button class="sub-tab" :class="{ active: subTab === 'race' }" @click="subTab = 'race'">🧬 种族进化</button>
-      <button class="sub-tab" :class="{ active: subTab === 'law' }" @click="subTab = 'law'">📜 法则</button>
-      <button class="sub-tab" :class="{ active: subTab === 'ascend' }" @click="subTab = 'ascend'">✨ 登神</button>
+      <button class="sub-tab" :class="{ active: subTab === 'race' }" @click="subTab = 'race'">
+        <IconBase name="dna" :size="14" class="btn-icon" />种族进化
+      </button>
+      <button class="sub-tab" :class="{ active: subTab === 'law' }" @click="subTab = 'law'">
+        <IconBase name="scroll" :size="14" class="btn-icon" />法则
+      </button>
+      <button class="sub-tab" :class="{ active: subTab === 'ascend' }" @click="subTab = 'ascend'">
+        <IconBase name="sparkle" :size="14" class="btn-icon" />登神
+      </button>
     </div>
 
     <!-- 种族进化 -->
@@ -173,6 +179,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import IconBase from './icons/IconBase.vue'
 
 const props = defineProps(['player'])
 defineEmits(['evolve', 'learnLaw', 'ascend'])

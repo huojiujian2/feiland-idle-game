@@ -14,7 +14,7 @@
         <div v-for="slot in slots" :key="slot.key" class="equip-slot"
           :class="{ filled: player.equipped[slot.key] }"
           @click="player.equipped[slot.key] ? showEquipDetail(slot.key) : null">
-          <div class="slot-icon">{{ slot.icon }}</div>
+          <div class="slot-icon"><IconBase :name="slot.iconName" :size="22" /></div>
           <div class="slot-label">{{ slot.label }}</div>
           <div v-if="player.equipped[slot.key]" class="slot-item"
             :style="{ color: qualityColors[player.equipped[slot.key].quality] }">
@@ -66,22 +66,22 @@
         </div>
       </div>
       <div class="combat-summary" v-if="player.totalStats">
-        <span class="cs-item">⚔ {{ player.totalStats.atk }}</span>
-        <span class="cs-item">🛡 {{ player.totalStats.def }}</span>
-        <span class="cs-item">⚡ {{ player.totalStats.agi }}</span>
-        <span class="cs-item" v-if="player.totalStats.crit">🎯 {{ (player.totalStats.crit * 100).toFixed(0) }}%</span>
-        <span class="cs-item" v-if="player.totalStats.dodge">💨 {{ (player.totalStats.dodge * 100).toFixed(0) }}%</span>
+        <span class="cs-item"><IconBase name="sword" :size="12" class="btn-icon" /> {{ player.totalStats.atk }}</span>
+        <span class="cs-item"><IconBase name="shield" :size="12" class="btn-icon" /> {{ player.totalStats.def }}</span>
+        <span class="cs-item"><IconBase name="bolt" :size="12" class="btn-icon" /> {{ player.totalStats.agi }}</span>
+        <span class="cs-item" v-if="player.totalStats.crit"><IconBase name="sparkle" :size="12" class="btn-icon" /> {{ (player.totalStats.crit * 100).toFixed(0) }}%</span>
+        <span class="cs-item" v-if="player.totalStats.dodge"><IconBase name="feather" :size="12" class="btn-icon" /> {{ (player.totalStats.dodge * 100).toFixed(0) }}%</span>
       </div>
       <button v-if="hasPending" class="btn btn-primary confirm-btn" data-alloc-available @click="confirmAllocate">确认分配</button>
       <div v-else-if="player.attrPoints > 0" class="auto-alloc-row" data-alloc-available>
-        <button class="btn btn-secondary auto-btn" @click="autoAllocate">✨ 一键加点（按职业权重）</button>
+        <button class="btn btn-secondary auto-btn" @click="autoAllocate"><IconBase name="sparkle" :size="14" class="btn-icon" /> 一键加点（按职业权重）</button>
       </div>
     </div>
 
     <!-- 职业区块 -->
     <div class="job-section card">
       <div class="section-header" @click="toggleSection('job')">
-        <span>🌟 职业</span>
+        <span><IconBase name="star" :size="14" class="section-icon" /> 职业</span>
         <span class="toggle-icon">{{ openSections.job ? '▾' : '▸' }}</span>
       </div>
       <div v-if="openSections.job" class="job-content">
@@ -163,7 +163,7 @@
     <!-- 词条摘要（完整管理请到「技能」页） -->
     <div class="affix-summary-card card" @click="$emit('goSkill')">
       <div class="section-header">
-        <span>🔮 词条系统</span>
+        <span><IconBase name="sparkle" :size="14" class="section-icon" /> 词条系统</span>
         <span class="toggle-icon">前往管理 ›</span>
       </div>
       <div v-if="!player.jobPath" class="no-job-hint">
@@ -194,12 +194,12 @@
       <transition name="side-slide">
         <div v-if="sideOpen" class="side-tabs">
           <div class="side-tab-item" @click="$emit('goEvo')">
-            <span class="side-tab-icon">🧬</span>
+            <span class="side-tab-icon"><IconBase name="dna" :size="16" class="icon-accent2" /></span>
             <span class="side-tab-label">进阶</span>
             <span v-if="player.canEvolve" class="side-tab-badge">!</span>
           </div>
           <div class="side-tab-item" @click="$emit('goQuest')">
-            <span class="side-tab-icon">📜</span>
+            <span class="side-tab-icon"><IconBase name="scroll" :size="16" class="icon-accent2" /></span>
             <span class="side-tab-label">任务</span>
             <span v-if="questBadge" class="side-tab-badge">{{ questBadge }}</span>
           </div>
@@ -248,6 +248,7 @@
 
 <script setup>
 import { ref, computed, reactive } from 'vue'
+import IconBase from './icons/IconBase.vue'
 
 const props = defineProps(['player', 'jobTree'])
 const emit = defineEmits(['allocate', 'autoAllocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest'])
@@ -267,9 +268,9 @@ const jobIcons = { thunder: '⚡', light: '✨', wind: '🌪', knight: '🛡', a
 const growthLabels = { hp: 'HP', atk: 'ATK', def: 'DEF', agi: 'AGI', exp: 'EXP', gold: 'GOLD' }
 
 const slots = [
-  { key: 'weapon', label: '武器', icon: '⚔' },
-  { key: 'armor', label: '护甲', icon: '🛡' },
-  { key: 'accessory', label: '饰品', icon: '💎' }
+  { key: 'weapon', label: '武器', iconName: 'sword' },
+  { key: 'armor', label: '护甲', iconName: 'shield' },
+  { key: 'accessory', label: '饰品', iconName: 'gem' }
 ]
 
 const attrList = [

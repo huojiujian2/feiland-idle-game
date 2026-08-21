@@ -1,7 +1,7 @@
 <template>
   <div class="view-container quest-view">
     <div class="quest-header">
-      <div class="quest-title">📜 任务委托</div>
+      <div class="quest-title"><IconBase name="scroll" :size="18" class="btn-icon icon-accent" />任务委托</div>
       <div class="quest-subtitle">日常可每日领取 · 成就永久有效</div>
     </div>
     <div class="sub-tabs">
@@ -70,6 +70,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import api from '../api.js'
+import IconBase from './icons/IconBase.vue'
 const props = defineProps(['player','currentUser'])
 const emit = defineEmits(['refresh'])
 const tab = ref('daily')

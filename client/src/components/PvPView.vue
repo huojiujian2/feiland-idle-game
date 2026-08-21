@@ -9,14 +9,14 @@
     <div class="pvp-header">
       <div class="pvp-card-row">
         <div class="pvp-card">
-          <div class="pvp-card-icon">⚔️</div>
+          <div class="pvp-card-icon"><IconBase name="crossedSwords" :size="22" /></div>
           <div class="pvp-card-info">
             <div class="pvp-card-label">竞技积分</div>
             <div class="pvp-card-value">{{ myRating }}</div>
           </div>
         </div>
         <div class="pvp-card">
-          <div class="pvp-card-icon">🪙</div>
+          <div class="pvp-card-icon"><IconBase name="gem" :size="22" /></div>
           <div class="pvp-card-info">
             <div class="pvp-card-label">竞技币</div>
             <div class="pvp-card-value coins">{{ arenaCoins }}</div>
@@ -36,7 +36,7 @@
 
     <!-- 赛季信息 -->
     <div v-if="season" class="season-bar">
-      <span class="season-icon">🏆</span>
+      <span class="season-icon"><IconBase name="trophy" :size="18" class="icon-accent" /></span>
       <span class="season-label">赛季 {{ season.currentSeason }}</span>
       <span class="season-info">剩余 {{ season.daysLeft }} 天重置</span>
     </div>
@@ -58,7 +58,7 @@
         <div v-for="opp in opponents" :key="opp.username" class="opp-card" @click="doChallenge(opp)">
           <div class="opp-top">
             <span class="opp-name">{{ opp.name }}</span>
-            <span v-if="opp.isBot" class="bot-tag">🤖 BOT</span>
+            <span v-if="opp.isBot" class="bot-tag"><IconBase name="dna" :size="12" /> BOT</span>
             <span v-if="opp.godhood === 'god'" class="opp-tag god">神灵</span>
             <span v-else-if="opp.godhood === 'demigod'" class="opp-tag demi">半神</span>
           </div>
@@ -89,9 +89,9 @@
         <div v-for="item in ranking" :key="item.username" class="rank-row"
             :class="{ self: item.username === currentUser }">
           <span class="rank-num">
-            <span v-if="item.rank === 1">🥇</span>
-            <span v-else-if="item.rank === 2">🥈</span>
-            <span v-else-if="item.rank === 3">🥉</span>
+            <IconBase v-if="item.rank === 1" name="trophy" :size="20" class="icon-accent" />
+            <IconBase v-else-if="item.rank === 2" name="star" :size="18" class="icon-accent2" />
+            <IconBase v-else-if="item.rank === 3" name="gem" :size="16" class="icon-success" />
             <span v-else>{{ item.rank }}</span>
           </span>
           <div class="rank-info">
@@ -150,7 +150,7 @@
             </span>
           </div>
           <div class="shop-bottom">
-            <span class="shop-price">🪙 {{ item.price }}</span>
+            <span class="shop-price"><IconBase name="gem" :size="13" class="btn-icon icon-accent2" /> {{ item.price }}</span>
             <button class="shop-buy-btn" :disabled="!canBuyItem(item)" @click="doBuy(item)">
               {{ buyBtnText(item) }}
             </button>
@@ -254,9 +254,9 @@
         </div>
 
         <div class="battle-rewards">
-          <div class="reward-item">💰 {{ battleResult.rewards.gold }}</div>
-          <div class="reward-item">⭐ {{ battleResult.rewards.exp }}</div>
-          <div class="reward-item">🪙 {{ battleResult.rewards.coins || 0 }}</div>
+          <div class="reward-item"><IconBase name="gold" :size="14" class="btn-icon icon-accent" /> {{ battleResult.rewards.gold }}</div>
+          <div class="reward-item"><IconBase name="scroll" :size="14" class="btn-icon icon-accent2" /> {{ battleResult.rewards.exp }}</div>
+          <div class="reward-item"><IconBase name="gem" :size="14" class="btn-icon icon-accent2" /> {{ battleResult.rewards.coins || 0 }}</div>
           <div class="reward-item" :class="{ up: battleResult.ratingChange > 0, down: battleResult.ratingChange < 0 }">
             积分 {{ battleResult.ratingChange > 0 ? '+' : '' }}{{ battleResult.ratingChange }}
           </div>
@@ -270,6 +270,7 @@
 
 <script setup>
 import { ref, onMounted, nextTick, watch } from 'vue'
+import IconBase from './icons/IconBase.vue'
 import api from '../api.js'
 
 const props = defineProps(['player', 'currentUser'])

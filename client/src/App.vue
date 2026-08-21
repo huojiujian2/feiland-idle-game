@@ -4,7 +4,7 @@
     <div class="login-bg" style="background-image: url('/img/login-bg.jpg')"></div>
     <div class="login-box">
       <div class="login-title">
-        <span class="login-icon">⚔</span>
+        <span class="login-icon"><IconBase name="sword" :size="38" class="icon-accent-glow" /></span>
         <h1>费兰德世界</h1>
         <p>从鹰人部落到天使帝国 · 挂机文字成长</p>
       </div>
@@ -43,7 +43,7 @@
           <div class="race-portrait">
             <img src="/img/race-eagle.jpg" alt="鹰人" />
           </div>
-          <span class="race-tag">🦅 鹰人</span>
+          <span class="race-tag"><IconBase name="feather" :size="14" class="icon-accent" /> 鹰人</span>
           <span class="race-desc">凡尘大陆的低等种族，拥有飞行的天赋</span>
         </div>
         <input v-model="charNameInput" class="login-input" placeholder="输入角色名..."
@@ -67,9 +67,13 @@
         <span class="header-godhood god" v-if="player.godhood === 'god'">神灵</span>
       </div>
       <div class="header-right">
-        <span class="header-gold">💰{{ player.gold }}</span>
-        <button class="btn btn-sm shop-btn" @click="showShop = true">🛒</button>
-        <button class="btn btn-sm" @click="logout">退出</button>
+        <span class="header-gold"><IconBase name="gold" :size="16" class="icon-accent" /> {{ player.gold }}</span>
+        <button class="header-icon-btn" :title="'商店'" @click="showShop = true">
+          <IconBase name="shop" :size="18" />
+        </button>
+        <button class="header-icon-btn" :title="'退出'" @click="logout">
+          <IconBase name="logout" :size="18" />
+        </button>
       </div>
     </header>
 
@@ -111,7 +115,7 @@
       <div v-for="tab in mainTabs" :key="tab.id" class="tabbar-item"
         :class="{ active: activeTab === tab.id, 'tabbar-center': tab.id === 'map' }"
         :data-tab="tab.id" @click="handleTabClick(tab.id)">
-        <span class="tabbar-icon">{{ tab.icon }}</span>
+        <IconBase :name="tab.icon" :size="tab.id === 'map' ? 24 : 20" class="tabbar-icon" />
         <span class="tabbar-text">{{ tab.label }}</span>
         <span v-if="tab.badge" class="tabbar-badge">{{ tab.badge }}</span>
       </div>
@@ -129,9 +133,11 @@
       <div v-if="showShop" class="shop-overlay" @click.self="closeShop">
         <div class="shop-sheet">
           <div class="sheet-header">
-            <span class="sheet-title">🛒 商店</span>
-            <span class="sheet-gold">💰 {{ player.gold }}</span>
-            <button class="btn btn-sm sheet-close" @click="closeShop">✕</button>
+            <span class="sheet-title"><IconBase name="shop" :size="18" class="btn-icon icon-accent2" /> 商店</span>
+            <span class="sheet-gold"><IconBase name="gold" :size="14" class="icon-accent" /> {{ player.gold }}</span>
+            <button class="btn btn-sm sheet-close header-icon-btn" @click="closeShop">
+              <IconBase name="close" :size="14" />
+            </button>
           </div>
           <div class="shop-grid">
             <div v-for="item in pagedShop" :key="item.id" class="shop-cell" @click="shopDetail = item">
@@ -182,6 +188,7 @@
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
 import api from './api.js'
+import IconBase from './components/icons/IconBase.vue'
 import CharacterView from './components/CharacterView.vue'
 import SkillView from './components/SkillView.vue'
 import InventoryView from './components/InventoryView.vue'
@@ -220,11 +227,11 @@ const currentUserRef = ref('')
 
 // 底部固定 5 个 Tab：角色、技能、地图(中间凸起)、背包、图鉴
 const mainTabs = computed(() => [
-  { id: 'char', label: '角色', icon: '👤', badge: player.value?.attrPoints > 0 ? player.value.attrPoints : null },
-  { id: 'skill', label: '技能', icon: '🔮', badge: null },
-  { id: 'map', label: '地图', icon: '🗺', badge: null },
-  { id: 'bag', label: '背包', icon: '🎒', badge: null },
-  { id: 'codex', label: '图鉴', icon: '📖', badge: null },
+  { id: 'char', label: '角色', icon: 'user', badge: player.value?.attrPoints > 0 ? player.value.attrPoints : null },
+  { id: 'skill', label: '技能', icon: 'skill', badge: null },
+  { id: 'map', label: '地图', icon: 'map', badge: null },
+  { id: 'bag', label: '背包', icon: 'bag', badge: null },
+  { id: 'codex', label: '图鉴', icon: 'book', badge: null },
 ])
 const transitionName = ref('slide-left')
 

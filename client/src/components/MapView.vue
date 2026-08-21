@@ -3,7 +3,7 @@
     <!-- 上半：地图选择 -->
     <div class="map-section">
       <div class="section-header">
-        <span>🗺 挂机区域</span>
+        <span><IconBase name="map" :size="14" class="section-icon" />挂机区域</span>
         <span class="current-area" v-if="currentAreaName">当前: {{ currentAreaName }}</span>
       </div>
       <div class="area-list">
@@ -24,7 +24,7 @@
 
     <!-- 战斗策略 -->
     <div class="strategy-section card" v-if="player.strategies">
-      <div class="section-header"><span>⚔ 战斗策略</span><span v-if="strategyCdText" class="strategy-cd">{{ strategyCdText }}</span></div>
+      <div class="section-header"><span><IconBase name="crossedSwords" :size="14" class="section-icon" />战斗策略</span><span v-if="strategyCdText" class="strategy-cd">{{ strategyCdText }}</span></div>
       <div class="strategy-grid">
         <button v-for="s in player.strategies" :key="s.id"
           class="strategy-btn"
@@ -42,7 +42,7 @@
 
     <!-- 战斗属性面板 -->
     <div class="combat-stats card" v-if="player.combatStats">
-      <div class="section-header"><span>⚔ 战斗属性</span></div>
+      <div class="section-header"><span><IconBase name="sword" :size="14" class="section-icon" />战斗属性</span></div>
       <div class="combat-stats-grid">
         <div class="cs-item"><span class="cs-label">攻击</span><span class="cs-val atk">{{ player.combatStats.atk }}</span></div>
         <div class="cs-item"><span class="cs-label">防御</span><span class="cs-val def">{{ player.combatStats.def }}</span></div>
@@ -56,9 +56,9 @@
     <!-- 下半：战斗日志（含飘字 overlay） -->
     <div class="log-section card" data-tutorial="log">
       <div class="log-header">
-        <span>⚔ 战斗日志</span>
+        <span><IconBase name="crossedSwords" :size="14" class="section-icon" />战斗日志</span>
         <span class="countdown-timer">
-          <span class="hourglass" :class="{ running: countdown > 0 }">⏳</span>
+          <span class="hourglass" :class="{ running: countdown > 0 }"><IconBase name="scroll" :size="13" /></span>
           <span class="countdown">{{ countdown }}s</span>
         </span>
       </div>
@@ -88,9 +88,9 @@
 
             <!-- 简要奖励（始终显示） -->
             <div class="battle-summary-row">
-              <span v-if="log.exp" class="reward-exp">⬆ +{{ log.exp }}</span>
-              <span v-if="log.gold" class="reward-gold">💰 +{{ log.gold }}</span>
-              <span v-if="log.drops.length" class="reward-drops">🎁 {{ log.drops.length }}件</span>
+              <span v-if="log.exp" class="reward-exp"><IconBase name="scroll" :size="12" class="btn-icon icon-accent2" /> +{{ log.exp }}</span>
+              <span v-if="log.gold" class="reward-gold"><IconBase name="gold" :size="12" class="btn-icon icon-accent" /> +{{ log.gold }}</span>
+              <span v-if="log.drops.length" class="reward-drops"><IconBase name="bag" :size="12" class="btn-icon icon-accent2" /> {{ log.drops.length }}件</span>
               <span class="expand-hint">{{ expandedLogs.has(i) ? '收起' : '展开详情' }}</span>
             </div>
 
@@ -311,6 +311,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
+import IconBase from './icons/IconBase.vue'
 
 const props = defineProps(['player', 'areas'])
 defineEmits(['select', 'strategy-change', 'goRank', 'goPvP'])

@@ -2,8 +2,12 @@
   <div class="view-container skill-view">
     <!-- 子标签：主动/被动 -->
     <div class="sub-tabs">
-      <button class="sub-tab" :class="{ active: subTab === 'active' }" @click="subTab = 'active'; page = 1">⚔ 主动</button>
-      <button class="sub-tab" :class="{ active: subTab === 'passive' }" @click="subTab = 'passive'; page = 1">🛡 被动</button>
+      <button class="sub-tab" :class="{ active: subTab === 'active' }" @click="subTab = 'active'; page = 1">
+        <IconBase name="sword" :size="14" class="btn-icon" /> 主动
+      </button>
+      <button class="sub-tab" :class="{ active: subTab === 'passive' }" @click="subTab = 'passive'; page = 1">
+        <IconBase name="shield" :size="14" class="btn-icon" /> 被动
+      </button>
     </div>
 
     <!-- 已装备概览 -->
@@ -50,14 +54,23 @@
       <button v-for="lv in levelOptions" :key="lv.key" class="level-btn"
         :class="{ active: activeLevel === lv.key }"
         @click="activeLevel = lv.key; page = 1">
-        {{ lv.icon }} {{ lv.label }}
+        <template v-if="renderLevelIcon(lv.icon).type === 'icon'">
+          <IconBase :name="lv.icon" :size="14" class="btn-icon" />
+        </template>
+        <template v-else>
+          <span class="btn-icon">{{ renderLevelIcon(lv.icon).text }}</span>
+        </template>
+        {{ lv.label }}
       </button>
     </div>
 
     <!-- 词条网格 -->
     <div class="card section">
       <div class="section-header">
-        <span>{{ subTab === 'active' ? '⚔ 主动词条' : '🛡 被动词条' }} ({{ filteredAffixes.length }})</span>
+        <span>
+          <IconBase :name="subTab === 'active' ? 'sword' : 'shield'" :size="14" class="section-icon" />
+          {{ subTab === 'active' ? '主动词条' : '被动词条' }} ({{ filteredAffixes.length }})
+        </span>
       </div>
       <div v-if="filteredAffixes.length === 0" class="empty-hint">暂无词条</div>
       <div v-else class="item-grid">
@@ -65,7 +78,10 @@
           :class="{ equipped: isEquipped(affix.id) }"
           :style="{ borderColor: isEquipped(affix.id) ? 'var(--accent)' : undefined }"
           @click="showDetail(affix)">
-          <div class="cell-icon">{{ getAffixIcon(affix) }}</div>
+          <div class="cell-icon">
+            <IconBase v-if="renderLevelIcon(getAffixIcon(affix)).type === 'icon'" :name="getAffixIcon(affix)" :size="22" class="icon-accent2" />
+            <span v-else>{{ getAffixIcon(affix) }}</span>
+          </div>
           <div class="cell-name">{{ affix.name }}</div>
           <div class="cell-cat">{{ affix.category || affix.group || '' }}</div>
           <span v-if="isEquipped(affix.id)" class="cell-badge">✓</span>
@@ -109,6 +125,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import IconBase from './icons/IconBase.vue'
 
 const props = defineProps(['player'])
 const emit = defineEmits(['equipAffix', 'unequipAffix'])
@@ -126,15 +143,27 @@ const statLabels = {
 }
 
 const levelOptions = computed(() => {
-  const opts = [{ key: 'all', label: '全部', icon: '📋' }]
+  const opts = [{ key: 'all', label: '全部', icon: 'skill' }]
   const data = props.player.affixData || {}
   Object.values(data).forEach(lv => {
     if (lv.config) {
-      opts.push({ key: String(lv.config.level || lv.config.name), label: lv.config.name, icon: lv.config.icon || '🔹' })
+      // config.icon 可能是后端 emoji（保留原样显示）或 icon name（命中 IconBase）
+      opts.push({
+        key: String(lv.config.level || lv.config.name),
+        label: lv.config.name,
+        icon: lv.config.icon || 'skill'
+      })
     }
   })
   return opts
 })
+
+function renderLevelIcon(name) {
+  // 已知的 icon 名交给 IconBase，其他当成原始字符（emoji）渲染
+  const known = ['skill', 'sword', 'shield', 'bolt', 'sparkle', 'heart', 'skull', 'scroll', 'gold', 'star', 'flag', 'trophy', 'crossedSwords', 'user']
+  if (known.includes(name)) return { type: 'icon', name }
+  return { type: 'raw', text: name }
+}
 
 const allAffixes = computed(() => {
   const result = []
@@ -178,15 +207,15 @@ function isEquipped(affixId) {
 function getAffixIcon(affix) {
   if (affix._levelIcon) return affix._levelIcon
   const cat = affix.category || affix.group || ''
-  if (cat.includes('攻') || cat.includes('ATK')) return '⚔'
-  if (cat.includes('防') || cat.includes('DEF')) return '🛡'
-  if (cat.includes('速') || cat.includes('AGI')) return '⚡'
-  if (cat.includes('暴') || cat.includes('crit')) return '🎯'
-  if (cat.includes('回') || cat.includes('regen')) return '💚'
-  if (cat.includes('吸') || cat.includes('lifesteal')) return '🩸'
-  if (cat.includes('经') || cat.includes('exp')) return '📜'
-  if (cat.includes('金') || cat.includes('gold')) return '💰'
-  return subTab.value === 'active' ? '🔥' : '🛡'
+  if (cat.includes('攻') || cat.includes('ATK')) return 'sword'
+  if (cat.includes('防') || cat.includes('DEF')) return 'shield'
+  if (cat.includes('速') || cat.includes('AGI')) return 'bolt'
+  if (cat.includes('暴') || cat.includes('crit')) return 'sparkle'
+  if (cat.includes('回') || cat.includes('regen')) return 'heart'
+  if (cat.includes('吸') || cat.includes('lifesteal')) return 'skull'
+  if (cat.includes('经') || cat.includes('exp')) return 'scroll'
+  if (cat.includes('金') || cat.includes('gold')) return 'gold'
+  return subTab.value === 'active' ? 'sword' : 'shield'
 }
 
 function showDetail(affix) {

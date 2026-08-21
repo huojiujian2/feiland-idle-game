@@ -3,18 +3,20 @@
       <!-- 装备网格 -->
       <div class="card section">
         <div class="section-header">
-          <span>⚔ 装备 ({{ player.equips.length }})</span>
+          <span><IconBase name="sword" :size="14" class="section-icon" />装备 ({{ player.equips.length }})</span>
         </div>
         <div v-if="player.equips.length === 0" class="empty-hint">空空如也...去打怪掉装备吧！</div>
         <div v-else class="item-grid">
           <div v-for="item in pagedEquips" :key="item.uid" class="grid-cell"
             :style="{ borderColor: qualityColors[item.quality] + '40' }"
             @click="showEquipDetail(item)">
-            <div class="cell-icon">{{ equipSlotIcons[item.slot] || '🔧' }}</div>
+            <div class="cell-icon">
+              <IconBase :name="equipSlotIcons[item.slot] || 'bag'" :size="22" class="icon-accent2" />
+            </div>
             <div class="cell-name" :style="{ color: qualityColors[item.quality] }">{{ item.name }}</div>
             <div class="cell-stat">{{ mainStat(item) }}</div>
             <span v-if="item.enchants && item.enchants.length > 0" class="cell-badge">✦{{ item.enchants.length }}</span>
-            <span v-if="player.level < item.reqLevel" class="cell-lock">🔒</span>
+            <span v-if="player.level < item.reqLevel" class="cell-lock"><IconBase name="close" :size="10" /></span>
           </div>
         </div>
         <div v-if="equipTotalPages > 1" class="pager">
@@ -27,13 +29,15 @@
       <!-- 物品网格 -->
       <div class="card section">
         <div class="section-header">
-          <span>📦 物品 ({{ player.inventory.length }})</span>
+          <span><IconBase name="bag" :size="14" class="section-icon" />物品 ({{ player.inventory.length }})</span>
         </div>
         <div v-if="player.inventory.length === 0" class="empty-hint">暂无物品</div>
         <div v-else class="item-grid">
           <div v-for="item in pagedMats" :key="item.name" class="grid-cell"
             @click="showItemDetail(item)">
-            <div class="cell-icon">{{ getItemIcon(item) }}</div>
+            <div class="cell-icon">
+              <IconBase :name="getItemIcon(item)" :size="22" class="icon-accent2" />
+            </div>
             <div class="cell-name">{{ item.name }}</div>
             <div class="cell-count">×{{ item.count }}</div>
           </div>
@@ -90,10 +94,14 @@
     <!-- 物品详情弹窗 -->
     <div v-if="itemDetail" class="modal-overlay" @click.self="itemDetail = null">
       <div class="modal-box">
-        <div class="modal-title">{{ getItemIcon(itemDetail) }} {{ itemDetail.name }}</div>
+        <div class="modal-title">
+          <IconBase :name="getItemIcon(itemDetail)" :size="16" class="btn-icon icon-accent2" />
+          {{ itemDetail.name }}
+        </div>
         <div class="modal-row"><span class="ml">数量</span><span class="mv">×{{ itemDetail.count }}</span></div>
         <div v-if="materialPrices[itemDetail.name]" class="modal-row">
-          <span class="ml">单件售价</span><span class="mv">💰{{ materialPrices[itemDetail.name] }}</span>
+          <span class="ml">单件售价</span>
+          <span class="mv"><IconBase name="gold" :size="13" class="icon-accent" /> {{ materialPrices[itemDetail.name] }}</span>
         </div>
         <div v-if="itemDetail.type === 'consumable'" class="modal-section">
           <div class="modal-section-title">批量使用</div>
@@ -119,6 +127,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import IconBase from './icons/IconBase.vue'
 
 const props = defineProps(['player', 'qualityColors', 'materialPrices'])
 const emit = defineEmits(['use', 'sellMaterial', 'sellEquip', 'equip', 'enchant'])
@@ -134,7 +143,7 @@ const pageSize = 12
 const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说' }
 const slotLabels = { weapon: '武器', armor: '护甲', accessory: '饰品' }
 const statLabels = { atk: '攻击', def: '防御', hp: 'HP', mp: 'MP', str: '力量', con: '体质', spi: '精神', agi: '敏捷', cha: '魅力', exp: '经验', gold: '金币' }
-const equipSlotIcons = { weapon: '⚔️', armor: '🛡️', accessory: '💍' }
+const equipSlotIcons = { weapon: 'sword', armor: 'shield', accessory: 'gem' }
 
 const equipTotalPages = computed(() => Math.max(1, Math.ceil(props.player.equips.length / pageSize)))
 const pagedEquips = computed(() => props.player.equips.slice((equipPage.value - 1) * pageSize, equipPage.value * pageSize))
@@ -154,12 +163,12 @@ function mainStat(item) {
 
 function getItemIcon(item) {
   if (item.type === 'consumable') {
-    if (item.itemId && item.itemId.includes('hp')) return '🧪'
-    if (item.itemId && item.itemId.includes('mp')) return '🔵'
-    if (item.itemId && item.itemId.includes('exp')) return '📜'
-    return '📦'
+    if (item.itemId && item.itemId.includes('hp')) return 'heart'
+    if (item.itemId && item.itemId.includes('mp')) return 'sparkle'
+    if (item.itemId && item.itemId.includes('exp')) return 'scroll'
+    return 'bag'
   }
-  return '📦'
+  return 'bag'
 }
 
 function changeUseQty(name, delta, max) {

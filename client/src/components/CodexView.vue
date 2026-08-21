@@ -4,7 +4,7 @@
     <div class="codex-tabs">
       <div v-for="cat in categories" :key="cat.id" class="codex-tab"
         :class="{ active: activeCat === cat.id }" @click="activeCat = cat.id">
-        <span class="cat-icon">{{ cat.icon }}</span>
+        <IconBase :name="cat.icon" :size="16" class="cat-icon icon-accent2" />
         <span class="cat-label">{{ cat.label }}</span>
       </div>
     </div>
@@ -142,6 +142,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import IconBase from './icons/IconBase.vue'
 import api from '../api.js'
 
 const activeCat = ref('material')
@@ -167,13 +168,13 @@ const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', leg
 const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说' }
 const slotLabels = { weapon: '武器', armor: '护甲', accessory: '饰品' }
 const statLabels = { atk: '攻击', def: '防御', hp: 'HP', mp: 'MP', str: '力量', con: '体质', spi: '精神', agi: '敏捷', cha: '魅力', exp: '经验', gold: '金币' }
-const equipIcons = { weapon: '⚔️', armor: '🛡️', accessory: '💍' }
+const equipIcons = { weapon: 'sword', armor: 'shield', accessory: 'gem' }
 
 const categories = [
-  { id: 'material', label: '材料', icon: '📦' },
-  { id: 'equip', label: '装备', icon: '⚔️' },
-  { id: 'consumable', label: '消耗品', icon: '🧪' },
-  { id: 'monster', label: '怪物', icon: '👹' }
+  { id: 'material', label: '材料', icon: 'bag' },
+  { id: 'equip', label: '装备', icon: 'sword' },
+  { id: 'consumable', label: '消耗品', icon: 'heart' },
+  { id: 'monster', label: '怪物', icon: 'skull' }
 ]
 
 function getConsumableIcon(id) {

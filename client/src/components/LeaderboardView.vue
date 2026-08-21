@@ -1,14 +1,14 @@
 <template>
   <div class="view-container leaderboard-view">
     <div class="lb-header">
-      <div class="lb-title">🏆 全服排行榜</div>
+      <div class="lb-title"><IconBase name="trophy" :size="20" class="btn-icon icon-accent" />全服排行榜</div>
       <div class="lb-subtitle">实时排行 · 展示全服最强冒险者</div>
     </div>
 
     <!-- 类型切换 -->
     <div class="sub-tabs lb-tabs">
       <button v-for="t in types" :key="t.id" class="sub-tab" :class="{ active: activeType === t.id }" @click="activeType = t.id">
-        <span class="tab-icon">{{ t.icon }}</span>{{ t.label }}
+        <IconBase :name="t.icon" :size="14" class="btn-icon icon-accent2" /> {{ t.label }}
       </button>
     </div>
 
@@ -26,15 +26,15 @@
         <div class="lb-list">
           <div v-for="item in pagedList" :key="item.username" class="lb-row" :class="[rankClass(item.rank), { self: item.username === currentUser }]">
             <span class="col-rank">
-              <span v-if="item.rank === 1" class="rank-medal gold">🥇</span>
-              <span v-else-if="item.rank === 2" class="rank-medal silver">🥈</span>
-              <span v-else-if="item.rank === 3" class="rank-medal bronze">🥉</span>
+              <IconBase v-if="item.rank === 1" name="trophy" :size="20" class="rank-medal gold icon-accent" />
+              <IconBase v-else-if="item.rank === 2" name="star" :size="18" class="rank-medal silver icon-accent2" />
+              <IconBase v-else-if="item.rank === 3" name="gem" :size="16" class="rank-medal bronze icon-success" />
               <span v-else class="rank-num">{{ item.rank }}</span>
             </span>
             <div class="col-player">
               <div class="player-main">
                 <span class="player-name">{{ item.name }}</span>
-                <span v-if="item.username === currentUser" class="self-tag">🏆</span>
+                <span v-if="item.username === currentUser" class="self-tag"><IconBase name="flag" :size="13" /></span>
                 <span v-if="item.godhood === 'god'" class="god-tag god">神灵</span>
                 <span v-else-if="item.godhood === 'demigod'" class="god-tag demi">半神</span>
               </div>
@@ -77,6 +77,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import IconBase from './icons/IconBase.vue'
 import api from '../api.js'
 
 const props = defineProps(['currentUser'])
@@ -92,12 +93,12 @@ const currentUser = computed(() => props.currentUser || '')
 
 // 单一数据源：榜单元信息（label/icon/value/sub），避免 BOARD_META 与 types 重复ID/label
 const BOARD_META = {
-  level: { label: '等级', shortLabel: '等级', icon: '⬆️', value: (i) => `Lv.${i.level}`, sub: (i) => `${i.exp} exp` },
-  power: { label: '战力', shortLabel: '战力', icon: '⚔️', value: (i) => i.power.toLocaleString(), sub: (i) => `ATK ${i.atk} · DEF ${i.def}` },
-  gold: { label: '金币', shortLabel: '金币', icon: '💰', value: (i) => i.gold.toLocaleString(), sub: (i) => `Lv.${i.level}` },
-  kills: { label: '击杀数', shortLabel: '击杀', icon: '💀', value: (i) => `${i.killCount}`, sub: (i) => `Lv.${i.level}` },
-  reincarnation: { label: '转生', shortLabel: '转生', icon: '🔄', value: (i) => `${i.reincarnation}`, sub: (i) => `Lv.${i.level}` },
-  boss: { label: 'BOSS击杀', shortLabel: 'BOSS', icon: '👹', value: (i) => `${i.bossKills}`, sub: (i) => `Lv.${i.level}` }
+  level: { label: '等级', shortLabel: '等级', icon: 'bolt', value: (i) => `Lv.${i.level}`, sub: (i) => `${i.exp} exp` },
+  power: { label: '战力', shortLabel: '战力', icon: 'crossedSwords', value: (i) => i.power.toLocaleString(), sub: (i) => `ATK ${i.atk} · DEF ${i.def}` },
+  gold: { label: '金币', shortLabel: '金币', icon: 'gold', value: (i) => i.gold.toLocaleString(), sub: (i) => `Lv.${i.level}` },
+  kills: { label: '击杀数', shortLabel: '击杀', icon: 'skull', value: (i) => `${i.killCount}`, sub: (i) => `Lv.${i.level}` },
+  reincarnation: { label: '转生', shortLabel: '转生', icon: 'dna', value: (i) => `${i.reincarnation}`, sub: (i) => `Lv.${i.level}` },
+  boss: { label: 'BOSS击杀', shortLabel: 'BOSS', icon: 'skull', value: (i) => `${i.bossKills}`, sub: (i) => `Lv.${i.level}` }
 }
 const types = Object.entries(BOARD_META).map(([id, m]) => ({ id, label: m.shortLabel, icon: m.icon }))
 
