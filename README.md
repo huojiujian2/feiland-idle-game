@@ -152,8 +152,7 @@ pnpm dev:server
 pnpm dev:client
 ```
 
-- 前端：http://localhost:3000
-- 后端 API：http://localhost:3001
+- 前端 / API：http://localhost:3000
 
 ### 方法四：Docker 部署（推荐生产环境）
 
@@ -180,11 +179,11 @@ docker compose ps
 docker compose logs -f
 ```
 
-部署完成后，浏览器打开 **http://localhost:3001** 即可游玩。
+部署完成后，浏览器打开 **http://localhost:3000** 即可游玩。
 
 #### 自定义端口
 
-如果 3001 端口被占用，可以修改端口：
+如果 3000 端口被占用，可以修改端口：
 
 ```bash
 # 方法 1：创建 .env 文件
@@ -237,8 +236,7 @@ node server/index.js   # 启动后端，自动托管前端静态文件
 
 | 服务 | 默认端口 | 配置方式 | 说明 |
 |------|----------|----------|------|
-| 前端 (Vite) | 3000 | `vite.config.js` | 仅开发模式使用 |
-| 后端 (Express) | 3001 | 环境变量 `PORT` / `HOST` | 开发/生产通用 |
+| 服务（前端 / API） | 3000 | 环境变量 `PORT` / `vite.config.js` | 开发/生产通用 |
 
 后端默认监听 `0.0.0.0`（所有网络接口），Docker 部署时容器外可正常访问。
 
@@ -251,7 +249,7 @@ node server/index.js   # 启动后端，自动托管前端静态文件
 server: {
   port: 8080,  // ← 改成你想要的端口
   proxy: {
-    '/api': 'http://localhost:3001'  // ← 指向后端端口
+    '/api': 'http://localhost:8080'  // ← 指向后端端口（与 port 保持一致）
   }
 }
 ```
@@ -302,7 +300,7 @@ PORT=8080 docker compose up -d --build
 ```
 game-mvp/
 ├── server/                    # 后端服务
-│   ├── index.js                # Express 服务器入口 (端口 3001)
+│   ├── index.js                # Express 服务器入口 (端口 3000)
 │   ├── store.js                # JSON 文件数据存储
 │   ├── data.js                 # 游戏静态数据 (区域/怪物/装备/职业/词条/法则)
 │   └── engine.js               # 游戏引擎 (挂机计算/战斗/升级/进化/登神)

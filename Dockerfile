@@ -43,19 +43,19 @@ RUN mkdir -p /app/data
 
 # 环境变量
 ENV NODE_ENV=production
-ENV PORT=3001
+ENV PORT=3000
 ENV DB_PATH=/app/data/db.json
 ENV HOST=0.0.0.0
 
 # 暴露端口
-EXPOSE 3001
+EXPOSE 3000
 
 # 数据卷
 VOLUME ["/app/data"]
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:3001/ || exit 1
+  CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
 
 # 启动
 CMD ["node", "server/index.js"]
