@@ -45,6 +45,7 @@ RUN mkdir -p /app/data
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV DB_PATH=/app/data/db.json
+ENV HOST=0.0.0.0
 
 # 暴露端口
 EXPOSE 3001
