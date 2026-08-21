@@ -44,6 +44,11 @@
 | 👑 **登神系统** | 半神 → 神灵，全属性暴涨 + 神威特性 | Lv.100+ |
 | 🛒 **商店系统** | 购买药剂/装备，出售材料/装备 | 初始 |
 | 📖 **图鉴系统** | 收录所有材料/装备/消耗品/怪物 | 初始 |
+| 📊 **排行榜系统** | 全服等级/战力/金币/击杀/转生排行 | 初始 |
+| 📜 **任务成就系统** | 每日任务 + 永久成就，完成获奖励和称号 | 初始 |
+| 🎓 **新手引导** | 分步教程，高亮引导新玩家完成核心操作 | 新角色 |
+| ⚔️ **战斗策略** | 6 种策略模式（全力/稳健/贪婪/背水/极限等） | Lv.20+ |
+| 💥 **伤害飘字** | 战斗中浮动伤害数字，暴击放大+抖动 | 初始 |
 
 ---
 
@@ -149,22 +154,96 @@ pnpm dev:client
 - 前端：http://localhost:3000
 - 后端 API：http://localhost:3001
 
-### 生产构建
+### 方法四：Docker 部署（推荐生产环境）
+
+> 适合服务器部署，一行命令构建+启动，数据自动持久化。
+
+#### 前提条件
+
+- 安装 [Docker](https://docs.docker.com/get-docker/) 和 [Docker Compose](https://docs.docker.com/compose/install/)
+
+#### 一键部署
+
+```bash
+# 1. 拉取代码
+git clone https://github.com/huojiujian2/feiland-idle-game.git
+cd feiland-idle-game
+
+# 2. 一键构建并启动（后台运行）
+docker compose up -d --build
+
+# 3. 查看运行状态
+docker compose ps
+
+# 4. 查看实时日志
+docker compose logs -f
+```
+
+部署完成后，浏览器打开 **http://localhost:3001** 即可游玩。
+
+#### 自定义端口
+
+如果 3001 端口被占用，可以修改端口：
+
+```bash
+# 方法 1：创建 .env 文件
+cp .env.example .env
+# 编辑 .env，修改 PORT=8080
+docker compose up -d
+
+# 方法 2：命令行直接指定
+PORT=8080 docker compose up -d --build
+```
+
+#### 数据持久化
+
+游戏数据保存在 Docker 卷中，容器重启/重建后数据不丢失。
+
+```bash
+# 查看数据卷名称（前缀为项目目录名）
+docker volume ls | grep game
+
+# 查看数据卷存储位置
+docker volume inspect <卷名称>
+
+# 备份数据（将 <卷名称> 替换为上一步查到的名称）
+docker run --rm -v <卷名称>:/data -v ${PWD}:/backup alpine cp -r /data /backup/game-data-backup
+
+# 恢复数据
+docker run --rm -v <卷名称>:/data -v ${PWD}:/backup alpine cp -r /backup/game-data-backup /data
+```
+
+#### 常用管理命令
+
+```bash
+docker compose up -d --build   # 重新构建并启动
+docker compose down            # 停止并删除容器
+docker compose restart         # 重启服务
+docker compose logs -f         # 查看实时日志
+docker compose ps              # 查看运行状态
+```
+
+### 生产构建（不用 Docker）
 
 ```bash
 pnpm build      # 构建前端到 client/dist/
+node server/index.js   # 启动后端，自动托管前端静态文件
 ```
 
 ### 端口配置
 
 本项目默认使用两个端口：
 
-| 服务 | 默认端口 | 配置文件 | 修改位置 |
-|------|----------|----------|----------|
-| 前端 (Vite) | 3000 | `vite.config.js` | `server.port: 3000` |
-| 后端 (Express) | 3001 | `server/index.js` | `const PORT = 3001` |
+| 服务 | 默认端口 | 配置方式 | 说明 |
+|------|----------|----------|------|
+| 前端 (Vite) | 3000 | `vite.config.js` | 仅开发模式使用 |
+| 后端 (Express) | 3001 | 环境变量 `PORT` / `HOST` | 开发/生产通用 |
 
-**修改前端端口**：编辑 `vite.config.js`
+后端默认监听 `0.0.0.0`（所有网络接口），Docker 部署时容器外可正常访问。
+
+**开发模式修改端口**：
+
+修改前端端口 — 编辑 `vite.config.js`
 
 ```js
 // vite.config.js
@@ -176,14 +255,29 @@ server: {
 }
 ```
 
-**修改后端端口**：编辑 `server/index.js`
+修改后端端口 — 设置环境变量或直接运行
 
-```js
-// server/index.js
-const PORT = 3002;  // ← 改成你想要的端口
+```bash
+# 命令行指定
+PORT=3002 pnpm dev:server
+
+# 或编辑 server/index.js
+const PORT = process.env.PORT || 3002;
 ```
 
 > **注意**：修改后端端口后，务必同步修改 `vite.config.js` 中 proxy 的 `/api` 目标地址，否则前端无法请求后端 API。
+
+**Docker 模式修改端口**：
+
+```bash
+# 通过 .env 文件
+cp .env.example .env
+# 编辑 .env，设置 PORT=8080
+docker compose up -d
+
+# 或命令行直接指定
+PORT=8080 docker compose up -d --build
+```
 
 ---
 
@@ -214,7 +308,7 @@ game-mvp/
 ├── client/                    # 前端
 │   ├── index.html              # HTML 入口
 │   └── src/
-│       ├── App.vue             # 主界面 (6-Tab 导航 + 页面切换动画 + 商店弹窗)
+│       ├── App.vue             # 主界面 (8-Tab 导航 + 页面切换动画 + 商店弹窗)
 │       ├── api.js              # API 请求封装
 │       ├── main.js             # Vue 应用入口
 │       ├── style.css           # 全局样式 + CSS 变量 + 设计令牌
@@ -222,11 +316,18 @@ game-mvp/
 │           ├── CharacterView.vue   # 角色页 (属性/职业/装备/词条摘要)
 │           ├── SkillView.vue       # 技能页 (词条网格+分页+详情弹窗)
 │           ├── InventoryView.vue   # 背包页 (装备/物品网格+分页+详情弹窗)
-│           ├── MapView.vue         # 地图页 (区域选择+战斗日志)
+│           ├── MapView.vue         # 地图页 (区域选择+战斗日志+伤害飘字+策略切换)
 │           ├── CodexView.vue        # 图鉴页 (材料/装备/消耗品/怪物图鉴)
-│           └── EvolutionView.vue   # 进阶页 (种族进化/附魔/法则/登神)
+│           ├── EvolutionView.vue   # 进阶页 (种族进化/附魔/法则/登神)
+│           ├── LeaderboardView.vue # 排行榜页 (等级/战力/金币/击杀/转生排行)
+│           ├── QuestView.vue        # 任务页 (每日任务+成就系统)
+│           └── TutorialOverlay.vue # 新手引导 (分步教程+高亮引导)
 ├── vite.config.js             # Vite 配置 (root: client)
 ├── package.json              # 项目依赖与脚本
+├── Dockerfile                # Docker 镜像构建（多阶段构建）
+├── docker-compose.yml        # Docker Compose 编排配置
+├── .dockerignore             # Docker 构建排除规则
+├── .env.example              # 环境变量示例
 ├── .gitignore
 └── 启动游戏.bat               # Windows 一键启动脚本
 ```
@@ -240,7 +341,7 @@ game-mvp/
 | **前端** | Vue 3.4 + Vite 5.2 | 组合式 API、响应式设计、HMR 热更新 |
 | **后端** | Node.js + Express | RESTful API、JSON 文件存储 |
 | **构建** | Vite | 极速构建、按需加载 |
-| **部署** | concurrently | 前后端同时开发/运行 |
+| **部署** | Docker Compose / concurrently | 生产环境 Docker 一键部署，开发模式 concurrently |
 | **存储** | JSON 文件 | MVP 阶段轻量存储，可平滑迁移至 MySQL |
 
 ---
@@ -254,6 +355,8 @@ game-mvp/
 | 背包、技能、图鉴、地图 | **全屏替换**（左右滑动） | 内容量大，需要沉浸式浏览 |
 | 装备详情、词条详情 | **居中弹窗**（Modal） | 临时操作，看完关掉回到原页面 |
 | 商店购买 | **底部弹出**（Action Sheet） | 即时反馈，带操作按钮 |
+
+**底部导航栏**：固定 5 个 Tab，不再新增。中间第 3 个为「地图」按钮，圆形凸起高于其他 4 个。后续新增功能页面按关联性嵌入对应页面的右侧折叠面板（小箭头点击展开/收起），不占用底部 TabBar。例如进阶/任务嵌入角色页、排行嵌入地图页。
 
 **页面切换动画**：基于 Tab 顺序的智能滑动方向（右滑进入 / 左滑返回）
 
@@ -276,6 +379,11 @@ game-mvp/
 | 种族进化 | 3 阶 |
 | 商店商品 | 6 |
 | 材料种类 | 18+ |
+| 排行榜维度 | 6 |
+| 每日任务 | 6 |
+| 成就数量 | 10+ |
+| 战斗策略 | 6 种 |
+| 前端组件 | 9 |
 
 ---
 
@@ -291,11 +399,19 @@ game-mvp/
 - [x] 登神系统（半神→神灵）
 - [x] 图鉴系统
 - [x] 网格+分页+弹窗 UI 规范
+- [x] 全服排行榜系统
+- [x] 每日任务 + 成就系统
+- [x] 新手引导教程
+- [x] 战斗策略模式（6 种策略）
+- [x] 伤害飘字动画
+- [x] 战斗日志增强（颜色区分/图标/连击）
 - [ ] PVP 竞技场
-- [ ] 公会系统
+- [ ] 转生/轮回系统
+- [ ] 装备锻造与合成
+- [ ] 世界 BOSS / 全服事件
 - [ ] 更多区域和怪物
 - [ ] MySQL 持久化存储
-- [ ] Docker 部署方案
+- [x] Docker 部署方案
 
 ---
 

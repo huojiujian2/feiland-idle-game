@@ -183,6 +183,27 @@
       </template>
     </div>
 
+    <!-- 右侧折叠面板：进阶/任务 -->
+    <div class="side-panel" :class="{ expanded: sideOpen }">
+      <button class="side-toggle" @click="sideOpen = !sideOpen">
+        <span class="side-arrow">{{ sideOpen ? '›' : '‹' }}</span>
+      </button>
+      <transition name="side-slide">
+        <div v-if="sideOpen" class="side-tabs">
+          <div class="side-tab-item" @click="$emit('goEvo')">
+            <span class="side-tab-icon">🧬</span>
+            <span class="side-tab-label">进阶</span>
+            <span v-if="player.canEvolve" class="side-tab-badge">!</span>
+          </div>
+          <div class="side-tab-item" @click="$emit('goQuest')">
+            <span class="side-tab-icon">📜</span>
+            <span class="side-tab-label">任务</span>
+            <span v-if="questBadge" class="side-tab-badge">{{ questBadge }}</span>
+          </div>
+        </div>
+      </transition>
+    </div>
+
     <!-- 装备详情弹窗（含附魔） -->
     <div v-if="detailItem" class="equip-detail-overlay" @click.self="detailItem = null">
       <div class="equip-detail-box">
@@ -226,12 +247,13 @@
 import { ref, computed, reactive } from 'vue'
 
 const props = defineProps(['player', 'jobTree'])
-const emit = defineEmits(['allocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill'])
+const emit = defineEmits(['allocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest'])
 
 const pending = ref({})
 const detailItem = ref(null)
 const detailSlot = ref(null)
 const selectedJob = ref(null)
+const sideOpen = ref(false)
 const openSections = reactive({ job: true })
 
 const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e' }
@@ -258,6 +280,16 @@ const hpPct = computed(() => Math.round(props.player.hp / props.player.maxHp * 1
 const mpPct = computed(() => Math.round(props.player.mp / props.player.maxMp * 100))
 const expPct = computed(() => Math.round(props.player.exp / props.player.expNeeded * 100))
 const hasPending = computed(() => Object.values(pending.value).some(v => v > 0))
+
+const questBadge = computed(() => {
+  const q = props.player?.questView
+  if (!q) return null
+  const daily = q.dailyQuests?.filter(x => x.done && !x.claimed).length || 0
+  const ach = q.achievements?.filter(x => x.unlocked && !x.claimed).length || 0
+  const chest = q.chest?.canClaim ? 1 : 0
+  const total = daily + ach + chest
+  return total > 0 ? total : null
+})
 
 const availableEnchants = computed(() => {
   if (!detailItem.value) return []
@@ -480,4 +512,42 @@ function handleEnchant(recipeId) {
 .recipe-cost { font-size: 0.68rem; color: var(--dim); }
 .detail-actions { display: flex; gap: 0.5rem; }
 .detail-actions .btn { flex: 1; }
+
+/* 右侧折叠面板 */
+.side-panel {
+  position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+  z-index: 50; display: flex; align-items: center;
+}
+.side-toggle {
+  width: 24px; height: 44px; border: 1px solid var(--rule, #2a2b42);
+  border-right: none; border-radius: 8px 0 0 8px;
+  background: var(--bg2, #14162a); color: var(--muted, #9d9bb8);
+  cursor: pointer; font-size: 1rem; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+}
+.side-toggle:hover { color: var(--accent, #d4af5e); border-color: var(--accent, #d4af5e); }
+.side-tabs {
+  background: var(--bg2, #14162a); border: 1px solid var(--rule, #2a2b42);
+  border-right: none; border-radius: 10px 0 0 10px;
+  padding: 0.35rem; display: flex; flex-direction: column; gap: 0.25rem;
+  box-shadow: -4px 0 12px rgba(0,0,0,0.3);
+}
+.side-tab-item {
+  display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.7rem;
+  border-radius: 8px; cursor: pointer; white-space: nowrap;
+  transition: all 0.15s ease; color: var(--muted, #9d9bb8);
+}
+.side-tab-item:hover { background: rgba(157,140,240,0.08); color: var(--ink, #ece9f5); }
+.side-tab-icon { font-size: 1rem; }
+.side-tab-label { font-size: 0.72rem; font-weight: 600; }
+.side-tab-badge {
+  background: var(--danger, #e85d75); color: #fff; font-size: 0.58rem;
+  min-width: 14px; height: 14px; line-height: 14px; text-align: center;
+  border-radius: 7px; padding: 0 3px; margin-left: auto;
+}
+.side-slide-enter-active, .side-slide-leave-active {
+  transition: all var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+.side-slide-enter-from, .side-slide-leave-to { opacity: 0; transform: translateX(15px); }
 </style>

@@ -81,7 +81,9 @@
             @allocate="handleAllocate"
             @equip="handleEquip" @unequip="handleUnequip" @enchant="handleEnchant"
             @chooseJob="handleChooseJob"
-            @goSkill="activeTab = 'skill'" />
+            @goSkill="activeTab = 'skill'"
+            @goEvo="activeTab = 'evo'"
+            @goQuest="activeTab = 'quest'" />
           <SkillView v-else-if="activeTab === 'skill'" :player="player"
             @equipAffix="handleEquipAffix" @unequipAffix="handleUnequipAffix" />
           <InventoryView v-else-if="activeTab === 'bag'" :player="player"
@@ -89,7 +91,8 @@
             @use="handleUseItem" @sellMaterial="handleSellMaterial"
             @sellEquip="handleSellEquip" @equip="handleEquip" @enchant="handleEnchant" />
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
-            @select="handleAreaChange" @strategy-change="handleStrategyChange" />
+            @select="handleAreaChange" @strategy-change="handleStrategyChange"
+            @goRank="activeTab = 'rank'" />
           <CodexView v-else-if="activeTab === 'codex'" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend" />
@@ -100,10 +103,11 @@
     </main>
     <TutorialOverlay v-if="player && typeof player.tutorialStep==='number' && player.tutorialStep<6" :player="player" @next="handleTutorialNext" @skip="handleTutorialSkip" />
 
-    <!-- 底部 TabBar -->
+    <!-- 底部 TabBar（固定 5 个，中间地图凸起圆形） -->
     <nav class="tabbar">
-      <div v-for="tab in tabs" :key="tab.id" class="tabbar-item"
-        :class="{ active: activeTab === tab.id }" :data-tab="tab.id" @click="handleTabClick(tab.id)">
+      <div v-for="tab in mainTabs" :key="tab.id" class="tabbar-item"
+        :class="{ active: activeTab === tab.id, 'tabbar-center': tab.id === 'map' }"
+        :data-tab="tab.id" @click="handleTabClick(tab.id)">
         <span class="tabbar-icon">{{ tab.icon }}</span>
         <span class="tabbar-text">{{ tab.label }}</span>
         <span v-if="tab.badge" class="tabbar-badge">{{ tab.badge }}</span>
@@ -210,19 +214,17 @@ let prevLevel = 0
 let currentUser = ''
 const currentUserRef = ref('')
 
-const tabs = computed(() => [
+// 底部固定 5 个 Tab：角色、技能、地图(中间凸起)、背包、图鉴
+const mainTabs = computed(() => [
   { id: 'char', label: '角色', icon: '👤', badge: player.value?.attrPoints > 0 ? player.value.attrPoints : null },
   { id: 'skill', label: '技能', icon: '🔮', badge: null },
-  { id: 'bag', label: '背包', icon: '🎒', badge: null },
   { id: 'map', label: '地图', icon: '🗺', badge: null },
+  { id: 'bag', label: '背包', icon: '🎒', badge: null },
   { id: 'codex', label: '图鉴', icon: '📖', badge: null },
-  { id: 'evo', label: '进阶', icon: '🧬', badge: player.value?.canEvolve ? '!' : null },
-  { id: 'rank', label: '排行', icon: '🏆', badge: null },
-  { id: 'quest', label: '任务', icon: '📜', badge: (()=>{ const q=player.value?.questView; if(!q) return null; const dailyClaimable=q.dailyQuests?.filter(x=>x.done&&!x.claimed).length||0; const achClaimable=q.achievements?.filter(x=>x.unlocked&&!x.claimed).length||0; const chestClaimable=q.chest?.canClaim?1:0; const totalClaimable=dailyClaimable+achClaimable+chestClaimable; return totalClaimable>0?totalClaimable:null })() }
 ])
+const transitionName = ref('slide-left')
 
 const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest']
-const transitionName = ref('slide-left')
 
 watch(activeTab, (newTab, oldTab) => {
   const newIdx = tabOrder.indexOf(newTab)
@@ -441,6 +443,30 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 
 /* 商店按钮 */
 .shop-btn { font-size: 1rem !important; padding: 0.2rem 0.5rem !important; }
+
+/* 中间凸起地图按钮 */
+.tabbar-center {
+  position: relative;
+  margin-top: -1.4rem;
+  z-index: 2;
+}
+.tabbar-center .tabbar-icon {
+  width: 48px; height: 48px; line-height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent, #d4af5e), #c4a04e);
+  color: var(--bg, #0d0e1a);
+  font-size: 1.4rem;
+  display: block; margin: 0 auto;
+  box-shadow: 0 4px 14px rgba(212,175,94,0.4), 0 0 0 4px var(--bg2, #14162a);
+  transition: transform 0.2s var(--ease-out, ease), box-shadow 0.2s ease;
+}
+.tabbar-center.active .tabbar-icon {
+  box-shadow: 0 6px 20px rgba(212,175,94,0.6), 0 0 0 4px var(--bg2, #14162a);
+  transform: scale(1.08);
+}
+.tabbar-center .tabbar-text {
+  font-size: 0.6rem; margin-top: 0.15rem;
+}
 
 /* 商店底部弹窗 */
 .sheet-enter-active, .sheet-leave-active { transition: all var(--duration-slow, 300ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)); }

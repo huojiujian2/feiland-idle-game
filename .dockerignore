@@ -1,0 +1,49 @@
+# Dependencies
+node_modules
+client/node_modules
+
+# Build output
+client/dist
+dist
+
+# Database
+server/db.json
+
+# Tests
+server/*.test.js
+
+# Docker files (not needed inside image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Version control
+.git
+.gitignore
+
+# Environment
+.env
+.env.local
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Lock files (we use pnpm, not npm)
+package-lock.json
+
+# Windows-only files
+启动游戏.bat
+
+# Documentation (not needed in image)
+GAMEPLAY_GUIDE.html
+GAMEPLAY_TASKS.md
+AGENT.md
+AGENTS.md
+docs
