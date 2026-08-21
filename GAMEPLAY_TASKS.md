@@ -10,13 +10,13 @@
 | 维度 | 数值 |
 |------|------|
 | 总任务数 | 33 |
-| ✅ 已完成 | 5 |
+| ✅ 已完成 | 6 |
 | 🟡 进行中 | 0 |
-| ⬜ 待办 | 26 |
-| 高优先剩余 | 5 / 10 |
-| 完成率 | 15% |
+| ⬜ 待办 | 27 |
+| 高优先剩余 | 4 / 10 |
+| 完成率 | 18% |
 
-> 更新时间：2026-08-20 · 当前分支：`feat/T-005-skill` · 最后完成：`T-050 新手引导教程`
+> 更新时间：2026-08-20 · 当前分支：`feat/T-005-skill` · 最后完成：`T-005 手动技能释放`
 
 ---
 
@@ -127,13 +127,14 @@
 - 状态：✅ 已完成
 - 分支：`feat/T-004-strategy` · 完成时间：2026-08-20 · 验收：10 引擎单测 + 6 路由事务单测通过，`build`/`diff --check` 通过
 
-#### T-005 手动技能释放（主动词条实战） — 🔴 高优先 · 难度 ★★★★ · 🟡 进行中
+#### T-005 手动技能释放（主动词条实战） — 🔴 高优先 · 难度 ★★★★ · ✅ 已完成
 
 主动词条当前仅被动加成，需在战斗中实际生效：每 N 回合自动释放（或手动），`data.js` `AFFIX_TREE` 已定义 `effect.type`。
 
 - 步骤：`calculateIdle` 每回合检查主动词条 → 按 `damage/heal/atk_buff/def_buff/agi_buff/gold_buff` 执行 → CD（初5/中4/高3/大师2）→ 日志 `type:'skill'` 前端特殊渲染
-- 状态：🟡 进行中
-- 分支：`feat/T-005-skill` · Spec：`docs/specs/T-005-skill-spec.md` v9（已通过，开发中）
+- 技术：`server/data.js:ACTIVE_SKILL_CD` 5/4/3/2 单一数据源；`server/engine.js` `getActiveSkillCd/shouldTriggerActiveSkill` 回合顶部 `round%cd` 判定、第一条普通后追加（首杀不追加）、`applyBuff/expireBuffs` 单层刷新 `expireRound=round+turns`、局部 `deathShield` 单次消费、`type:'passive'` 分离、`selfHeal/selfHp` 复合保留、仅 `win` 时 `goldMult*=1+skillGoldBonus`；`client/src/components/MapView.vue` `processActions` 仅 `type!=='passive'` 入 `combo`（`item.totalDamage`）、`hit.type==='skill'` 高亮与 `selfHeal/selfHp`、`actionClass` 优先 `skill`；`client/src/style.css` `--skill-*` 纯净化
+- 状态：✅ 已完成
+- 分支：`feat/T-005-skill` · Spec：`docs/specs/T-005-skill-spec.md` v9 · 完成时间：2026-08-20 · 验收：`vite build`/`diff --check` 通过，`skill 19/19`（`CD/顺序/过期/经济/日志/combo/slice`）及全量 `69/69`
 
 #### T-006 BOSS 战与精英怪 — 🟡 中优先 · 难度 ★★★ · ⬜ 待办
 
@@ -356,7 +357,7 @@ JWT + `express-rate-limit` + 二次确认 + bcrypt + 参数校验。
 | T-002 | 战斗动作动画与特效 | 🔴 高 | ★★★ | T-001 | ⬜ 待办 | — | — |  |
 | T-003 | 战斗 BGM 与音效 | 🟢 低 | ★★ | 无 | ⬜ 待办 | — | — |  |
 | T-004 | 战斗策略模式选择 | 🔴 高 | ★★ | 无 | ✅ 已完成 | `feat/T-004-strategy` | 2026-08-20 | 单一数据源+两阶段事务+4列网格 |
-| T-005 | 手动技能释放（主动词条实战） | 🔴 高 | ★★★★ | 无 | 🟡 进行中 | `feat/T-005-skill` | — | Spec v9 已通过，开发中（v9 闭合主动/被动类型与 combo） |
+| T-005 | 手动技能释放（主动词条实战） | 🔴 高 | ★★★★ | 无 | ✅ 已完成 | `feat/T-005-skill` | 2026-08-20 | CD 5/4/3/2 普攻后追加 单层刷新 金币仅 win 19/19 |
 | T-006 | BOSS 战与精英怪 | 🟡 中 | ★★★ | 无 | ⬜ 待办 | — | — |  |
 | T-007 | 战斗结算评级 | 🟢 低 | ★★ | T-001 | ⬜ 待办 | — | — |  |
 | T-010 | 转生/轮回系统 | 🔴 高 | ★★★★ | 无 | ⬜ 待办 | — | — |  |
@@ -458,6 +459,7 @@ pnpm build            # 构建前端到 client/dist/
 
 | 日期 | 变更 | 分支 |
 |------|------|------|
+| 2026-08-20 | T-005 手动技能释放完成（CD 5/4/3/2 普攻后追加 单层刷新） | `feat/T-005-skill` |
 | 2026-08-20 | T-050 新手引导教程完成（6步 4块镂空 补偿重试） | `feat/T-050-tutorial` |
 | 2026-08-20 | T-040 任务/委托系统完成（日常6+宝箱/成就10 10/20） | `feat/T-040-quest` |
 | 2026-08-20 | T-001 战斗伤害数字飘字完成（overlay+1.5s飘字+暴击抖动） | `feat/T-001-damage-numbers` |
