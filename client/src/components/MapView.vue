@@ -295,6 +295,10 @@
       </button>
       <transition name="side-slide">
         <div v-if="sideOpen" class="side-tabs">
+          <div class="side-tab-item" @click="$emit('goBoss')">
+            <IconBase name="skull" :size="20" class="side-tab-icon" />
+            <span class="side-tab-label">世界 BOSS</span>
+          </div>
           <div class="side-tab-item" @click="$emit('goRank')">
             <span class="side-tab-icon">🏆</span>
             <span class="side-tab-label">排行榜</span>
@@ -314,7 +318,7 @@ import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import IconBase from './icons/IconBase.vue'
 
 const props = defineProps(['player', 'areas'])
-defineEmits(['select', 'strategy-change', 'goRank', 'goPvP'])
+defineEmits(['select', 'strategy-change', 'goRank', 'goPvP', 'goBoss'])
 
 const strategyCdRemaining = ref(0)
 const sideOpen = ref(false)
@@ -616,7 +620,12 @@ function dropQuality(name) {
 .cs-val.agi { color: var(--success); }
 
 /* 战斗日志 */
-.log-section { flex: 1; display: flex; flex-direction: column; min-height: 180px; overflow: hidden; position: relative; }
+.log-section { flex: 1 1 0; display: flex; flex-direction: column; min-height: 180px; max-height: 38vh; overflow: hidden; position: relative; }
+/* 上半部分允许滚动，避免把日志挤出 tabbar */
+.area-list { max-height: 26vh; overflow-y: auto; }
+.combat-stats { flex-shrink: 0; }
+.strategy-section { flex-shrink: 0; }
+.map-section { flex-shrink: 0; }
 .log-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.4rem; border-bottom: 1px solid var(--rule); margin-bottom: 0.3rem; font-size: 0.85rem; }
 .countdown-timer { display: flex; align-items: center; gap: 0.2rem; font-size: 0.7rem; color: var(--muted); }
 /* 飘字 overlay */

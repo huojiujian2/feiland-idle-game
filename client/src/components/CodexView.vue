@@ -13,7 +13,7 @@
     <div v-if="activeCat === 'material'" class="codex-grid">
       <div v-for="mat in pagedItems" :key="mat.name" class="codex-item"
         @click="selectItem(mat)">
-        <div class="item-icon mat-icon">📦</div>
+        <div class="item-icon mat-icon"><IconBase name="bag" :size="28" class="icon-accent2" /></div>
         <div class="item-name">{{ mat.name }}</div>
         <div class="item-price">💰{{ mat.price }}</div>
       </div>
@@ -23,7 +23,9 @@
     <div v-if="activeCat === 'equip'" class="codex-grid">
       <div v-for="eq in pagedItems" :key="eq.templateId" class="codex-item"
         @click="selectItem(eq)">
-        <div class="item-icon" :class="eq.quality">{{ equipIcons[eq.slot] }}</div>
+        <div class="item-icon" :class="eq.quality">
+          <IconBase :name="equipIcons[eq.slot]" :size="28" />
+        </div>
         <div class="item-name" :style="{ color: qualityColors[eq.quality] }">{{ eq.name }}</div>
         <div class="item-quality" :style="{ color: qualityColors[eq.quality] }">{{ qualityLabels[eq.quality] }}</div>
       </div>
@@ -33,7 +35,9 @@
     <div v-if="activeCat === 'consumable'" class="codex-grid">
       <div v-for="con in pagedItems" :key="con.id" class="codex-item"
         @click="selectItem(con)">
-        <div class="item-icon con-icon">{{ getConsumableIcon(con.id) }}</div>
+        <div class="item-icon con-icon">
+          <IconBase :name="getConsumableIconName(con.id)" :size="28" class="icon-accent2" />
+        </div>
         <div class="item-name">{{ con.name }}</div>
         <div class="item-price">💰{{ con.price }}</div>
       </div>
@@ -43,7 +47,7 @@
     <div v-if="activeCat === 'monster'" class="codex-grid">
       <div v-for="mo in pagedItems" :key="mo.name + mo.area" class="codex-item"
         @click="selectItem(mo)">
-        <div class="item-icon mon-icon">👹</div>
+        <div class="item-icon mon-icon"><IconBase name="skull" :size="28" /></div>
         <div class="item-name">{{ mo.name }}</div>
         <div class="item-area">{{ mo.areaName }}</div>
       </div>
@@ -183,6 +187,12 @@ function getConsumableIcon(id) {
   if (id.includes('exp')) return '📜'
   return '📦'
 }
+function getConsumableIconName(id) {
+  if (id.includes('hp')) return 'heart'
+  if (id.includes('mp')) return 'sparkle'
+  if (id.includes('exp')) return 'scroll'
+  return 'bag'
+}
 
 function selectItem(item) {
   selected.value = item
@@ -212,7 +222,7 @@ onMounted(async () => {
 .codex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 0.4rem; }
 .codex-item { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.5rem 0.3rem; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(24,26,46,0.4); text-align: center; }
 .codex-item:hover { border-color: var(--accent2); transform: translateY(-2px); }
-.item-icon { font-size: 1.5rem; }
+.item-icon { font-size: 1.5rem; display: flex; align-items: center; justify-content: center; }
 .item-icon.normal { filter: brightness(0.9); }
 .item-icon.fine { filter: hue-rotate(60deg); }
 .item-icon.epic { filter: hue-rotate(220deg); }

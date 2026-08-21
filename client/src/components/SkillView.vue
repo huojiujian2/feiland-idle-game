@@ -80,7 +80,7 @@
           @click="showDetail(affix)">
           <div class="cell-icon">
             <IconBase v-if="renderLevelIcon(getAffixIcon(affix)).type === 'icon'" :name="getAffixIcon(affix)" :size="22" class="icon-accent2" />
-            <span v-else>{{ getAffixIcon(affix) }}</span>
+            <span v-else class="raw-emoji">{{ getAffixIcon(affix) }}</span>
           </div>
           <div class="cell-name">{{ affix.name }}</div>
           <div class="cell-cat">{{ affix.category || affix.group || '' }}</div>
@@ -99,8 +99,14 @@
     <div v-if="detailAffix" class="modal-overlay" @click.self="detailAffix = null">
       <div class="modal-box">
         <div class="modal-title">
-          {{ getAffixIcon(detailAffix) }} {{ detailAffix.name }}
-          <span class="modal-level-tag">{{ detailAffix._levelIcon }} {{ detailAffix._levelName }}</span>
+          <IconBase v-if="renderLevelIcon(getAffixIcon(detailAffix)).type === 'icon'" :name="getAffixIcon(detailAffix)" :size="22" class="icon-accent2" />
+          <span v-else class="raw-emoji">{{ getAffixIcon(detailAffix) }}</span>
+          {{ detailAffix.name }}
+          <span class="modal-level-tag">
+            <IconBase v-if="renderLevelIcon(detailAffix._levelIcon).type === 'icon'" :name="detailAffix._levelIcon" :size="14" />
+            <span v-else class="raw-emoji">{{ detailAffix._levelIcon }}</span>
+            {{ detailAffix._levelName }}
+          </span>
         </div>
         <div class="modal-row"><span class="ml">类型</span><span class="mv">{{ subTab === 'active' ? '主动词条' : '被动词条' }}</span></div>
         <div class="modal-row" v-if="detailAffix.category || detailAffix.group"><span class="ml">分类</span><span class="mv">{{ detailAffix.category || detailAffix.group }}</span></div>
@@ -160,7 +166,7 @@ const levelOptions = computed(() => {
 
 function renderLevelIcon(name) {
   // 已知的 icon 名交给 IconBase，其他当成原始字符（emoji）渲染
-  const known = ['skill', 'sword', 'shield', 'bolt', 'sparkle', 'heart', 'skull', 'scroll', 'gold', 'star', 'flag', 'trophy', 'crossedSwords', 'user']
+  const known = ['skill', 'sword', 'shield', 'bolt', 'sparkle', 'heart', 'skull', 'scroll', 'gold', 'star', 'flag', 'trophy', 'crossedSwords', 'user', 'plus', 'minus', 'gem', 'confirm', 'close', 'feather', 'bag', 'map', 'book', 'dna', 'logout', 'shop', 'chevronRight']
   if (known.includes(name)) return { type: 'icon', name }
   return { type: 'raw', text: name }
 }
@@ -271,7 +277,7 @@ function handleUnequip() {
 .grid-cell { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.4rem 0.2rem; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; transition: all 0.15s; background: rgba(24,26,46,0.4); position: relative; text-align: center; }
 .grid-cell:hover { border-color: var(--accent2); transform: translateY(-2px); background: rgba(157,140,240,0.06); }
 .grid-cell.equipped { background: rgba(212,175,94,0.08); }
-.cell-icon { font-size: 1.3rem; }
+.cell-icon { font-size: 1.3rem; display: flex; align-items: center; justify-content: center; min-height: 28px; min-width: 28px; }
 .cell-name { font-size: 0.65rem; font-weight: 600; word-break: break-all; line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
 .cell-cat { font-size: 0.55rem; color: var(--dim); }
 .cell-badge { position: absolute; top: 1px; right: 3px; font-size: 0.6rem; color: var(--accent); font-weight: 700; }

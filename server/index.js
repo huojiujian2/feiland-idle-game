@@ -9,7 +9,9 @@ const {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
   chooseJob, equipItem, unequipItem, useConsumable, buyItem,
   sellMaterial, sellEquip,
-  evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
+  evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate, getReincarnationInfo,
+  upgradeEquipment, mergeEquipment, reforgeEquipment,
+  spawnWorldBoss, getActiveBoss, attackWorldBoss, getBossRanking,
   equipAffix, unequipAffix,
   getPowerScore, getTotalStats, getReadonlyPlayer, getStageFull,
   maybeResetWeeklyBossKills,
@@ -278,6 +280,47 @@ app.post('/api/player/:username/sell-equip', (req, res) => {
   const result = sellEquip(player, itemUid);
   if (!result.success) return res.json({ success: false, message: result.message });
   store.setPlayer(player.username, player);
+  res.json({ success: true, data: getPlayerView(player) });
+});
+
+// ====== 装备锻造：升级 ======
+app.post('/api/player/:username/equipment/upgrade', (req, res) => {
+  const { itemUid } = req.body || {};
+  if (!itemUid) return res.json({ success: false, message: '缺少 itemUid' });
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const result = upgradeEquipment(player, itemUid);
+  if (!result.success) return res.json({ success: false, message: result.message });
+  store.setPlayer(player.username, player);
+  store.save();
+  res.json({ success: true, data: getPlayerView(player), upgradeLevel: result.upgradeLevel, goldCost: result.goldCost });
+});
+
+// ====== 装备合成：3 合 1 ======
+app.post('/api/player/:username/equipment/merge', (req, res) => {
+  const { itemUids } = req.body || {};
+  if (!Array.isArray(itemUids) || itemUids.length !== 3) {
+    return res.json({ success: false, message: '需要选择 3 件装备' });
+  }
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const result = mergeEquipment(player, itemUids);
+  if (!result.success) return res.json({ success: false, message: result.message });
+  store.setPlayer(player.username, player);
+  store.save();
+  res.json({ success: true, data: getPlayerView(player), newItem: result.newItem });
+});
+
+// ====== 装备重铸 ======
+app.post('/api/player/:username/equipment/reforge', (req, res) => {
+  const { itemUid } = req.body || {};
+  if (!itemUid) return res.json({ success: false, message: '缺少 itemUid' });
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const result = reforgeEquipment(player, itemUid);
+  if (!result.success) return res.json({ success: false, message: result.message });
+  store.setPlayer(player.username, player);
+  store.save();
   res.json({ success: true, data: getPlayerView(player) });
 });
 
@@ -893,7 +936,56 @@ app.post('/api/player/:username/reincarnate', (req, res) => {
   const result = doReincarnate(player);
   if (!result.success) return res.json({ success: false, message: result.message });
   store.setPlayer(player.username, player);
-  res.json({ success: true, data: getPlayerView(player) });
+  res.json({ success: true, data: getPlayerView(player), earnedPoints: result.earnedPoints, reincarnation: result.reincarnation });
+});
+
+// 获取转生信息（前端展示用）
+app.get('/api/player/:username/reincarnation', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  res.json({ success: true, data: getReincarnationInfo(player) });
+});
+
+// ====== 世界 BOSS ======
+// 获取当前激活的世界 BOSS（如果没有就生成一个）
+app.get('/api/worldboss/active', (req, res) => {
+  const boss = getActiveBoss(store);
+  const ranking = getBossRanking(store, 10);
+  res.json({ success: true, data: { boss, ranking } });
+});
+
+// 玩家攻击世界 BOSS
+app.post('/api/player/:username/worldboss/attack', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  // 冷却：5 秒一次
+  player.lastBossAttackAt = player.lastBossAttackAt || 0;
+  if (getNow() - player.lastBossAttackAt < 5000) {
+    return res.json({ success: false, message: '攻击冷却中，请稍候' });
+  }
+  player.lastBossAttackAt = getNow();
+  const result = attackWorldBoss(store, req.params.username);
+  if (!result.success) return res.json({ success: false, message: result.message });
+  // 重新读取（settleWorldBossRewards 可能改了 player）
+  const updated = store.getPlayer(req.params.username);
+  res.json({
+    success: true,
+    damage: result.damage,
+    isCrit: result.isCrit,
+    bossHp: result.bossHp,
+    bossMaxHp: result.bossMaxHp,
+    myDamage: result.myDamage,
+    killed: result.killed,
+    finalHit: result.finalHit,
+    player: updated ? getPlayerView(updated) : null,
+  });
+});
+
+// 强制刷新世界 BOSS（管理员/调试用）
+app.post('/api/worldboss/spawn', (req, res) => {
+  const boss = spawnWorldBoss(store);
+  store.save();
+  res.json({ success: true, data: boss });
 });
 
 // ====== 战斗策略 ======
@@ -1113,6 +1205,11 @@ if (require.main === module) {
 
   // ====== 生产模式：托管前端构建产物 ======
   const distPath = path.join(__dirname, '..', 'client', 'dist');
+  // AI 生成的图标资源（PNG，存放在 client/public/icons/ai/）
+  const publicIconsPath = path.join(__dirname, '..', 'client', 'public', 'icons');
+  if (fs.existsSync(publicIconsPath)) {
+    app.use('/icons', express.static(publicIconsPath));
+  }
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {

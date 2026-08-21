@@ -11,6 +11,9 @@
       <button class="sub-tab" :class="{ active: subTab === 'ascend' }" @click="subTab = 'ascend'">
         <IconBase name="sparkle" :size="14" class="btn-icon" />登神
       </button>
+      <button class="sub-tab" :class="{ active: subTab === 'reinc' }" @click="subTab = 'reinc'; fetchReincInfo()">
+        <IconBase name="dna" :size="14" class="btn-icon" />转生
+      </button>
     </div>
 
     <!-- 种族进化 -->
@@ -174,17 +177,132 @@
         <div v-else class="ascend-locked">需先成为半神</div>
       </div>
     </div>
+
+    <!-- 转生 / 轮回 -->
+    <div v-if="subTab === 'reinc'" class="evo-section">
+      <!-- 当前轮回次数 -->
+      <div class="card reinc-header">
+        <div class="reinc-title">轮回 {{ reincInfo.reincarnation || 0 }} 次</div>
+        <div class="reinc-subtitle">累计转生点数：<b>{{ reincInfo.reincPoints || 0 }}</b></div>
+      </div>
+
+      <!-- 当前永久加成 -->
+      <div class="card reinc-buffs">
+        <div class="buffs-title">永久加成（当前）</div>
+        <div class="buff-grid">
+          <div class="buff-cell">
+            <span class="buff-label">经验</span>
+            <span class="buff-val">+{{ Math.round((reincInfo.permanentBuffs?.expBonus || 0) * 100) }}%</span>
+          </div>
+          <div class="buff-cell">
+            <span class="buff-label">金币</span>
+            <span class="buff-val">+{{ Math.round((reincInfo.permanentBuffs?.goldBonus || 0) * 100) }}%</span>
+          </div>
+          <div class="buff-cell">
+            <span class="buff-label">基础攻击</span>
+            <span class="buff-val">+{{ reincInfo.permanentBuffs?.baseAtkBonus || 0 }}</span>
+          </div>
+          <div class="buff-cell">
+            <span class="buff-label">基础防御</span>
+            <span class="buff-val">+{{ reincInfo.permanentBuffs?.baseDefBonus || 0 }}</span>
+          </div>
+          <div class="buff-cell">
+            <span class="buff-label">基础生命</span>
+            <span class="buff-val">+{{ reincInfo.permanentBuffs?.baseHpBonus || 0 }}</span>
+          </div>
+          <div class="buff-cell">
+            <span class="buff-label">基础敏捷</span>
+            <span class="buff-val">+{{ reincInfo.permanentBuffs?.baseAgiBonus || 0 }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 下一级预览 -->
+      <div class="card reinc-preview">
+        <div class="preview-title">转生 1 次后将获得</div>
+        <div class="preview-grid">
+          <span>经验/金币加成：+{{ Math.round(((reincInfo.nextBuffs?.expBonus || 0) - (reincInfo.permanentBuffs?.expBonus || 0)) * 100) }}%</span>
+          <span>基础攻击/防御/生命/敏捷：各 +5</span>
+          <span>转生点数：+{{ reincEstimatePoints }}</span>
+        </div>
+      </div>
+
+      <!-- 转生条件 -->
+      <div class="card reinc-reqs">
+        <div class="reqs-title">转生条件</div>
+        <div class="req-row" :class="{ met: player.level >= 100 }">
+          <span class="req-icon">{{ player.level >= 100 ? '✓' : '✗' }}</span>
+          <span>等级 Lv.100（当前 Lv.{{ player.level }}）</span>
+        </div>
+        <div class="req-row" :class="{ met: reincInfo.canReincarnate && player.level >= 100 }">
+          <span class="req-icon">{{ reincInfo.canReincarnate ? '✓' : '✗' }}</span>
+          <span>通关龙岛或更高级区域</span>
+        </div>
+      </div>
+
+      <button class="btn btn-primary reinc-btn"
+        :class="{ 'btn-disabled': !reincInfo.canReincarnate || player.level < 100 || reincLoading }"
+        :disabled="reincLoading"
+        @click="doReincarnate">
+        {{ reincLoading ? '轮回中...' : '立即转生' }}
+      </button>
+      <div class="reinc-warning">
+        ⚠ 转生将重置等级、经验、属性点；装备、词条、法则、登神进度、积分、材料保留
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import IconBase from './icons/IconBase.vue'
+import api from '../api.js'
 
 const props = defineProps(['player'])
-defineEmits(['evolve', 'learnLaw', 'ascend'])
+const emit = defineEmits(['evolve', 'learnLaw', 'ascend', 'reincarnated'])
 
 const subTab = ref('race')
+
+// 转生系统
+const reincInfo = ref({
+  reincarnation: 0,
+  reincPoints: 0,
+  permanentBuffs: { expBonus: 0, goldBonus: 0, baseAtkBonus: 0, baseDefBonus: 0, baseHpBonus: 0, baseAgiBonus: 0 },
+  nextBuffs: { expBonus: 0, goldBonus: 0, baseAtkBonus: 0, baseDefBonus: 0, baseHpBonus: 0, baseAgiBonus: 0 },
+  canReincarnate: false,
+  level: 1,
+})
+const reincLoading = ref(false)
+async function fetchReincInfo() {
+  if (!props.player.username) return
+  try {
+    const res = await api.getReincarnationInfo(props.player.username)
+    if (res.success) reincInfo.value = res.data
+  } catch (e) { /* ignore */ }
+}
+// 预估算转生点：基于当前总属性 / 100
+const reincEstimatePoints = computed(() => {
+  const a = props.player.attributes || {}
+  return Math.max(1, Math.floor((a.atk || 0) + (a.def || 0) + (a.hp || 0) + (a.agi || 0)) / 100)
+})
+async function doReincarnate() {
+  if (!confirm('确认转生？等级、经验、属性点将重置（永久加成保留）')) return
+  reincLoading.value = true
+  try {
+    const res = await api.reincarnate(props.player.username)
+    if (res.success) {
+      emit('reincarnated', res.data)
+      await fetchReincInfo()
+      alert(`转生成功！第 ${res.reincarnation} 轮回，获得 ${res.earnedPoints} 转生点`)
+    } else {
+      alert(res.message || '转生失败')
+    }
+  } catch (e) {
+    alert('转生失败：' + (e.message || '网络错误'))
+  } finally {
+    reincLoading.value = false
+  }
+}
 
 const RACE_IMAGES = {
   '鹰人': '/img/race-eagle.jpg',
@@ -199,6 +317,8 @@ const nextRaceImg = computed(() => {
 })
 
 const raceInfo = computed(() => props.player.raceInfo || { current: null, next: null })
+
+onMounted(() => { fetchReincInfo() })
 const lawBonus = computed(() => props.player.lawBonus || {})
 const ascInfo = computed(() => props.player.ascensionInfo || { demigod: {}, god: {} })
 
@@ -320,4 +440,26 @@ function allAttrsMet(req) {
 .ascend-btn { width: 100%; }
 .ascend-done { text-align: center; color: var(--success); font-size: 0.82rem; font-weight: 600; }
 .ascend-locked { text-align: center; color: var(--dim); font-size: 0.78rem; }
+
+/* 转生 / 轮回 */
+.reinc-header { text-align: center; padding: 1rem; background: linear-gradient(135deg, rgba(212,175,94,0.08), rgba(157,140,240,0.08)); }
+.reinc-title { font-size: 1.3rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.reinc-subtitle { font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; }
+.reinc-subtitle b { color: var(--accent); font-weight: 700; }
+.reinc-buffs { padding: 0.8rem; }
+.buffs-title { font-size: 0.85rem; font-weight: 600; color: var(--ink); margin-bottom: 0.5rem; }
+.buff-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+.buff-cell { display: flex; flex-direction: column; align-items: center; padding: 0.4rem 0.2rem; background: rgba(20,22,42,0.4); border: 1px solid var(--rule); border-radius: 6px; }
+.buff-label { font-size: 0.68rem; color: var(--muted); }
+.buff-val { font-size: 0.95rem; font-weight: 700; color: var(--accent); margin-top: 0.15rem; }
+.reinc-preview { padding: 0.8rem; border-color: rgba(212,175,94,0.3); background: rgba(212,175,94,0.04); }
+.preview-title { font-size: 0.82rem; color: var(--accent); font-weight: 600; margin-bottom: 0.4rem; }
+.preview-grid { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78rem; color: var(--ink); }
+.reinc-reqs { padding: 0.8rem; }
+.reqs-title { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--ink); }
+.req-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--dim); padding: 0.15rem 0; }
+.req-row.met { color: var(--success); }
+.req-icon { font-weight: 700; width: 16px; }
+.reinc-btn { width: 100%; margin-top: 0.4rem; }
+.reinc-warning { margin-top: 0.5rem; font-size: 0.7rem; color: var(--dim); text-align: center; line-height: 1.5; }
 </style>

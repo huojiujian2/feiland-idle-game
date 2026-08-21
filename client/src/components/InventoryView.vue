@@ -69,6 +69,37 @@
             <span class="enchant-desc">{{ getEnchantDesc(enchId) }}</span>
           </div>
         </div>
+        <!-- 锻造 / 升级 -->
+        <div class="forge-section">
+          <div class="forge-header">锻造升级（+{{ detailItem.upgradeLevel || 0 }}/10）</div>
+          <div class="forge-cost">
+            下次升级：{{ getUpgradeCost() }} 金币 + {{ detailItem.upgradeLevel ? (detailItem.upgradeLevel + 1) : 1 }} 个
+            {{ getUpgradeMaterial() }}
+          </div>
+          <button class="btn btn-primary btn-sm forge-btn"
+            :class="{ 'btn-disabled': !canUpgrade() }"
+            @click="handleUpgrade">强化 +{{ (detailItem.upgradeLevel || 0) + 1 }}</button>
+        </div>
+        <!-- 合成：加入合成槽 -->
+        <div class="forge-section">
+          <div class="forge-header">合成（3 件同品质 → 1 件更高品质）</div>
+          <button class="btn btn-sm"
+            :class="{ 'btn-primary': !inMergeSlots(detailItem.uid), 'btn-disabled': inMergeSlots(detailItem.uid) || (detailItem.upgradeLevel || 0) > 0 }"
+            @click="toggleMergeSlot(detailItem.uid)">
+            {{ inMergeSlots(detailItem.uid) ? '已加入合成槽' : '加入合成槽' }}
+          </button>
+          <button class="btn btn-sm btn-primary" style="margin-left: 0.3rem;"
+            :class="{ 'btn-disabled': mergeSlots.length !== 3 }"
+            @click="handleMerge">立即合成（已选 {{ mergeSlots.length }}/3）</button>
+          <div v-if="(detailItem.upgradeLevel || 0) > 0" class="forge-tip">⚠ 已强化装备合成后强化等级会丢失</div>
+        </div>
+        <!-- 重铸 -->
+        <div class="forge-section">
+          <div class="forge-header">重铸词条</div>
+          <div class="forge-cost">消耗 1000 金币，随机生成新的被动词条</div>
+          <button class="btn btn-sm" :class="{ 'btn-disabled': player.gold < 1000 }"
+            @click="handleReforge">消耗1000金 重铸</button>
+        </div>
         <div v-if="availableEnchants.length > 0 && (!detailItem.enchants || detailItem.enchants.length < 3)" class="enchant-section">
           <div class="enchant-header">可用附魔</div>
           <div v-for="recipe in availableEnchants" :key="recipe.id" class="enchant-recipe"
@@ -128,13 +159,94 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import IconBase from './icons/IconBase.vue'
+import api from '../api.js'
 
 const props = defineProps(['player', 'qualityColors', 'materialPrices'])
-const emit = defineEmits(['use', 'sellMaterial', 'sellEquip', 'equip', 'enchant'])
+const emit = defineEmits(['use', 'sellMaterial', 'sellEquip', 'equip', 'enchant', 'refresh'])
 
 const detailItem = ref(null)
 const itemDetail = ref(null)
 const useQty = ref({})
+// 合成槽（最多 3 件同品质装备）
+const mergeSlots = ref([])
+
+// 锻造相关（与后端常量保持一致）
+const UPGRADE_LEVEL_MAX = 10
+const UPGRADE_BASE_GOLD = 200
+const QUALITY_GOLD_MULT = { normal: 1, fine: 1.5, epic: 2.5, legend: 4 }
+const UPGRADE_MATERIAL_BY_QUALITY = {
+  normal: '青铜矿', fine: '铁矿', epic: '飞龙鳞片', legend: '龙鳞'
+}
+
+function getUpgradeCost() {
+  if (!detailItem.value) return 0
+  const cur = detailItem.value.upgradeLevel || 0
+  const q = detailItem.value.quality
+  return Math.floor(UPGRADE_BASE_GOLD * Math.pow(1.5, cur) * (QUALITY_GOLD_MULT[q] || 1))
+}
+function getUpgradeMaterial() {
+  return UPGRADE_MATERIAL_BY_QUALITY[detailItem.value?.quality] || '青铜矿'
+}
+function canUpgrade() {
+  if (!detailItem.value) return false
+  const cur = detailItem.value.upgradeLevel || 0
+  if (cur >= UPGRADE_LEVEL_MAX) return false
+  if ((props.player.gold || 0) < getUpgradeCost()) return false
+  const matName = getUpgradeMaterial()
+  const matCount = cur + 1
+  const inv = (props.player.inventory || []).find(i => i.name === matName)
+  return inv && inv.count >= matCount
+}
+async function handleUpgrade() {
+  if (!detailItem.value) return
+  if (!confirm(`确认消耗 ${getUpgradeCost()} 金币 + ${(detailItem.value.upgradeLevel||0)+1} 个 ${getUpgradeMaterial()} 强化到 +${(detailItem.value.upgradeLevel||0)+1}？`)) return
+  try {
+    const res = await api.upgradeEquipment(props.player.username, detailItem.value.uid)
+    if (res.success) {
+      emit('refresh', res.data)
+      detailItem.value = res.data.equips.find(e => e.uid === detailItem.value.uid)
+        || Object.values(res.data.equipped || {}).find(e => e && e.uid === detailItem.value.uid)
+        || detailItem.value
+      alert('强化成功！')
+    } else alert(res.message || '强化失败')
+  } catch (e) { alert('强化失败：' + e.message) }
+}
+function inMergeSlots(uid) { return mergeSlots.value.includes(uid) }
+function toggleMergeSlot(uid) {
+  if (mergeSlots.value.includes(uid)) {
+    mergeSlots.value = mergeSlots.value.filter(x => x !== uid)
+  } else {
+    if (mergeSlots.value.length >= 3) return
+    mergeSlots.value = [...mergeSlots.value, uid]
+  }
+}
+async function handleMerge() {
+  if (mergeSlots.value.length !== 3) return alert('需选择 3 件装备')
+  if (!confirm('3 件装备将消失，合成 1 件更高品质装备（强化等级会丢失）。继续？')) return
+  try {
+    const res = await api.mergeEquipment(props.player.username, mergeSlots.value)
+    if (res.success) {
+      emit('refresh', res.data)
+      alert(`合成成功！获得「${res.newItem.name}」`)
+      mergeSlots.value = []
+      detailItem.value = null
+    } else alert(res.message || '合成失败')
+  } catch (e) { alert('合成失败：' + e.message) }
+}
+async function handleReforge() {
+  if (!detailItem.value) return
+  if (!confirm('消耗 1000 金币重洗这件装备的词条。继续？')) return
+  try {
+    const res = await api.reforgeEquipment(props.player.username, detailItem.value.uid)
+    if (res.success) {
+      emit('refresh', res.data)
+      detailItem.value = res.data.equips.find(e => e.uid === detailItem.value.uid)
+        || Object.values(res.data.equipped || {}).find(e => e && e.uid === detailItem.value.uid)
+        || detailItem.value
+      alert('重铸完成！')
+    } else alert(res.message || '重铸失败')
+  } catch (e) { alert('重铸失败：' + e.message) }
+}
 
 const equipPage = ref(1)
 const matPage = ref(1)
@@ -273,6 +385,13 @@ function handleEnchant(recipeId) {
 .modal-action-btn { width: 100%; margin-top: 0.3rem; }
 .modal-actions { display: flex; gap: 0.3rem; margin-top: 0.5rem; }
 .modal-actions .btn { flex: 1; }
+
+/* 锻造 / 合成 / 重铸 */
+.forge-section { padding: 0.5rem; border: 1px solid var(--rule); border-radius: 6px; margin-top: 0.4rem; background: rgba(212,175,94,0.04); }
+.forge-header { font-size: 0.8rem; font-weight: 600; color: var(--accent); margin-bottom: 0.3rem; }
+.forge-cost { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.3rem; }
+.forge-btn { width: 100%; }
+.forge-tip { font-size: 0.68rem; color: #d4af5e; margin-top: 0.3rem; }
 .modal-close-btn { width: 100%; margin-top: 0.3rem; }
 
 /* 数量控制 */

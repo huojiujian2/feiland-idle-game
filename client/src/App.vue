@@ -94,17 +94,20 @@
           <InventoryView v-else-if="activeTab === 'bag'" :player="player"
             :qualityColors="qualityColors" :materialPrices="materialPrices"
             @use="handleUseItem" @sellMaterial="handleSellMaterial"
-            @sellEquip="handleSellEquip" @equip="handleEquip" @enchant="handleEnchant" />
+            @sellEquip="handleSellEquip" @equip="handleEquip" @enchant="handleEnchant"
+            @refresh="player = $event" />
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
-            @select="handleAreaChange" @strategy-change="handleStrategyChange"
-            @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" />
+              @select="handleAreaChange" @strategy-change="handleStrategyChange"
+              @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" @goBoss="activeTab = 'boss'" />
           <CodexView v-else-if="activeTab === 'codex'" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
-            @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend" />
+            @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend"
+            @reincarnated="player = $event" />
           <LeaderboardView v-else-if="activeTab === 'rank'" :currentUser="currentUserRef" />
           <QuestView v-else-if="activeTab === 'quest'" :player="player" :currentUser="currentUserRef" @refresh="player = $event" />
           <PvPView v-else-if="activeTab === 'pvp'" :player="player" :currentUser="currentUserRef"
             @goBack="activeTab = 'map'" @updatePlayer="player = $event" />
+          <WorldBossView v-else-if="activeTab === 'boss'" :player="player" :currentUser="currentUserRef" />
         </div>
       </transition>
     </main>
@@ -198,6 +201,7 @@ import EvolutionView from './components/EvolutionView.vue'
 import LeaderboardView from './components/LeaderboardView.vue'
 import QuestView from './components/QuestView.vue'
 import PvPView from './components/PvPView.vue'
+import WorldBossView from './components/WorldBossView.vue'
 import TutorialOverlay from './components/TutorialOverlay.vue'
 
 const player = ref(null)

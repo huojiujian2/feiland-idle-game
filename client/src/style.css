@@ -292,15 +292,9 @@ html, body {
   background: linear-gradient(0deg, rgba(10,11,20,0.98), rgba(10,11,20,0.9));
   backdrop-filter: blur(12px);
   border-top: 1px solid rgba(157,140,240,0.08);
-  z-index: 50;
+  z-index: 100;
   position: relative;
-}
-.tabbar::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent 10%, rgba(212,175,94,0.12) 50%, transparent 90%);
+  overflow: visible;
 }
 .tabbar-item {
   flex: 1;
@@ -312,10 +306,19 @@ html, body {
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-out);
   position: relative;
-  border-top: 2px solid transparent;
+}
+.tabbar-item::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 0; height: 2px;
+  background: var(--accent);
+  transition: width var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 .tabbar-item:hover { background: rgba(157,140,240,0.04); }
-.tabbar-item.active { border-top-color: var(--accent); }
+.tabbar-item.active::before { width: 60%; }
+/* 中间凸起的地图 tab：不画顶部边框线（避免视觉错位），改用图标发光指示 */
+.tabbar-center.active::before { display: none; }
 .tabbar-item.active .tabbar-icon {
   color: var(--accent);
   transform: scale(1.15);

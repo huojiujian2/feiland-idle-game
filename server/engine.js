@@ -8,6 +8,9 @@ const {
   STRATEGIES, STRATEGY_CD_MS,
   ACTIVE_SKILL_CD,
   INITIAL_MATERIAL_POOL, DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS,
+  WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS,
+  UPGRADE_LEVEL_MAX, UPGRADE_BASE_GOLD, QUALITY_GOLD_MULT, QUALITY_STAT_MULT, UPGRADE_MATERIAL_BY_QUALITY,
+  QUALITY_ORDER, QUALITY_NEXT,
   getStage, expToNext, createEquipItem,
   PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, SEASON_MONTHS,
   ARENA_RANK_REWARDS, ARENA_EQUIPMENT, BOT_NAMES, BOT_JOB_PREF
@@ -441,6 +444,18 @@ function getRaceBonus(player) {
 }
 
 // ====== 法则加成 ======
+function getReincarnationBonus(player) {
+  const b = player.permanentBuffs || {};
+  return {
+    baseAtk: b.baseAtkBonus || 0,
+    baseDef: b.baseDefBonus || 0,
+    baseHp: b.baseHpBonus || 0,
+    baseAgi: b.baseAgiBonus || 0,
+    expBonus: b.expBonus || 0,
+    goldBonus: b.goldBonus || 0,
+  };
+}
+
 function getLawBonus(player) {
   const bonus = { damage: 0, defense: 0, exp: 0, gold: 0, heal: 0, allAttr: 0 };
   for (const lawId of player.laws) {
@@ -587,16 +602,17 @@ function getTotalStats(player) {
   const raceBonus = getRaceBonus(player);
   const lawBonus = getLawBonus(player);
   const godBonus = getGodhoodBonus(player);
+  const reincBonus = getReincarnationBonus(player);
   const talents = getJobTalents(player);
   const mechanics = getJobMechanics(player);
   const base = player.attributes;
   const allAttrMult = 1 + (lawBonus.allAttr || 0);
 
-  // 基础值 = 等级成长 + 属性点 + 装备 + 种族/登神加成
-  const baseAtk = (10 + (player.level - 1) * 3 + base.atk * 2 + eq.atk + (raceBonus.str || 0) * 2 + (godBonus.atk || 0) * 2);
-  const baseDef = (5 + (player.level - 1) * 2 + base.def * 1.5 + eq.def + (raceBonus.con || 0) * 1.5 + (godBonus.def || 0) * 1.5);
-  const baseHp = (100 + (player.level - 1) * 20 + base.hp * 10 + eq.hp + (raceBonus.con || 0) * 5 + (godBonus.hp || 0) * 5);
-  const baseAgi = (10 + (player.level - 1) * 2 + base.agi * 1 + eq.agi + (raceBonus.agi || 0) + (godBonus.agi || 0));
+  // 基础值 = 等级成长 + 属性点 + 装备 + 种族/登神加成 + 轮回永久加成
+  const baseAtk = (10 + (player.level - 1) * 3 + base.atk * 2 + eq.atk + (raceBonus.str || 0) * 2 + (godBonus.atk || 0) * 2 + reincBonus.baseAtk);
+  const baseDef = (5 + (player.level - 1) * 2 + base.def * 1.5 + eq.def + (raceBonus.con || 0) * 1.5 + (godBonus.def || 0) * 1.5 + reincBonus.baseDef);
+  const baseHp = (100 + (player.level - 1) * 20 + base.hp * 10 + eq.hp + (raceBonus.con || 0) * 5 + (godBonus.hp || 0) * 5 + reincBonus.baseHp);
+  const baseAgi = (10 + (player.level - 1) * 2 + base.agi * 1 + eq.agi + (raceBonus.agi || 0) + (godBonus.agi || 0) + reincBonus.baseAgi);
 
   // 策略百分比加成（战斗向，仅 atk/def/regen）
   const strat = STRATEGIES[player.strategy] || STRATEGIES.balanced;
@@ -974,7 +990,7 @@ function simulatePvP(playerA, playerB) {
       return;
     }
 
-    const skill = pickPvPSkill(atkCombat, round, atkCombat === combatA ? cdA : cdB);
+    const skill = pickPvPSkill(atkCombat, rounds.length, atkCombat === combatA ? cdA : cdB);
     let mult = 1;
     let skillName = '普通攻击';
 
@@ -1219,9 +1235,9 @@ function genBotId(idx) {
   return `bot_${getNow()}_${idx}_${Math.floor(Math.random() * 10000)}`;
 }
 
-function createBot(idx, baseLevel, rating) {
-  // baseLevel 在 [baseLevel-5, baseLevel+5] 内随机
-  const level = Math.max(1, baseLevel + Math.floor((Math.random() - 0.5) * 10));
+function createBot(idx, baseLevel, rating, tierOffset = 0) {
+  // tierOffset: -5（低5） / 0（同级） / +5（高5）—— 控制 BOT 强度档位
+  const level = Math.max(1, baseLevel);
   const isFemale = Math.random() < 0.5;
   const baseName = pickRandom(isFemale ? BOT_NAMES.female : BOT_NAMES.male);
 
@@ -1268,18 +1284,30 @@ function createBot(idx, baseLevel, rating) {
   const pointsHp  = Math.floor(totalPoints * wHp  / wSum);
   const pointsAgi = totalPoints - pointsAtk - pointsDef - pointsHp;
 
-  baseChar.attributes = {
-    atk: 5 + pointsAtk,
-    def: 4 + pointsDef,
-    hp:  5 + pointsHp,
-    agi: 8 + pointsAgi
-  };
+  // 强度档位缩放：低5级 → 50%（玩家轻松碾压）、同级 → 100%、高5级 → 150%（玩家需要认真打）
+  const tierScale = tierOffset >= 4 ? 1.50 : tierOffset <= -4 ? 0.50 : 1.00;
 
-  // 装备：根据等级档位选装备（Lv.<20 普通，<40 精良，<60 史诗，≥60 传说）
-  const targetQuality = level >= 60 ? 'legend' : level >= 30 ? 'epic' : level >= 15 ? 'fine' : 'normal';
+  baseChar.attributes = {
+    atk: Math.floor((5 + pointsAtk) * tierScale),
+    def: Math.floor((4 + pointsDef) * tierScale),
+    hp:  Math.floor((5 + pointsHp ) * tierScale),
+    agi: Math.floor((8 + pointsAgi) * tierScale)
+  };
+  baseChar.botTier = tierOffset; // 标记档位，方便前端展示
+
+  // 装备：根据等级+档位选装备品质（低5级强制普通，同级按等级，高5级强制传说）
+  let targetQuality;
+  if (tierOffset >= 4) {
+    targetQuality = 'legend';
+  } else if (tierOffset <= -4) {
+    targetQuality = level >= 15 ? 'fine' : 'normal';
+  } else {
+    targetQuality = level >= 60 ? 'legend' : level >= 30 ? 'epic' : level >= 15 ? 'fine' : 'normal';
+  }
   const eqPool = Object.values(EQUIP_TEMPLATES).filter(t =>
     t.reqLevel <= level && t.quality === targetQuality
   );
+  // 按 slot 分组
   const slotMap = { weapon: null, armor: null, accessory: null };
   for (const slot of ['weapon', 'armor', 'accessory']) {
     const candidates = eqPool.filter(t => t.slot === slot);
@@ -1297,6 +1325,31 @@ function createBot(idx, baseLevel, rating) {
       };
     }
   }
+
+  // 附魔：根据档位决定附魔数量（低5级 0，同级 1，高5级 2）
+  const enchantCount = tierOffset >= 4 ? 2 : tierOffset <= -4 ? 0 : 1;
+  const enchantPool = ENCHANT_RECIPES.filter(r => {
+    const slot = slotMap[r.slot];
+    return slot && r.reqLevel <= level;
+  });
+  if (enchantPool.length > 0 && enchantCount > 0) {
+    const copy = [...enchantPool];
+    for (let i = 0; i < Math.min(enchantCount, copy.length); i++) {
+      const recipe = pickRandom(copy);
+      copy.splice(copy.indexOf(recipe), 1);
+      const slot = slotMap[recipe.slot];
+      if (slot) {
+        slot.enchants.push(recipe.id);
+        // 应用附魔加成到 stats
+        if (recipe.bonus) {
+          for (const [k, v] of Object.entries(recipe.bonus)) {
+            slot.stats[k] = (slot.stats[k] || 0) + v;
+          }
+        }
+      }
+    }
+  }
+
   baseChar.equipped = slotMap;
   baseChar.equips = Object.values(slotMap).filter(Boolean);
   baseChar.inventory = [];
@@ -1316,18 +1369,56 @@ function createBot(idx, baseLevel, rating) {
     }
   }
 
-  // 主动词条槽：如果有可解锁的，从池中随机选 1 个
-  const botActive = allActiveIds.length > 0 ? pickRandom(allActiveIds) : null;
+  // 主动词条槽：根据档位差异化配置
+  // 低5级 → 30% 概率装主动词条（弱技能），同级 → 70%，高5级 → 100% 装最优主动
+  let botActive = null;
+  const activeChance = tierOffset >= 4 ? 1.0 : tierOffset <= -4 ? 0.30 : 0.70;
+  if (allActiveIds.length > 0 && Math.random() < activeChance) {
+    if (tierOffset >= 4) {
+      // 高5级：从当前等级可解锁的最高级词条池里挑（伤害型优先）
+      const highestLevel = affixLvls[affixLvls.length - 1];
+      const candidates = (AFFIX_TREE[highestLevel] || []).filter(a => a.slot === 'active');
+      botActive = candidates.length > 0 ? pickRandom(candidates).id : pickRandom(allActiveIds);
+    } else {
+      botActive = pickRandom(allActiveIds);
+    }
+  }
   // 被动词条：从池中随机选 passiveCount 个
+  // 低5级 → 最多2个被动（弱），同级 → 标配，高5级 → 满被动 + 优先高级被动
+  const tierPassiveMul = tierOffset >= 4 ? 1.0 : tierOffset <= -4 ? 0.4 : 0.7;
+  const finalPassiveCount = Math.max(1, Math.floor(passiveCount * tierPassiveMul));
   const botPassive = [];
   if (allPassiveIds.length > 0) {
     const copy = [...allPassiveIds];
-    for (let i = 0; i < Math.min(passiveCount, copy.length); i++) {
+    for (let i = 0; i < Math.min(finalPassiveCount, copy.length); i++) {
       const idx2 = Math.floor(Math.random() * copy.length);
       botPassive.push(copy.splice(idx2, 1)[0]);
     }
   }
   baseChar.affixes = { active: botActive, passive: botPassive };
+
+  // 策略选择：低5级随便，同级偏 aggressive/balanced，高5级强制 defensive + greedy 配合
+  if (tierOffset >= 4) {
+    baseChar.strategy = pickRandom(['defensive', 'greedy', 'defensive', 'aggressive']);
+  } else if (tierOffset <= -4) {
+    baseChar.strategy = pickRandom(['aggressive', 'balanced', 'balanced']);
+  } else {
+    baseChar.strategy = pickRandom(['aggressive', 'aggressive', 'balanced', 'defensive']);
+  }
+
+  // 法则系统：根据档位决定法则数量（低5级 0，同级 1，高5级 3+）
+  // Lv.100+ 才解锁法则，所以低等级 bot 这一步自动跳过
+  const lawCount = tierOffset >= 4 ? 3 : tierOffset <= -4 ? 0 : 1;
+  if (lawCount > 0 && level >= 100) {
+    const availableLaws = LAWS.filter(l => l.reqLevel <= level);
+    const copy = [...availableLaws];
+    for (let i = 0; i < Math.min(lawCount, copy.length); i++) {
+      const law = pickRandom(copy);
+      copy.splice(copy.indexOf(law), 1);
+      if (!baseChar.laws) baseChar.laws = [];
+      if (!baseChar.laws.includes(law.id)) baseChar.laws.push(law.id);
+    }
+  }
 
   // 种族：默认鹰人；Lv.30+ 随机进化到翼人；Lv.80+ 进化到天使
   let race = '鹰人';
@@ -1361,12 +1452,14 @@ function createBot(idx, baseLevel, rating) {
 }
 
 // 动态生成 3 个 Bot（对手）
+// 固定档位：3 个 bot 分别是 -5 / 0 / +5 等级差，让玩家从"碾压"到"苦战"梯度体验
 function generateArenaBots(playerLevel, playerRating) {
+  const tierOffsets = [-5, 0, 5]; // 低5 / 同级 / 高5
   const bots = [];
   for (let i = 0; i < 3; i++) {
     // 积分略高于玩家 0~100 之间随机
     const rating = playerRating + Math.floor(Math.random() * 200) - 50;
-    const bot = createBot(i, playerLevel, Math.max(800, rating));
+    const bot = createBot(i, playerLevel + tierOffsets[i], Math.max(800, rating), tierOffsets[i]);
     bots.push(bot);
   }
   return bots;
@@ -1498,8 +1591,8 @@ function calculateIdle(player) {
   let drops = [];
 
   // 基础倍率（保留现有回归项）
-  let expMult = 1 + total.expBonus + lawBonus.exp + (raceBonus.exp || 0);
-  let goldMult = 1 + total.goldBonus + lawBonus.gold;
+  let expMult = 1 + total.expBonus + reincBonus.expBonus + lawBonus.exp + (raceBonus.exp || 0);
+  let goldMult = 1 + total.goldBonus + reincBonus.goldBonus + lawBonus.gold;
   if (player.godhood === 'demigod') expMult *= 1.5;
   if (player.godhood === 'god') expMult *= 2;
   // 策略收益倍率（插入点固定，读 STRATEGIES 单一数据源）
@@ -1722,10 +1815,11 @@ function recalcMaxStats(player) {
   const affix = getAffixBonus(player);
   const raceBonus = getRaceBonus(player);
   const godBonus = getGodhoodBonus(player);
+  const reincBonus = getReincarnationBonus(player);
   const base = player.attributes;
   const godMult = player.godhood === 'demigod' ? 2 : (player.godhood === 'god' ? 3 : 1);
 
-  const baseHp = 100 + (player.level - 1) * 20 + base.hp * 10 + eq.hp + (raceBonus.con || 0) * 5 + (godBonus.hp || 0) * 5;
+  const baseHp = 100 + (player.level - 1) * 20 + base.hp * 10 + eq.hp + (raceBonus.con || 0) * 5 + (godBonus.hp || 0) * 5 + reincBonus.baseHp;
   player.maxHp = Math.floor(baseHp * (1 + affix.hp) * godMult);
   player.maxMp = (50 + (player.level - 1) * 10 + eq.mp) * godMult;
   if (player.hp > player.maxHp) player.hp = player.maxHp;
@@ -1947,6 +2041,155 @@ function enchantItem(player, itemUid, recipeId) {
   return { success: true };
 }
 
+// ====== 装备升级（锻造） ======
+// 装备 +1：每级 +5% 基础属性，金币按品质系数翻倍，材料按等级递增
+function upgradeEquipment(player, itemUid) {
+  player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
+  const item = player.equips.find(e => e.uid === itemUid)
+    || Object.values(player.equipped || {}).find(e => e && e.uid === itemUid);
+  if (!item) return { success: false, message: '装备不存在' };
+  const cur = item.upgradeLevel || 0;
+  if (cur >= UPGRADE_LEVEL_MAX) return { success: false, message: `已达最高强化等级 +${UPGRADE_LEVEL_MAX}` };
+  const targetLv = cur + 1;
+  const cost = Math.floor(UPGRADE_BASE_GOLD * Math.pow(1.5, cur) * (QUALITY_GOLD_MULT[item.quality] || 1));
+  const matSpec = UPGRADE_MATERIAL_BY_QUALITY[item.quality];
+  const matCount = targetLv; // +1→1, +2→2 ...
+  if ((player.gold || 0) < cost) return { success: false, message: `金币不足，需要 ${cost}` };
+  const inv = player.inventory.find(i => i.name === matSpec.name);
+  if (!inv || inv.count < matCount) return { success: false, message: `需要 ${matSpec.name} ×${matCount}` };
+
+  // 扣费
+  player.gold -= cost;
+  inv.count -= matCount;
+  if (inv.count <= 0) player.inventory = player.inventory.filter(i => i !== inv);
+
+  // 提升属性（5% 每级），原属性按 1.05^level 倍提升
+  item.upgradeLevel = targetLv;
+  if (item.baseStats) {
+    // 已经升级过：baseStats 是原始 stats
+    for (const k of Object.keys(item.baseStats)) {
+      item.stats[k] = Math.floor(item.baseStats[k] * Math.pow(1.05, targetLv));
+    }
+  } else {
+    // 第一次升级：冻结原始值作为 baseStats
+    item.baseStats = { ...item.stats };
+    for (const k of Object.keys(item.baseStats)) {
+      item.stats[k] = Math.floor(item.baseStats[k] * 1.05);
+    }
+  }
+  recalcMaxStats(player);
+  player.logs = player.logs || [];
+  player.logs.push({ time: getNow(), type: 'upgrade', text: `【锻造】${item.name} 强化至 +${targetLv}（消耗 ${cost} 金币 + ${matSpec.name}×${matCount}）` });
+  return { success: true, upgradeLevel: targetLv, goldCost: cost };
+}
+
+// ====== 装备合成（3 合 1） ======
+// 3 件同品质 → 1 件高一阶品质的随机装备（按当前等级档位）
+function mergeEquipment(player, itemUids) {
+  player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
+  if (!Array.isArray(itemUids) || itemUids.length !== 3) return { success: false, message: '需要 3 件装备' };
+
+  // 找到 3 件装备
+  const items = [];
+  for (const uid of itemUids) {
+    const it = player.equips.find(e => e.uid === uid)
+      || Object.values(player.equipped || {}).find(e => e && e.uid === uid);
+    if (!it) return { success: false, message: `装备 ${uid} 不存在` };
+    items.push(it);
+  }
+  const q = items[0].quality;
+  if (!items.every(i => i.quality === q)) return { success: false, message: '3 件装备必须同一品质' };
+  const next = QUALITY_NEXT[q];
+  if (!next) return { success: false, message: '已是最高品质传说级，无法合成' };
+
+  // 找当前等级可用的高一阶品质装备池
+  const pool = Object.values(EQUIP_TEMPLATES).filter(t =>
+    t.quality === next && t.reqLevel <= player.level
+  );
+  if (pool.length === 0) return { success: false, message: `当前等级 (Lv.${player.level}) 没有可合成的高品质装备模板` };
+
+  // 随机抽 1 件同 slot 的
+  const slots = items.map(i => i.slot);
+  const targetSlot = slots[Math.floor(_rand() * slots.length)];
+  const candidates = pool.filter(t => t.slot === targetSlot);
+  if (candidates.length === 0) return { success: false, message: `当前等级没有 ${targetSlot} 类型的 ${next} 装备模板` };
+
+  const tpl = candidates[Math.floor(_rand() * candidates.length)];
+
+  // 删除 3 件原装备
+  for (const it of items) {
+    if (player.equipped && Object.values(player.equipped).some(e => e && e.uid === it.uid)) {
+      // 已装备：从 equipped 移除
+      for (const [slot, eq] of Object.entries(player.equipped)) {
+        if (eq && eq.uid === it.uid) player.equipped[slot] = null;
+      }
+    }
+    player.equips = player.equips.filter(e => e.uid !== it.uid);
+  }
+
+  // 生成新装备（继承最高 upgradeLevel）
+  const maxUp = Math.max(...items.map(i => i.upgradeLevel || 0));
+  const newItem = {
+    uid: genUid(),
+    templateId: tpl.id || tpl.name,
+    name: tpl.name,
+    slot: tpl.slot,
+    quality: tpl.quality,
+    reqLevel: tpl.reqLevel,
+    stats: { ...tpl.stats },
+    enchants: [],
+    upgradeLevel: maxUp,
+  };
+  // 如果继承了升级等级，要还原到新装备上
+  if (maxUp > 0) {
+    newItem.baseStats = { ...newItem.stats };
+    for (const k of Object.keys(newItem.baseStats)) {
+      newItem.stats[k] = Math.floor(newItem.baseStats[k] * Math.pow(1.05, maxUp));
+    }
+  }
+  player.equips.push(newItem);
+
+  recalcMaxStats(player);
+  player.logs = player.logs || [];
+  player.logs.push({ time: getNow(), type: 'merge', text: `【合成】3 件 ${q} → 1 件 ${next} 装备「${newItem.name}」（slot=${targetSlot}）` });
+  return { success: true, newItem };
+}
+
+// ====== 装备重铸（重洗词条） ======
+// 消耗金币：random 数重置，随机生成 1-2 个新词条（限同等级的 AFFIX 池）
+function reforgeEquipment(player, itemUid, cost = 1000) {
+  player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
+  const item = player.equips.find(e => e.uid === itemUid)
+    || Object.values(player.equipped || {}).find(e => e && e.uid === itemUid);
+  if (!item) return { success: false, message: '装备不存在' };
+  if ((player.gold || 0) < cost) return { success: false, message: `金币不足，需要 ${cost}` };
+  // 删词条，加新词条（1-2 条，从当前等级可解锁的 AFFIX 池抽）
+  item.enchants = []; // 不影响附魔，只清 affix-like 字段
+  item.affixes = [];
+  const lvls = (function(){
+    if (typeof getUnlockedAffixLevels === 'function') return getUnlockedAffixLevels(player.level);
+    return Object.keys(AFFIX_TREE).map(Number).filter(l => l <= 100);
+  })();
+  // 简单生成 1 个被动词条
+  const affixPool = [];
+  for (const lv of lvls) {
+    for (const a of (AFFIX_TREE[lv] || [])) {
+      if (a.slot === 'passive') affixPool.push({ id: a.id, level: lv });
+    }
+  }
+  if (affixPool.length > 0) {
+    const pick = affixPool[Math.floor(_rand() * affixPool.length)];
+    item.affixes.push({ id: pick.id, level: pick.level });
+  }
+  player.gold -= cost;
+  player.logs = player.logs || [];
+  player.logs.push({ time: getNow(), type: 'reforge', text: `【重铸】${item.name} 词条重置（消耗 ${cost} 金币）` });
+  return { success: true };
+}
+
 // ====== 学习法则 ======
 function learnLaw(player, lawId) {
   player = migratePlayer(player);
@@ -1968,20 +2211,264 @@ function doReincarnate(player) {
   player = migratePlayer(player);
   refreshDailyIfNeeded(player);
   if (player.level < 100) return { success: false, message: '需要 Lv.100 才能转生' };
+  // 通关要求：必须击败过龙岛（长岛）或更高级区域
+  const maxClearedArea = player.stats?.maxClearedArea || 'gaomanshan';
+  const areaOrder = ['gaomanshan','miyusenlin','hanhaisenlin','donghaizhibin','tiantangshan','jingchengwaibi','longdao','shenyuan'];
+  const curIdx = areaOrder.indexOf(maxClearedArea);
+  if (curIdx < areaOrder.indexOf('longdao')) {
+    return { success: false, message: '需先通关「龙岛」才可转生' };
+  }
+
+  // 累积转生点数 = 转生前总属性 / 100（向下取整）
+  const totalAttr = (player.attributes.atk || 0) + (player.attributes.def || 0) +
+                    (player.attributes.hp || 0) + (player.attributes.agi || 0);
+  const earnedPoints = Math.max(1, Math.floor(totalAttr / 100));
+
   player.reincarnation = (player.reincarnation || 0) + 1;
+  player.reincPoints = (player.reincPoints || 0) + earnedPoints;
+
+  // 永久加成：每转生 1 次 +2% 经验/+2% 金币（封顶30%），基础属性 +5
+  const rc = player.reincarnation;
+  player.permanentBuffs = {
+    expBonus: Math.min(0.30, rc * 0.02),       // +2%/次，封顶30%
+    goldBonus: Math.min(0.30, rc * 0.02),
+    baseAtkBonus: rc * 5,
+    baseDefBonus: rc * 5,
+    baseHpBonus: rc * 5,
+    baseAgiBonus: rc * 5,
+  };
+
+  // 重置等级、经验、属性点
   player.level = 1;
   player.exp = 0;
   player.attrPoints = 0;
   player.skillPoints = 0;
-  // 重置属性为初始值，避免 2580/1040 残留
   player.attributes = { atk: 5, def: 4, hp: 5, agi: 8 };
+  // 种族：转生不影响种族进化进度，但 stage 重置为 0（保留已经学到的种族特性）
+  // 这里选择保留种族不变，更友好
+  // player.race = '鹰人'; player.raceStage = 0;
+
   recalcMaxStats(player);
   player.hp = player.maxHp;
   player.mp = player.maxMp;
   player.lastTick = getNow();
-  player.logs.push({ time: getNow(), type: 'reincarnate', text: `转生成功！第 ${player.reincarnation} 次轮回，属性已重置，战力将重新成长` });
+
+  player.logs = player.logs || [];
+  player.logs.push({
+    time: getNow(),
+    type: 'reincarnate',
+    text: `【轮回 ${player.reincarnation}】转生成功！获得 ${earnedPoints} 转生点，永久 +${Math.round(player.permanentBuffs.expBonus*100)}% 经验/+${Math.round(player.permanentBuffs.goldBonus*100)}% 金币/基础属性 +5`
+  });
+
   checkAchievements(player);
-  return { success: true };
+  return { success: true, earnedPoints, reincarnation: player.reincarnation };
+}
+
+// 转生信息查询（前端展示用）
+function getReincarnationInfo(player) {
+  player = migratePlayer(player);
+  const rc = player.reincarnation || 0;
+  const nextCap = 30; // 30%
+  return {
+    reincarnation: rc,
+    reincPoints: player.reincPoints || 0,
+    permanentBuffs: player.permanentBuffs || {
+      expBonus: 0,
+      goldBonus: 0,
+      baseAtkBonus: 0,
+      baseDefBonus: 0,
+      baseHpBonus: 0,
+      baseAgiBonus: 0,
+    },
+    // 下一级的加成预览
+    nextBuffs: {
+      expBonus: Math.min(nextCap, (rc + 1) * 0.02),
+      goldBonus: Math.min(nextCap, (rc + 1) * 0.02),
+      baseAtkBonus: (rc + 1) * 5,
+      baseDefBonus: (rc + 1) * 5,
+      baseHpBonus: (rc + 1) * 5,
+      baseAgiBonus: (rc + 1) * 5,
+    },
+    canReincarnate: (player.level >= 100) &&
+      ((player.stats && player.stats.maxClearedArea &&
+        ['longdao','shenyuan'].includes(player.stats.maxClearedArea)) || rc > 0),
+    level: player.level,
+  };
+}
+
+// ====== 世界 BOSS 系统 ======
+function spawnWorldBoss(store) {
+  const meta = store.getMeta();
+  const tpl = WORLD_BOSS_TEMPLATES[Math.floor(_rand() * WORLD_BOSS_TEMPLATES.length)];
+  meta.worldBoss = {
+    id: tpl.id,
+    name: tpl.name,
+    icon: tpl.icon,
+    desc: tpl.desc,
+    hp: tpl.baseHp,
+    maxHp: tpl.baseHp,
+    atk: tpl.baseAtk,
+    def: tpl.baseDef,
+    agi: tpl.baseAgi,
+    skillChance: tpl.skillChance,
+    spawnedAt: getNow(),
+    rewards: tpl.rewards,
+    finalHitRewards: tpl.finalHitRewards,
+    damageLog: {}, // username -> 累计伤害
+    finalHitBy: null,
+    dead: false,
+  };
+  store.setMeta(meta);
+  return meta.worldBoss;
+}
+
+function getActiveBoss(store) {
+  const meta = store.getMeta();
+  if (!meta.worldBoss || meta.worldBoss.dead) {
+    // 检查是否需要生成（30 分钟间隔）
+    const lastSpawn = meta.worldBoss ? meta.worldBoss.spawnedAt : 0;
+    if (!meta.worldBoss || getNow() - lastSpawn >= WORLD_BOSS_SPAWN_INTERVAL_MS) {
+      return spawnWorldBoss(store);
+    }
+    return null;
+  }
+  return meta.worldBoss;
+}
+
+// 玩家攻击世界 BOSS
+function attackWorldBoss(store, username) {
+  const meta = store.getMeta();
+  const boss = meta.worldBoss;
+  if (!boss || boss.dead) return { success: false, message: '当前没有可攻击的世界 BOSS' };
+
+  // 取玩家
+  const player = store.getPlayer(username);
+  if (!player) return { success: false, message: '玩家不存在' };
+
+  // 用玩家自己的总攻击做伤害计算（简化版，避免走完整 PvP 模拟）
+  const stats = getTotalStats(player);
+  // BOSS 防御减少伤害
+  let damage = Math.max(1, stats.atk - boss.def);
+  // 暴击：玩家 crit 概率
+  const isCrit = _rand() < (stats.crit || 0);
+  if (isCrit) damage = Math.floor(damage * 1.5);
+  // 浮动 ±10%
+  damage = Math.floor(damage * (0.9 + _rand() * 0.2));
+
+  // 应用伤害
+  boss.hp = Math.max(0, boss.hp - damage);
+  boss.damageLog = boss.damageLog || {};
+  boss.damageLog[username] = (boss.damageLog[username] || 0) + damage;
+
+  let killed = false;
+  let rewards = null;
+  if (boss.hp <= 0) {
+    boss.dead = true;
+    boss.killedAt = getNow();
+    boss.finalHitBy = username;
+    killed = true;
+    rewards = settleWorldBossRewards(store, boss);
+  }
+
+  store.setMeta(meta);
+  store.save();
+
+  // 给发起攻击的玩家发放参与奖（仅参与就给基础奖励）
+  if (!killed) {
+    grantWorldBossParticipation(player, boss);
+    store.setPlayer(username, player);
+    store.save();
+  }
+
+  return {
+    success: true,
+    damage,
+    isCrit,
+    bossHp: boss.hp,
+    bossMaxHp: boss.maxHp,
+    myDamage: boss.damageLog[username],
+    killed,
+    rewards, // 击杀奖励（全员获奖时才非 null）
+    finalHit: username === boss.finalHitBy,
+  };
+}
+
+// 给参与玩家发放基础奖励（金币/经验按伤害占比）
+function grantWorldBossParticipation(player, boss) {
+  const myDmg = boss.damageLog[player.username] || 0;
+  const totalDmg = Object.values(boss.damageLog).reduce((a, b) => a + b, 0);
+  const ratio = totalDmg > 0 ? myDmg / totalDmg : 0;
+  // 玩家获得金币/经验 = 基础奖励 × 个人贡献比
+  const baseGold = boss.rewards?.gold || 0;
+  const baseExp = boss.rewards?.exp || 0;
+  const goldGain = Math.floor(baseGold * ratio);
+  const expGain = Math.floor(baseExp * ratio);
+  player.gold = (player.gold || 0) + goldGain;
+  player.exp = (player.exp || 0) + expGain;
+  // 材料：参与即发放 1 份
+  if (boss.rewards?.materials) {
+    for (const m of boss.rewards.materials) {
+      const inv = player.inventory.find(i => i.name === m.name);
+      if (inv) inv.count += Math.max(1, Math.floor(m.count * Math.max(0.3, ratio)));
+      else player.inventory.push({ name: m.name, count: Math.max(1, Math.floor(m.count * Math.max(0.3, ratio))), type: 'material' });
+    }
+  }
+}
+
+// 结算世界 BOSS 击杀奖励
+function settleWorldBossRewards(store, boss) {
+  const ranked = Object.entries(boss.damageLog || {})
+    .map(([username, dmg]) => ({ username, dmg }))
+    .sort((a, b) => b.dmg - a.dmg);
+
+  const result = { participants: ranked.length, top: [] };
+  // 给所有参与者发放最终结算奖励（追加一次，防止之前没发完）
+  for (const r of ranked) {
+    const p = store.getPlayer(r.username);
+    if (!p) continue;
+    // 最后一击者额外奖励
+    if (r.username === boss.finalHitBy) {
+      if (boss.finalHitRewards) {
+        p.gold = (p.gold || 0) + (boss.finalHitRewards.gold || 0);
+        p.exp = (p.exp || 0) + (boss.finalHitRewards.exp || 0);
+        if (boss.finalHitRewards.materials) {
+          for (const m of boss.finalHitRewards.materials) {
+            const inv = p.inventory.find(i => i.name === m.name);
+            if (inv) inv.count += m.count;
+            else p.inventory.push({ name: m.name, count: m.count, type: 'material' });
+          }
+        }
+      }
+      // 写入击杀日志
+      p.logs = p.logs || [];
+      p.logs.push({
+        time: getNow(),
+        type: 'world-boss',
+        text: `【世界 BOSS】你击杀了 ${boss.name}！获得额外击杀奖励`,
+      });
+    } else {
+      p.logs = p.logs || [];
+      p.logs.push({
+        time: getNow(),
+        type: 'world-boss',
+        text: `【世界 BOSS】${boss.name} 已被击杀，你参与了战斗`,
+      });
+    }
+    store.setPlayer(r.username, p);
+  }
+  result.top = ranked.slice(0, 5);
+  return result;
+}
+
+// 获取世界 BOSS 伤害排行（前 10）
+function getBossRanking(store, limit = 10) {
+  const meta = store.getMeta();
+  const boss = meta.worldBoss;
+  if (!boss) return [];
+  return Object.entries(boss.damageLog || {})
+    .map(([username, dmg]) => ({ username, damage: dmg }))
+    .sort((a, b) => b.damage - a.damage)
+    .slice(0, limit);
 }
 
 // ====== 登神 ======
@@ -2148,7 +2635,9 @@ module.exports = {
   createCharacter, calculateIdle, allocateAttributes, autoAllocateAttributes, getPlayerView,
   migratePlayer, getReadonlyPlayer, chooseJob, equipItem, unequipItem,
   useConsumable, buyItem, recalcMaxStats, sellMaterial, sellEquip,
-  evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
+  evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate, getReincarnationInfo,
+  upgradeEquipment, mergeEquipment, reforgeEquipment,
+  spawnWorldBoss, getActiveBoss, attackWorldBoss, getBossRanking,
   simulateBattle, simulatePvP, calcPvpRating, calcPvpRewards,
   getCombatStats, getTotalStats, getPowerScore, getStageFull,
   getCurrentWeekKey, maybeResetWeeklyBossKills,

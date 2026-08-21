@@ -17,7 +17,16 @@ const MONSTER_SKILLS = {
   steam_blast:{name: '蒸汽爆破',chance: 0.15, mult: 1.6, desc: '蒸汽爆炸' },
   holy_smite:{ name: '圣光击', chance: 0.15, mult: 1.7, desc: '光属性打击' },
   serpent_bite:{name:'蛇毒噬咬',chance: 0.22, mult: 1.5, desc: '蛇毒噬咬' },
-  wing_blade:{ name: '翼刃斩', chance: 0.18, mult: 1.6, desc: '翼羽如刃' }
+  wing_blade:{ name: '翼刃斩', chance: 0.18, mult: 1.6, desc: '翼羽如刃' },
+  // 高阶新技能
+  void_nova:   { name: '虚空新星', chance: 0.08, mult: 2.8, desc: '以自身为中心的虚空爆破' },
+  time_stop:   { name: '时间停止', chance: 0.06, mult: 3.0, desc: '冻结时空后全力一击' },
+  star_arrow:  { name: '星辰箭',   chance: 0.10, mult: 2.4, desc: '凝聚星光的箭矢' },
+  god_smash:   { name: '神怒一击', chance: 0.05, mult: 3.5, desc: '诸神愤怒的一击' },
+  element_storm:{ name: '元素风暴', chance: 0.08, mult: 2.6, desc: '召唤元素乱流' },
+  divine_judgment:{ name: '神圣审判',chance: 0.07, mult: 3.2, desc: '神的审判之光' },
+  soul_split:  { name: '灵魂分裂', chance: 0.10, mult: 2.3, desc: '分裂灵魂攻击' },
+  realm_rift:  { name: '界域崩裂', chance: 0.06, mult: 3.0, desc: '撕裂位面界限' },
 };
 
 // ====== 挂机区域（8个，覆盖前期到后期） ======
@@ -95,7 +104,10 @@ const AREAS = {
       { type: 'material', name: '光明晶', rate: 0.04 },
       { type: 'material', name: '天使之羽', rate: 0.01 },
       { type: 'equip', template: 'holy_blade', rate: 0.005 },
-      { type: 'equip', template: 'light_wings', rate: 0.003 }
+      { type: 'equip', template: 'light_wings', rate: 0.003 },
+      { type: 'equip', template: 'ranger_bow', rate: 0.008 },
+      { type: 'equip', template: 'paladin_shield', rate: 0.006 },
+      { type: 'equip', template: 'timekeeper_amulet', rate: 0.004 }
     ]
   },
   jingchengwaibi: {
@@ -110,7 +122,8 @@ const AREAS = {
       { type: 'material', name: '附魔卷轴', rate: 0.06 },
       { type: 'material', name: '炼金材料', rate: 0.10 },
       { type: 'equip', template: 'knight_blade', rate: 0.005 },
-      { type: 'equip', template: 'golem_armor', rate: 0.004 }
+      { type: 'equip', template: 'golem_armor', rate: 0.004 },
+      { type: 'equip', template: 'sage_robe', rate: 0.005 }
     ]
   },
   longdao: {
@@ -125,7 +138,8 @@ const AREAS = {
       { type: 'material', name: '龙鳞', rate: 0.08 },
       { type: 'material', name: '龙血', rate: 0.03 },
       { type: 'equip', template: 'dragon_slayer', rate: 0.003 },
-      { type: 'equip', template: 'dragon_armor', rate: 0.002 }
+      { type: 'equip', template: 'dragon_armor', rate: 0.002 },
+      { type: 'equip', template: 'warlord_blade', rate: 0.005 }
     ]
   },
   shenyuan: {
@@ -141,6 +155,101 @@ const AREAS = {
       { type: 'material', name: '深渊之石', rate: 0.08 },
       { type: 'equip', template: 'void_blade', rate: 0.002 },
       { type: 'equip', template: 'abyss_cloak', rate: 0.0015 }
+    ]
+  },
+  // ====== 高阶区域（Lv.130+）======
+  elementshenyuan: {
+    id: 'elementshenyuan', name: '元素深渊', minLevel: 130,
+    desc: '六大元素失控之地，每一步都在与自然之力搏斗',
+    monsters: [
+      { name: '元素怨灵', exp: 5000, gold: 1000, hp: 40000, atk: 350, def: 150, agi: 80, skills: ['element_storm','void_nova'] },
+      { name: '炎魔', exp: 7000, gold: 1500, hp: 60000, atk: 420, def: 180, agi: 60, skills: ['fire_breath','soul_split'] },
+      { name: '冰霜女巫', exp: 6500, gold: 1300, hp: 50000, atk: 400, def: 200, agi: 90, skills: ['ice_breath','time_stop'] },
+      { name: '雷霆巨像', exp: 8500, gold: 1800, hp: 80000, atk: 480, def: 250, agi: 50, skills: ['element_storm','realm_rift'], isBoss: true },
+      { name: '虚空元素', exp: 7500, gold: 1600, hp: 70000, atk: 450, def: 220, agi: 100, skills: ['void_nova','star_arrow'] }
+    ],
+    drops: [
+      { type: 'material', name: '法则碎片', rate: 0.08 },
+      { type: 'material', name: '深渊之石', rate: 0.10 },
+      { type: 'equip', template: 'starforged_blade', rate: 0.005 },
+      { type: 'equip', template: 'element_crown', rate: 0.004 },
+      { type: 'equip', template: 'godheart_orb', rate: 0.003 },
+      { type: 'equip', template: 'abyss_devourer', rate: 0.004 },
+      { type: 'equip', template: 'dragon_lord_plate', rate: 0.0035 },
+      { type: 'equip', template: 'phoenix_feather', rate: 0.003 }
+    ]
+  },
+  xingjiezhanchang: {
+    id: 'xingjiezhanchang', name: '星界战场', minLevel: 150,
+    desc: '诸神黄昏的遗迹残骸，无数英雄的灵魂在此激荡',
+    monsters: [
+      { name: '星界骑士', exp: 12000, gold: 2500, hp: 100000, atk: 600, def: 280, agi: 90, skills: ['star_arrow','wing_blade'] },
+      { name: '堕落天使', exp: 15000, gold: 3000, hp: 130000, atk: 700, def: 320, agi: 110, skills: ['divine_judgment','holy_smite'] },
+      { name: '暗影巫王', exp: 18000, gold: 3500, hp: 160000, atk: 750, def: 350, agi: 100, skills: ['soul_drain','void_nova'] },
+      { name: '星辰巨龙', exp: 25000, gold: 5000, hp: 250000, atk: 900, def: 450, agi: 80, skills: ['fire_breath','star_arrow','realm_rift'], isBoss: true }
+    ],
+    drops: [
+      { type: 'material', name: '法则碎片', rate: 0.10 },
+      { type: 'equip', template: 'realm_breaker', rate: 0.003 },
+      { type: 'equip', template: 'void_dragonscale', rate: 0.0025 },
+      { type: 'equip', template: 'eternity_band', rate: 0.002 },
+      { type: 'equip', template: 'realm_walker_boots', rate: 0.002 }
+    ]
+  },
+  shenmodian: {
+    id: 'shenmodian', name: '神魔殿', minLevel: 180,
+    desc: '诸神的最终试炼之所，唯有真正的英雄方能进入',
+    monsters: [
+      { name: '神官祭司', exp: 30000, gold: 6000, hp: 300000, atk: 1200, def: 600, agi: 120, skills: ['divine_judgment','holy_smite'] },
+      { name: '魔将', exp: 35000, gold: 7000, hp: 400000, atk: 1400, def: 700, agi: 100, skills: ['god_smash','realm_rift'] },
+      { name: '时间操控者', exp: 40000, gold: 8000, hp: 500000, atk: 1600, def: 800, agi: 200, skills: ['time_stop','star_arrow'] },
+      { name: '原初之神', exp: 80000, gold: 20000, hp: 1500000, atk: 2500, def: 1200, agi: 150, skills: ['god_smash','divine_judgment','time_stop','realm_rift'], isBoss: true }
+    ],
+    drops: [
+      { type: 'material', name: '法则碎片', rate: 0.20 },
+      { type: 'equip', template: 'creators_blade', rate: 0.002 },
+      { type: 'equip', template: 'god_plate', rate: 0.0015 },
+      { type: 'equip', template: 'origin_eye', rate: 0.001 }
+    ]
+  },
+  // ====== 终极区域（Lv.200+）======
+  eternity_void: {
+    id: 'eternity_void', name: '永恒虚空', minLevel: 200,
+    desc: '超越神魔的禁地，时间在这里停止流动',
+    monsters: [
+      { name: '虚空行者·极', exp: 80000, gold: 15000, hp: 800000, atk: 2200, def: 1000, agi: 200, skills: ['void_nova','realm_rift'] },
+      { name: '永恒守卫', exp: 90000, gold: 18000, hp: 1000000, atk: 2400, def: 1100, agi: 180, skills: ['time_stop','god_smash'] },
+      { name: '虚空之主', exp: 150000, gold: 30000, hp: 3000000, atk: 3000, def: 1500, agi: 220, skills: ['god_smash','divine_judgment','realm_rift','time_stop'], isBoss: true }
+    ],
+    drops: [
+      { type: 'material', name: '法则碎片', rate: 0.30 },
+      { type: 'equip', template: 'infinity_edge', rate: 0.003 }
+    ]
+  },
+  chrono_realm: {
+    id: 'chrono_realm', name: '时之境', minLevel: 220,
+    desc: '时间与空间的交汇处，过去与未来在这里重叠',
+    monsters: [
+      { name: '时之精灵', exp: 120000, gold: 25000, hp: 1500000, atk: 3000, def: 1500, agi: 250, skills: ['time_stop','star_arrow'] },
+      { name: '永恒骑士', exp: 150000, gold: 30000, hp: 2000000, atk: 3500, def: 1800, agi: 220, skills: ['divine_judgment','wing_blade'] },
+      { name: '时之龙王', exp: 300000, gold: 60000, hp: 6000000, atk: 4500, def: 2200, agi: 250, skills: ['god_smash','realm_rift','time_stop'], isBoss: true }
+    ],
+    drops: [
+      { type: 'material', name: '法则碎片', rate: 0.40 },
+      { type: 'equip', template: 'chrono_armor', rate: 0.003 }
+    ]
+  },
+  genesis_core: {
+    id: 'genesis_core', name: '创世核心', minLevel: 250,
+    desc: '万物起源之处，全知全能者居住的最终领域',
+    monsters: [
+      { name: '造物者投影', exp: 300000, gold: 60000, hp: 5000000, atk: 5000, def: 2500, agi: 300, skills: ['god_smash','divine_judgment'] },
+      { name: '原初之魂', exp: 400000, gold: 80000, hp: 8000000, atk: 6000, def: 3000, agi: 350, skills: ['time_stop','realm_rift'] },
+      { name: '万界之眼', exp: 800000, gold: 200000, hp: 30000000, atk: 8000, def: 4000, agi: 400, skills: ['god_smash','divine_judgment','time_stop','realm_rift'], isBoss: true }
+    ],
+    drops: [
+      { type: 'material', name: '法则碎片', rate: 0.50 },
+      { type: 'equip', template: 'omni_eye', rate: 0.002 }
     ]
   }
 };
@@ -171,7 +280,32 @@ const EQUIP_TEMPLATES = {
   crystal_ring:    { name: '水晶戒指',   slot: 'accessory', quality: 'fine',   reqLevel: 15, stats: { mp: 30, spi: 3 } },
   sea_amulet:     { name: '海灵护符',   slot: 'accessory', quality: 'epic',   reqLevel: 30, stats: { mp: 80, spi: 8, exp: 0.1 } },
   angel_feather:  { name: '天使之羽',   slot: 'accessory', quality: 'epic',   reqLevel: 50, stats: { hp: 200, mp: 100, exp: 0.15 } },
-  dragon_eye:     { name: '龙之眼',     slot: 'accessory', quality: 'legend', reqLevel: 90, stats: { atk: 50, def: 50, exp: 0.25 } }
+  dragon_eye:     { name: '龙之眼',     slot: 'accessory', quality: 'legend', reqLevel: 90, stats: { atk: 50, def: 50, exp: 0.25 } },
+  // Lv.130+ 高阶装备
+  starforged_blade: { name: '星辰锻造之刃', slot: 'weapon', quality: 'legend', reqLevel: 130, stats: { atk: 500, str: 60, spi: 40, agi: 25 } },
+  element_crown:    { name: '元素王冠',     slot: 'armor',  quality: 'legend', reqLevel: 130, stats: { def: 380, hp: 3500, con: 50, spi: 30 } },
+  godheart_orb:     { name: '神心宝珠',     slot: 'accessory', quality: 'legend', reqLevel: 130, stats: { atk: 200, def: 200, critDmg: 0.30, allAttr: 0.05 } },
+  realm_breaker:    { name: '界域破碎者',   slot: 'weapon', quality: 'legend', reqLevel: 150, stats: { atk: 800, str: 100, spi: 80, agi: 50 } },
+  void_dragonscale: { name: '虚空龙鳞甲',   slot: 'armor',  quality: 'legend', reqLevel: 150, stats: { def: 600, hp: 6000, con: 80, agi: 30 } },
+  eternity_band:    { name: '永恒之环',     slot: 'accessory', quality: 'legend', reqLevel: 150, stats: { atk: 350, def: 350, critDmg: 0.40, ignoreDef: 0.20 } },
+  creators_blade:   { name: '造物主之剑',   slot: 'weapon', quality: 'legend', reqLevel: 180, stats: { atk: 1500, str: 200, spi: 150, agi: 80 } },
+  god_plate:        { name: '神祇战甲',     slot: 'armor',  quality: 'legend', reqLevel: 180, stats: { def: 1000, hp: 12000, con: 150, spi: 100 } },
+  origin_eye:       { name: '原初之眼',     slot: 'accessory', quality: 'legend', reqLevel: 180, stats: { atk: 600, def: 600, critDmg: 0.60, allAttr: 0.15, dmgTaken: -0.20 } },
+  // ====== 中段过渡装备（Lv.50-90）======
+  ranger_bow:        { name: '游侠长弓',     slot: 'weapon', quality: 'fine',   reqLevel: 50,  stats: { atk: 60, agi: 15 } },
+  paladin_shield:    { name: '圣骑士盾',     slot: 'armor',  quality: 'fine',   reqLevel: 60,  stats: { def: 50, hp: 300, con: 10 } },
+  sage_robe:         { name: '贤者长袍',     slot: 'armor',  quality: 'epic',   reqLevel: 80,  stats: { def: 80, hp: 500, spi: 20 } },
+  warlord_blade:     { name: '战神之刃',     slot: 'weapon', quality: 'epic',   reqLevel: 90,  stats: { atk: 200, str: 30, spi: 15 } },
+  timekeeper_amulet: { name: '时光守护者吊坠', slot: 'accessory', quality: 'epic', reqLevel: 70, stats: { atk: 50, def: 50, exp: 0.20, gold: 0.10 } },
+  // ====== 高阶元素/位面装备（Lv.100-150）======
+  abyss_devourer:    { name: '深渊吞噬者',   slot: 'weapon', quality: 'legend', reqLevel: 110, stats: { atk: 380, str: 50, spi: 40, agi: 20 } },
+  dragon_lord_plate: { name: '龙王战甲',     slot: 'armor',  quality: 'legend', reqLevel: 110, stats: { def: 320, hp: 2800, con: 45, spi: 25 } },
+  phoenix_feather:   { name: '凤凰之羽',     slot: 'accessory', quality: 'legend', reqLevel: 120, stats: { atk: 120, def: 120, lifesteal: 0.10, critDmg: 0.20 } },
+  realm_walker_boots:{ name: '界域行者之靴', slot: 'armor', quality: 'legend', reqLevel: 140, stats: { def: 250, hp: 1500, agi: 40, dodge: 0.10 } },
+  // ====== 终极装备（Lv.200-250）======
+  infinity_edge:     { name: '无尽之刃',     slot: 'weapon', quality: 'legend', reqLevel: 200, stats: { atk: 2500, str: 300, spi: 200, agi: 120, crit: 0.10 } },
+  chrono_armor:      { name: '时之甲',       slot: 'armor',  quality: 'legend', reqLevel: 220, stats: { def: 1800, hp: 25000, con: 200, agi: 60, dmgTaken: -0.25 } },
+  omni_eye:          { name: '全知之眼',     slot: 'accessory', quality: 'legend', reqLevel: 250, stats: { atk: 1000, def: 1000, critDmg: 1.00, allAttr: 0.20, dmgTaken: -0.30, lifesteal: 0.15 } },
 };
 
 // 材质对应的颜色
@@ -185,7 +319,7 @@ const QUALITY_COLORS = {
 // ====== 职业进阶树 ======
 const JOB_TREE = {
   thunder: {
-    id: 'thunder', name: '雷霆系', desc: '雷霆属性，高爆发高机动。主角姜尤所走之路', icon: '⚡',
+    id: 'thunder', name: '雷霆系', desc: '雷霆属性，高爆发高机动。主角姜尤所走之路', icon: 'bolt',
     growth: { hp: 1.0, atk: 1.2, def: 0.8, agi: 1.1, exp: 0.05, gold: 0 },
     talents: [
       { name: '雷霆意志', desc: '暴击伤害 +15%', effect: { critDmg: 0.15 } },
@@ -205,7 +339,7 @@ const JOB_TREE = {
     ]
   },
   light: {
-    id: 'light', name: '光明系', desc: '光属性，攻防一体，附带治愈能力', icon: '✨',
+    id: 'light', name: '光明系', desc: '光属性，攻防一体，附带治愈能力', icon: 'sparkle',
     growth: { hp: 1.2, atk: 1.0, def: 1.2, agi: 0.8, exp: 0, gold: 0 },
     talents: [
       { name: '圣光庇护', desc: '受到的治疗效果 +20%', effect: { healTaken: 0.20 } },
@@ -225,7 +359,7 @@ const JOB_TREE = {
     ]
   },
   wind: {
-    id: 'wind', name: '风行系', desc: '风属性，速度极快，侦察游击', icon: '🌪',
+    id: 'wind', name: '风行系', desc: '风属性，速度极快，侦察游击', icon: 'sparkle',
     growth: { hp: 0.9, atk: 1.0, def: 0.8, agi: 1.3, exp: 0.03, gold: 0 },
     talents: [
       { name: '风之优雅', desc: '闪避率 +8%', effect: { dodge: 0.08 } },
@@ -245,7 +379,7 @@ const JOB_TREE = {
     ]
   },
   knight: {
-    id: 'knight', name: '骑士系', desc: '骑乘战斗，冲锋陷阵，地精传承', icon: '🛡',
+    id: 'knight', name: '骑士系', desc: '骑乘战斗，冲锋陷阵，地精传承', icon: 'shield',
     growth: { hp: 1.1, atk: 1.0, def: 1.3, agi: 0.8, exp: 0, gold: 0 },
     talents: [
       { name: '钢铁壁垒', desc: '受到的所有伤害 -8%', effect: { dmgTaken: -0.08 } },
@@ -265,7 +399,7 @@ const JOB_TREE = {
     ]
   },
   alchemy: {
-    id: 'alchemy', name: '炼金系', desc: '生产辅助，制造药剂与附魔装备', icon: '⚗',
+    id: 'alchemy', name: '炼金系', desc: '生产辅助，制造药剂与附魔装备', icon: 'scroll',
     growth: { hp: 1.0, atk: 0.9, def: 1.0, agi: 1.0, exp: 0.03, gold: 0.10 },
     talents: [
       { name: '财富嗅觉', desc: '所有 GOLD 获取 +15%', effect: { goldGain: 0.15 } },
@@ -288,10 +422,10 @@ const JOB_TREE = {
 
 // ====== 词条等级配置 ======
 const AFFIX_LEVELS = {
-  1: { name: '初级', icon: '🔰', color: '#9d9bb8', reqLevel: 1 },
-  2: { name: '中级', icon: '⚙️', color: '#5eda7a', reqLevel: 31 },
-  3: { name: '高级', icon: '🔥', color: '#9d8cf0', reqLevel: 61 },
-  4: { name: '大师', icon: '💎', color: '#d4af5e', reqLevel: 100 }
+  1: { name: '初级', icon: 'star', color: '#9d9bb8', reqLevel: 1 },
+  2: { name: '中级', icon: 'plus', color: '#5eda7a', reqLevel: 31 },
+  3: { name: '高级', icon: 'sparkle', color: '#9d8cf0', reqLevel: 61 },
+  4: { name: '大师', icon: 'gem', color: '#d4af5e', reqLevel: 100 }
 };
 
 // ====== 词条库（4级，每级10主动+40被动） ======
@@ -528,6 +662,24 @@ const AFFIX_TREE = {
   ]
 };
 
+// ====== 装备锻造配置 ======
+// 升级：装备 +1~+10，每级属性 +5%，需要金币
+const UPGRADE_LEVEL_MAX = 10;
+const UPGRADE_BASE_GOLD = 200;  // 基础金币（每级再乘品质系数）
+const QUALITY_GOLD_MULT = { normal: 1, fine: 1.5, epic: 2.5, legend: 4 };
+const QUALITY_STAT_MULT = { normal: 1, fine: 1, epic: 1, legend: 1 }; // 保留
+// 升级所需的材料（按品质）
+const UPGRADE_MATERIAL_BY_QUALITY = {
+  normal:   { name: '青铜矿', perLevel: 1 },
+  fine:     { name: '铁矿', perLevel: 1 },
+  epic:     { name: '飞龙鳞片', perLevel: 1 },
+  legend:   { name: '龙鳞', perLevel: 1 },
+};
+
+// 合成：3 件同品质 → 1 件高一阶品质
+const QUALITY_ORDER = ['normal', 'fine', 'epic', 'legend'];
+const QUALITY_NEXT = { normal: 'fine', fine: 'epic', epic: 'legend', legend: null };
+
 // 力量等阶表
 function getStage(level) {
   if (level <= 10) return { name: '凡人', color: '#9d9bb8' };
@@ -682,6 +834,52 @@ const STRATEGIES = {
 };
 const STRATEGY_CD_MS = 5 * 60 * 1000;
 
+// ====== 世界 BOSS 配置 ======
+// 全服玩家同时攻打同一个 BOSS，共享血量；按伤害排行；击杀后发放奖励
+const WORLD_BOSS_TEMPLATES = [
+  {
+    id: 'void_lord',
+    name: '虚空领主',
+    icon: 'skull',
+    desc: '从深渊裂隙爬出的古老存在，吞噬一切凝视它的生命',
+    baseHp: 100000,
+    baseAtk: 500,
+    baseDef: 200,
+    baseAgi: 80,
+    skillChance: 0.30,
+    rewards: { gold: 5000, exp: 2000, materials: [{ name: '法则碎片', count: 5 }] },
+    finalHitRewards: { gold: 10000, exp: 5000, materials: [{ name: '龙血', count: 3 }] },
+  },
+  {
+    id: 'abyss_serpent',
+    name: '深渊巨蛇',
+    icon: 'dna',
+    desc: '盘踞在深渊裂隙的无尽之蛇，每一片鳞都蕴含腐蚀之力',
+    baseHp: 80000,
+    baseAtk: 400,
+    baseDef: 250,
+    baseAgi: 60,
+    skillChance: 0.25,
+    rewards: { gold: 4000, exp: 1500, materials: [{ name: '深渊之石', count: 8 }] },
+    finalHitRewards: { gold: 8000, exp: 3500, materials: [{ name: '龙鳞', count: 5 }] },
+  },
+  {
+    id: 'titan_soul',
+    name: '泰坦之魂',
+    icon: 'sparkle',
+    desc: '远古泰坦死后不灭的灵魂，携带着失落纪元的怒火',
+    baseHp: 150000,
+    baseAtk: 700,
+    baseDef: 350,
+    baseAgi: 50,
+    skillChance: 0.20,
+    rewards: { gold: 8000, exp: 3000, materials: [{ name: '法则碎片', count: 10 }] },
+    finalHitRewards: { gold: 15000, exp: 7000, materials: [{ name: '天使之羽', count: 5 }] },
+  },
+];
+// BOSS 自动刷新间隔（毫秒）
+const WORLD_BOSS_SPAWN_INTERVAL_MS = 30 * 60 * 1000;
+
 // ====== 每日任务（T-040 静态） ======
 const INITIAL_MATERIAL_POOL = ['草药', '兽皮', '兽骨', '青铜矿'];
 const DAILY_QUESTS = [
@@ -806,6 +1004,9 @@ module.exports = {
   STRATEGIES, STRATEGY_CD_MS,
   ACTIVE_SKILL_CD,
   INITIAL_MATERIAL_POOL, DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS,
+  WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS,
+  UPGRADE_LEVEL_MAX, UPGRADE_BASE_GOLD, QUALITY_GOLD_MULT, QUALITY_STAT_MULT, UPGRADE_MATERIAL_BY_QUALITY,
+  QUALITY_ORDER, QUALITY_NEXT,
   getStage, expToNext, createEquipItem,
   PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, SEASON_MONTHS,
   ARENA_RANK_REWARDS, ARENA_EQUIPMENT, BOT_NAMES, BOT_JOB_PREF

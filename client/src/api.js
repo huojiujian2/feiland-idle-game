@@ -67,6 +67,30 @@ export default {
     return request(`/leaderboard${q}`)
   },
   reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) },
+  getReincarnationInfo(username) { return request(`/player/${username}/reincarnation`) },
+  upgradeEquipment(username, itemUid) {
+    return request(`/player/${username}/equipment/upgrade`, {
+      method: 'POST',
+      body: JSON.stringify({ itemUid })
+    })
+  },
+  mergeEquipment(username, itemUids) {
+    return request(`/player/${username}/equipment/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ itemUids })
+    })
+  },
+  reforgeEquipment(username, itemUid) {
+    return request(`/player/${username}/equipment/reforge`, {
+      method: 'POST',
+      body: JSON.stringify({ itemUid })
+    })
+  },
+  // 世界 BOSS
+  getWorldBoss() { return request('/worldboss/active') },
+  attackWorldBoss(username) {
+    return request(`/player/${username}/worldboss/attack`, { method: 'POST' })
+  },
 
   // 战斗策略
   setStrategy(username, strategy) { return request(`/player/${username}/strategy`, { method: 'POST', body: JSON.stringify({ strategy }) }) },
@@ -104,10 +128,12 @@ export default {
     const q = username ? `?username=${encodeURIComponent(username)}` : ''
     return request(`/arena/rewards/${period}${q}`)
   },
-  settleArena(period) {
-    return request('/arena/settle', {
-      method: 'POST',
-      body: JSON.stringify({ period })
-    })
-  }
+  // settleArena 已废弃：竞技场奖励改为自动结算，前端不再调用
+  // （接口保留以便日后排查/管理员手动触发）
+  // settleArena(period) {
+  //   return request('/arena/settle', {
+  //     method: 'POST',
+  //     body: JSON.stringify({ period })
+  //   })
+  // }
 }

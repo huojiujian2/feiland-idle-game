@@ -195,13 +195,6 @@
           当前周期排名 100+，无奖励
         </div>
 
-        <!-- 当前周期状态 -->
-        <div class="reward-status">
-          <span v-if="rewardData && rewardData.settled" class="settled-yes">本周期已结算</span>
-          <span v-else class="settled-no">本周期未结算</span>
-          <button v-if="!rewardData || !rewardData.settled" class="settle-btn" @click="doSettle">手动结算本周期</button>
-        </div>
-
         <!-- 排行榜（用于了解自己位置） -->
         <div v-if="rewardData && rewardData.ranking.length > 0" class="reward-ranking-mini">
           <div class="ranking-mini-title">当前积分榜 Top {{ Math.min(rewardData.ranking.length, 20) }}</div>
@@ -491,22 +484,7 @@ async function fetchRewards() {
 }
 
 async function doSettle() {
-  if (!confirm('确认手动结算本周期奖励？每周期只能结算一次')) return
-  loadingRewards.value = true
-  try {
-    const res = await api.settleArena(rewardPeriod.value)
-    if (res.success) {
-      alert(res.data.already ? '本周期已结算' : `结算完成，奖励了 ${res.data.creditedCount || 0} 人`)
-      await fetchRewards()
-      await fetchOpponents() // 刷新竞技币
-    } else {
-      alert(res.message)
-    }
-  } catch (e) {
-    alert('结算失败: ' + e.message)
-  } finally {
-    loadingRewards.value = false
-  }
+  // 已废弃：竞技场奖励改为自动结算，不再提供手动入口
 }
 
 function canBuyItem(item) {
@@ -634,7 +612,7 @@ watch(rewardPeriod, () => {
   background: var(--bg3); color: var(--accent); font-weight: 600;
 }
 
-.pvp-loading, .pvp-empty {
+.pvp-loading, .pvp-empty, .reward-empty {
   text-align: center; color: var(--muted); padding: 40px 0; font-size: 0.9rem;
 }
 
@@ -805,14 +783,7 @@ watch(rewardPeriod, () => {
   padding: 6px 10px; background: var(--bg2); border-radius: var(--radius-sm);
   font-size: 0.8rem;
 }
-.settled-yes { color: var(--success); flex: 1; }
-.settled-no { color: var(--accent); flex: 1; }
-.settle-btn {
-  background: var(--accent); color: var(--bg);
-  border: none; padding: 4px 10px; border-radius: var(--radius-sm);
-  font-weight: 600; cursor: pointer; font-size: 0.78rem;
-}
-.settle-btn:hover { background: var(--accent-dim); }
+/* 当前周期状态 UI 已移除：后台自动结算，无需前端展示 */
 
 .reward-ranking-mini {
   background: var(--bg2); border-radius: var(--radius-sm); padding: 8px;
