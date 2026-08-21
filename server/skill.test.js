@@ -143,24 +143,27 @@ describe('T-005 buff 过期与单层刷新', ()=>{
     const testId='TEST-ATK-OVERLAP';
     data.AFFIX_TREE[1].push({ id:testId, level:1, slot:'active', group:'A', name:'测试ATK', desc:'重叠', category:'增益', effect:{ type:'atk_buff', value:0.10, turns:3 } });
     const origCd = data.ACTIVE_SKILL_CD[1];
-    data.ACTIVE_SKILL_CD[1]=2; // 人工 cd2 使 2,4 重叠（2+3=5，4<5）
-    const p = engine.createCharacter('b2','n');
-    p.level=31; p.attributes={ atk:10, def:4, hp:5, agi:8 }; engine.recalcMaxStats(p);
-    const baseAtk = engine.getCombatStats(p).atk;
-    p.affixes.active=testId; p.hp=p.maxHp;
-    const monster={ name:'桩', hp:120000, atk:1, def:100, agi:80, skills:[] };
-    const battle = engine.simulateBattle(p, monster);
-    const r2 = battle.rounds.find(r=>r.round===2);
-    const r4 = battle.rounds.find(r=>r.round===4);
-    assert.ok(r2.actions.some(a=>a.type==='skill'), 'r2 trigger');
-    assert.ok(r4.actions.some(a=>a.type==='skill'), 'r4 overlap trigger');
-    const finalAtk = battle.combatStats.atk;
-    const single = Math.floor(baseAtk*1.1);
-    const double = Math.floor(Math.floor(baseAtk*1.1)*1.1);
-    assert.notEqual(finalAtk, double, `should not be double ${double}, got ${finalAtk}`);
-    assert.ok(finalAtk===single || finalAtk===baseAtk, `finalAtk ${finalAtk} single ${single}`);
-    data.ACTIVE_SKILL_CD[1]=origCd;
-    data.AFFIX_TREE[1] = data.AFFIX_TREE[1].filter(a=>a.id!==testId);
+    data.ACTIVE_SKILL_CD[1]=2;
+    try{
+      const p = engine.createCharacter('b2','n');
+      p.level=31; p.attributes={ atk:10, def:4, hp:5, agi:8 }; engine.recalcMaxStats(p);
+      const baseAtk = engine.getCombatStats(p).atk;
+      p.affixes.active=testId; p.hp=p.maxHp;
+      const monster={ name:'桩', hp:120000, atk:1, def:100, agi:80, skills:[] };
+      const battle = engine.simulateBattle(p, monster);
+      const r2 = battle.rounds.find(r=>r.round===2);
+      const r4 = battle.rounds.find(r=>r.round===4);
+      assert.ok(r2.actions.some(a=>a.type==='skill'), 'r2 trigger');
+      assert.ok(r4.actions.some(a=>a.type==='skill'), 'r4 overlap trigger');
+      const finalAtk = battle.combatStats.atk;
+      const single = Math.floor(baseAtk*1.1);
+      const double = Math.floor(Math.floor(baseAtk*1.1)*1.1);
+      assert.notEqual(finalAtk, double, `should not be double ${double}, got ${finalAtk}`);
+      assert.ok(finalAtk===single || finalAtk===baseAtk, `finalAtk ${finalAtk} single ${single}`);
+    } finally{
+      data.ACTIVE_SKILL_CD[1]=origCd;
+      data.AFFIX_TREE[1] = data.AFFIX_TREE[1].filter(a=>a.id!==testId);
+    }
   });
 });
 
@@ -341,24 +344,25 @@ describe('T-005 前端 combo 与切片', ()=>{
     assert.equal(skillHit.selfHeal, 20);
     assert.equal(skillHit.selfHp, 150);
   });
-  it('detail slice(-6)：短场 skill 可见，长场早期被截断（真实 calculateIdle）', ()=>{
+  it('detail slice(-6)：短场≤6回合 skill 可见，长场早期被截断（真实 calculateIdle）', ()=>{
     engine.__setRandom(()=>0.99);
     engine.__setDropRandom(()=>1);
     const data = require('./data');
-    const areaId='test_slice2'; data.AREAS[areaId]={ id:areaId, name:'切片场', minLevel:1, monsters:[{ name:'短怪', hp:3000, atk:5, def:80, agi:80, skills:[], exp:10, gold:10 }], drops:[] };
-    // 短场：win 于 5-10 回合，detail 来自 calculateIdle 的 logEntry.detail = rounds.slice(-6)
+    const areaId='test_slice2';
+    try{
+    data.AREAS[areaId]={ id:areaId, name:'切片场', minLevel:1, monsters:[{ name:'短怪', hp:700, atk:5, def:80, agi:80, skills:[], exp:10, gold:10 }], drops:[] };
+    // 短场：≤6 回合 win（700hp/≈114 dmg≈6回合），detail 来自 calculateIdle 的 logEntry.detail = rounds.slice(-6)
     const pShort = engine.createCharacter('s1','n');
     pShort.level=31; pShort.attributes={ atk:30, def:10, hp:10, agi:10 }; engine.recalcMaxStats(pShort);
     pShort.affixes.active='A1-01'; pShort.hp=pShort.maxHp; pShort.currentArea=areaId; pShort.lastTick=0;
     engine.__setNow(()=>1000000);
     const resShort = engine.calculateIdle(pShort);
     assert.ok(resShort && resShort.logEntry.detail, 'short should have detail');
+    assert.ok(resShort.logEntry.rounds <=6, `short should be ≤6 rounds, got ${resShort.logEntry.rounds}`);
     assert.ok(resShort.logEntry.detail.length <=6, `detail <=6 got ${resShort.logEntry.detail.length}`);
-    // 若 win 于 >=5，detail 应含 skill
-    if(resShort.logEntry.rounds >=5){
-      const hasSkill = resShort.logEntry.detail.some(r=> (r.actions||[]).some(a=>a.type==='skill'));
-      assert.ok(hasSkill, `short detail should contain skill for rounds ${resShort.logEntry.rounds}`);
-    }
+    assert.equal(resShort.logEntry.detail.length, resShort.logEntry.rounds, 'short detail should equal rounds (≤6)');
+    const hasSkillShort = resShort.logEntry.detail.some(r=> (r.actions||[]).some(a=>a.type==='skill'));
+    assert.ok(hasSkillShort, `short detail should contain skill for rounds ${resShort.logEntry.rounds} (cd5 at 5)`);
     // 长场：30 回合 timeout，detail 仅后 6 轮，早期 5 的 skill 不在 detail
     const pLong = engine.createCharacter('s2','n');
     pLong.level=31; pLong.attributes={ atk:5, def:4, hp:20, agi:8 }; engine.recalcMaxStats(pLong);
@@ -373,12 +377,13 @@ describe('T-005 前端 combo 与切片', ()=>{
     assert.equal(earlyInDetail, false, 'early 5 should be truncated');
     const hasSkillInDetail = detailLong.some(r=> (r.actions||[]).some(a=>a.type==='skill'));
     assert.ok(hasSkillInDetail, 'detail 25-30 should have 25/30 skill');
-    // calculateIdle 的 detail 同为 slice(-6)
+    // calculateIdle 的 detail 同为 slice(-6) 且内容为最后六回合
     pLong.currentArea=areaId; pLong.lastTick=0; engine.__setNow(()=>2000000);
-    // 临时把 area 怪换为长桩以复用 calculateIdle 长场
     data.AREAS[areaId].monsters=[{ name:'长桩', hp:200000, atk:1, def:100, agi:80, skills:[], exp:10, gold:10 }];
     const resLong = engine.calculateIdle(pLong);
     assert.equal(resLong.logEntry.detail.length, 6);
-    delete data.AREAS[areaId];
+    // 内容确为最后六回合（25-30）
+    assert.deepEqual(resLong.logEntry.detail.map(r=>r.round), bLong.rounds.slice(-6).map(r=>r.round), 'detail should be last six rounds');
+    } finally{ delete data.AREAS[areaId]; }
   });
 });
