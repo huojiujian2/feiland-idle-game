@@ -1584,6 +1584,7 @@ function calculateIdle(player) {
   const eqBonus = getEquipBonus(player);
   const lawBonus = getLawBonus(player);
   const raceBonus = getRaceBonus(player);
+  const reincBonus = getReincarnationBonus(player);
   const talents = getJobTalents(player);
 
   let expGain = 0;
