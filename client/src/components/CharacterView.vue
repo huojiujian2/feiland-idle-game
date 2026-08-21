@@ -183,6 +183,28 @@
       </template>
     </div>
 
+    <!-- 进阶 & 任务 入口卡片 -->
+    <div class="entry-cards">
+      <div class="entry-card card" @click="$emit('goEvo')">
+        <div class="entry-icon">🧬</div>
+        <div class="entry-info">
+          <div class="entry-title">进阶</div>
+          <div class="entry-desc">种族进化 · 附魔 · 法则 · 登神</div>
+        </div>
+        <span v-if="player.canEvolve" class="entry-badge">!</span>
+        <span class="entry-arrow">›</span>
+      </div>
+      <div class="entry-card card" @click="$emit('goQuest')">
+        <div class="entry-icon">📜</div>
+        <div class="entry-info">
+          <div class="entry-title">任务</div>
+          <div class="entry-desc">每日任务 · 成就 · 奖励</div>
+        </div>
+        <span v-if="questBadge" class="entry-badge">{{ questBadge }}</span>
+        <span class="entry-arrow">›</span>
+      </div>
+    </div>
+
     <!-- 装备详情弹窗（含附魔） -->
     <div v-if="detailItem" class="equip-detail-overlay" @click.self="detailItem = null">
       <div class="equip-detail-box">
@@ -226,7 +248,7 @@
 import { ref, computed, reactive } from 'vue'
 
 const props = defineProps(['player', 'jobTree'])
-const emit = defineEmits(['allocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill'])
+const emit = defineEmits(['allocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest'])
 
 const pending = ref({})
 const detailItem = ref(null)
@@ -258,6 +280,16 @@ const hpPct = computed(() => Math.round(props.player.hp / props.player.maxHp * 1
 const mpPct = computed(() => Math.round(props.player.mp / props.player.maxMp * 100))
 const expPct = computed(() => Math.round(props.player.exp / props.player.expNeeded * 100))
 const hasPending = computed(() => Object.values(pending.value).some(v => v > 0))
+
+const questBadge = computed(() => {
+  const q = props.player?.questView
+  if (!q) return null
+  const daily = q.dailyQuests?.filter(x => x.done && !x.claimed).length || 0
+  const ach = q.achievements?.filter(x => x.unlocked && !x.claimed).length || 0
+  const chest = q.chest?.canClaim ? 1 : 0
+  const total = daily + ach + chest
+  return total > 0 ? total : null
+})
 
 const availableEnchants = computed(() => {
   if (!detailItem.value) return []
@@ -480,4 +512,22 @@ function handleEnchant(recipeId) {
 .recipe-cost { font-size: 0.68rem; color: var(--dim); }
 .detail-actions { display: flex; gap: 0.5rem; }
 .detail-actions .btn { flex: 1; }
+
+/* 入口卡片 */
+.entry-cards { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.entry-card {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.8rem;
+  cursor: pointer; transition: all 0.15s ease; position: relative;
+}
+.entry-card:hover { border-color: var(--accent2); background: rgba(157,140,240,0.06); }
+.entry-icon { font-size: 1.4rem; flex-shrink: 0; }
+.entry-info { flex: 1; }
+.entry-title { font-size: 0.85rem; font-weight: 700; color: var(--ink); }
+.entry-desc { font-size: 0.68rem; color: var(--muted); }
+.entry-badge {
+  background: var(--danger); color: #fff; font-size: 0.6rem;
+  min-width: 18px; height: 18px; line-height: 18px; text-align: center;
+  border-radius: 9px; padding: 0 5px;
+}
+.entry-arrow { font-size: 1.2rem; color: var(--dim); }
 </style>

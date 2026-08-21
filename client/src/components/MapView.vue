@@ -4,7 +4,10 @@
     <div class="map-section">
       <div class="section-header">
         <span>🗺 挂机区域</span>
-        <span class="current-area" v-if="currentAreaName">当前: {{ currentAreaName }}</span>
+        <div class="map-header-right">
+          <button class="rank-entry-btn" @click="$emit('goRank')">🏆 排行榜 ›</button>
+          <span class="current-area" v-if="currentAreaName">{{ currentAreaName }}</span>
+        </div>
       </div>
       <div class="area-list">
         <div v-for="area in areas" :key="area.id" class="area-item"
@@ -278,7 +281,7 @@
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 
 const props = defineProps(['player', 'areas'])
-defineEmits(['select', 'strategy-change'])
+defineEmits(['select', 'strategy-change', 'goRank'])
 
 const strategyCdRemaining = ref(0)
 let strategyCdTimer = null
@@ -750,4 +753,13 @@ function dropQuality(name) {
 .expand-enter-active, .expand-leave-active { transition: all var(--duration-normal) var(--ease-out); overflow: hidden; }
 .expand-enter-from, .expand-leave-to { opacity: 0; max-height: 0; }
 .expand-enter-to, .expand-leave-from { opacity: 1; max-height: 1000px; }
+
+/* 排行入口按钮 */
+.map-header-right { display: flex; align-items: center; gap: 0.5rem; }
+.rank-entry-btn {
+  font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 6px;
+  border: 1px solid rgba(212,175,94,0.25); background: rgba(212,175,94,0.08);
+  color: var(--accent); cursor: pointer; transition: all 0.15s ease;
+}
+.rank-entry-btn:hover { background: rgba(212,175,94,0.15); border-color: var(--accent); }
 </style>

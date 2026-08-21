@@ -81,7 +81,9 @@
             @allocate="handleAllocate"
             @equip="handleEquip" @unequip="handleUnequip" @enchant="handleEnchant"
             @chooseJob="handleChooseJob"
-            @goSkill="activeTab = 'skill'" />
+            @goSkill="activeTab = 'skill'"
+            @goEvo="activeTab = 'evo'"
+            @goQuest="activeTab = 'quest'" />
           <SkillView v-else-if="activeTab === 'skill'" :player="player"
             @equipAffix="handleEquipAffix" @unequipAffix="handleUnequipAffix" />
           <InventoryView v-else-if="activeTab === 'bag'" :player="player"
@@ -89,7 +91,8 @@
             @use="handleUseItem" @sellMaterial="handleSellMaterial"
             @sellEquip="handleSellEquip" @equip="handleEquip" @enchant="handleEnchant" />
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
-            @select="handleAreaChange" @strategy-change="handleStrategyChange" />
+            @select="handleAreaChange" @strategy-change="handleStrategyChange"
+            @goRank="activeTab = 'rank'" />
           <CodexView v-else-if="activeTab === 'codex'" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend" />
@@ -110,23 +113,6 @@
         <span v-if="tab.badge" class="tabbar-badge">{{ tab.badge }}</span>
       </div>
     </nav>
-
-    <!-- 右侧折叠面板（进阶/排行/任务） -->
-    <div class="side-panel" :class="{ expanded: sidePanelOpen }">
-      <button class="side-toggle" @click="sidePanelOpen = !sidePanelOpen">
-        <span class="side-arrow">{{ sidePanelOpen ? '›' : '‹' }}</span>
-      </button>
-      <transition name="side-slide">
-        <div v-if="sidePanelOpen" class="side-tabs">
-          <div v-for="tab in sideTabs" :key="tab.id" class="side-tab-item"
-            :class="{ active: activeTab === tab.id }" @click="handleTabClick(tab.id); sidePanelOpen = false">
-            <span class="side-tab-icon">{{ tab.icon }}</span>
-            <span class="side-tab-label">{{ tab.label }}</span>
-            <span v-if="tab.badge" class="side-tab-badge">{{ tab.badge }}</span>
-          </div>
-        </div>
-      </transition>
-    </div>
 
     <!-- 升级提示 -->
     <transition name="levelup">
@@ -216,7 +202,6 @@ const shopDetail = ref(null)
 const buyQty = ref({})
 const shopPage = ref(1)
 const shopPageSize = 8
-const sidePanelOpen = ref(false)
 
 // 登录流程
 const loginStep = ref('login') // 'login' | 'register' | 'create'
@@ -237,16 +222,9 @@ const mainTabs = computed(() => [
   { id: 'bag', label: '背包', icon: '🎒', badge: null },
   { id: 'codex', label: '图鉴', icon: '📖', badge: null },
 ])
-
-// 右侧折叠面板 Tab：进阶、排行、任务
-const sideTabs = computed(() => [
-  { id: 'evo', label: '进阶', icon: '🧬', badge: player.value?.canEvolve ? '!' : null },
-  { id: 'rank', label: '排行', icon: '🏆', badge: null },
-  { id: 'quest', label: '任务', icon: '📜', badge: (()=>{ const q=player.value?.questView; if(!q) return null; const dailyClaimable=q.dailyQuests?.filter(x=>x.done&&!x.claimed).length||0; const achClaimable=q.achievements?.filter(x=>x.unlocked&&!x.claimed).length||0; const chestClaimable=q.chest?.canClaim?1:0; const totalClaimable=dailyClaimable+achClaimable+chestClaimable; return totalClaimable>0?totalClaimable:null })() }
-])
+const transitionName = ref('slide-left')
 
 const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest']
-const transitionName = ref('slide-left')
 
 watch(activeTab, (newTab, oldTab) => {
   const newIdx = tabOrder.indexOf(newTab)
@@ -488,52 +466,6 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 }
 .tabbar-center .tabbar-text {
   font-size: 0.6rem; margin-top: 0.15rem;
-}
-
-/* 右侧折叠面板 */
-.side-panel {
-  position: fixed; right: 0; top: 50%; transform: translateY(-50%);
-  z-index: 200; display: flex; align-items: center;
-}
-.side-toggle {
-  width: 26px; height: 48px; border: 1px solid var(--rule, #2a2b42);
-  border-right: none; border-radius: 8px 0 0 8px;
-  background: var(--bg2, #14162a); color: var(--muted, #9d9bb8);
-  cursor: pointer; font-size: 1.1rem; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s ease;
-}
-.side-toggle:hover { color: var(--accent, #d4af5e); border-color: var(--accent, #d4af5e); }
-.side-arrow { transition: transform 0.2s ease; }
-
-.side-tabs {
-  background: var(--bg2, #14162a); border: 1px solid var(--rule, #2a2b42);
-  border-right: none; border-radius: 10px 0 0 10px;
-  padding: 0.4rem; display: flex; flex-direction: column; gap: 0.3rem;
-  box-shadow: -4px 0 12px rgba(0,0,0,0.3);
-}
-.side-tab-item {
-  display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.8rem;
-  border-radius: 8px; cursor: pointer; white-space: nowrap;
-  transition: all 0.15s ease; color: var(--muted, #9d9bb8);
-}
-.side-tab-item:hover { background: rgba(157,140,240,0.08); color: var(--ink, #ece9f5); }
-.side-tab-item.active { background: rgba(212,175,94,0.12); color: var(--accent, #d4af5e); }
-.side-tab-icon { font-size: 1.1rem; }
-.side-tab-label { font-size: 0.78rem; font-weight: 600; }
-.side-tab-badge {
-  background: var(--danger, #e85d75); color: #fff; font-size: 0.6rem;
-  min-width: 16px; height: 16px; line-height: 16px; text-align: center;
-  border-radius: 8px; padding: 0 4px; margin-left: auto;
-}
-
-/* 折叠面板动画 */
-.side-slide-enter-active, .side-slide-leave-active {
-  transition: all var(--duration-fast, 150ms) var(--ease-out, ease);
-  transform-origin: right center;
-}
-.side-slide-enter-from, .side-slide-leave-to {
-  opacity: 0; transform: translateX(20px);
 }
 
 /* 商店底部弹窗 */
