@@ -80,7 +80,33 @@ export default {
 
   // 竞技场
   getOpponents(username) { return request(`/arena/opponents/${username}`) },
-  challenge(username, targetUsername) { return request('/arena/challenge', { method: 'POST', body: JSON.stringify({ username, targetUsername }) }) },
+  challenge(username, targetUsername, isBot) {
+    return request('/arena/challenge', {
+      method: 'POST',
+      body: JSON.stringify({ username, targetUsername, isBot })
+    })
+  },
   getArenaRanking() { return request('/arena/ranking') },
-  getArenaRecords(username) { return request(`/arena/records/${username}`) }
+  getArenaRecords(username) { return request(`/arena/records/${username}`) },
+  getArenaShop() { return request('/arena/shop') },
+  buyArenaItem(username, itemId) {
+    return request('/arena/buy', {
+      method: 'POST',
+      body: JSON.stringify({ username, itemId })
+    })
+  },
+  getArenaSeason(username) {
+    const q = username ? `?username=${encodeURIComponent(username)}` : ''
+    return request(`/arena/season${q}`)
+  },
+  getArenaRewards(period, username) {
+    const q = username ? `?username=${encodeURIComponent(username)}` : ''
+    return request(`/arena/rewards/${period}${q}`)
+  },
+  settleArena(period) {
+    return request('/arena/settle', {
+      method: 'POST',
+      body: JSON.stringify({ period })
+    })
+  }
 }

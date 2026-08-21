@@ -8,7 +8,9 @@ const {
   STRATEGIES, STRATEGY_CD_MS,
   ACTIVE_SKILL_CD,
   INITIAL_MATERIAL_POOL, DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS,
-  getStage, expToNext, createEquipItem
+  getStage, expToNext, createEquipItem,
+  PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, SEASON_MONTHS,
+  ARENA_RANK_REWARDS, ARENA_EQUIPMENT, BOT_NAMES, BOT_JOB_PREF
 } = require('./data');
 
 // ====== 可注入时钟与随机（测试 seam） ======
@@ -1116,6 +1118,342 @@ function calcPvpRewards(playerLevel, isWin, streak) {
   return { gold: 10, exp: 5 + playerLevel };
 }
 
+// ====== 赛季键（每 3 个月一个赛季） ======
+function getSeasonKey() {
+  const d = new Date(getNow());
+  const y = d.getFullYear();
+  const monthIdx = d.getMonth(); // 0..11
+  const seasonIdx = Math.floor(monthIdx / SEASON_MONTHS); // 0..3
+  return `${y}-S${seasonIdx + 1}`; // 2026-S1, 2026-S2 ...
+}
+
+function getSeasonIndex() {
+  const d = new Date(getNow());
+  const monthIdx = d.getMonth();
+  return Math.floor(monthIdx / SEASON_MONTHS);
+}
+
+// 赛季剩余天数（用于 UI 显示）
+function getSeasonDaysLeft() {
+  const d = new Date(getNow());
+  const seasonIdx = getSeasonIndex();
+  const nextStartMonth = (seasonIdx + 1) * SEASON_MONTHS;
+  const nextStart = new Date(d.getFullYear(), nextStartMonth, 1);
+  const ms = nextStart.getTime() - d.getTime();
+  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+}
+
+// ====== 每日/周/月周期键 ======
+function getDailyKey() {
+  const d = new Date(getNow());
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function getWeeklyKey() {
+  // ISO 周：周一为起点
+  const d = new Date(getNow());
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0 Sun..6 Sat
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, '0');
+  const da = String(monday.getDate()).padStart(2, '0');
+  return `${y}-W${m}-${da}`;
+}
+function getMonthlyKey() {
+  const d = new Date(getNow());
+  return `${d.getFullYear()}-M${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// ====== 计算玩家在赛季内的阶级奖励 ======
+function getRankTier(period, rankNum) {
+  if (!rankNum || rankNum < 1 || rankNum > 100) return null;
+  for (const r of ARENA_RANK_REWARDS[period]) {
+    if (rankNum >= r.minRank && rankNum <= r.maxRank) return r;
+  }
+  return null;
+}
+
+// ====== 动态生成 Bot（每次拉取按需生成，不持久化） ======
+const BOT_TITLES = ['初出茅庐', '崭露头角', '身经百战', '老谋深算', '名震一方'];
+
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// 根据等级可解锁的词条等级（1/2/3/4 对应 Lv.1/31/61/100）
+function getAvailableAffixLevelsByLv(lv) {
+  const out = [];
+  for (const lv of [1, 2, 3, 4]) {
+    if (lv <= 1 || (lv === 2 && lv >= 31) || (lv === 3 && lv >= 61) || (lv === 4 && lv >= 100)) {
+      out.push(lv);
+    }
+  }
+  return out;
+}
+function getUnlockedAffixLevels(lv) {
+  // Lv.1=1, Lv.31+=2, Lv.61+=3, Lv.100+=4
+  const out = [1];
+  if (lv >= 31) out.push(2);
+  if (lv >= 61) out.push(3);
+  if (lv >= 100) out.push(4);
+  return out;
+}
+
+function genBotId(idx) {
+  return `bot_${getNow()}_${idx}_${Math.floor(Math.random() * 10000)}`;
+}
+
+function createBot(idx, baseLevel, rating) {
+  // baseLevel 在 [baseLevel-5, baseLevel+5] 内随机
+  const level = Math.max(1, baseLevel + Math.floor((Math.random() - 0.5) * 10));
+  const isFemale = Math.random() < 0.5;
+  const baseName = pickRandom(isFemale ? BOT_NAMES.female : BOT_NAMES.male);
+
+  // 随机职业（Lv.11 才解锁）
+  const jobKeys = ['thunder', 'light', 'wind', 'knight', 'alchemy'];
+  const jobPath = level >= 11 ? pickRandom(jobKeys) : null;
+
+  // 职业化命名：Lv.20+ 时把职业前缀和基础名组合
+  let charName;
+  if (jobPath && level >= 20) {
+    const pref = pickRandom(BOT_JOB_PREF[jobPath]);
+    charName = pref + baseName;
+  } else if (level >= 11) {
+    charName = baseName;
+  } else {
+    // 低等级用简单职业称号+名字
+    charName = pickRandom(['见习', '冒险者']) + baseName;
+  }
+
+  // 创建一个空对象，先复用 createCharacter 初始化，再覆盖关键字段
+  const baseChar = createCharacter(genBotId(idx), charName);
+  baseChar.level = level;
+  baseChar.exp = 0;
+  // 模拟总经验：expNeeded 给满级（实际战斗中不会真的升级）
+  baseChar.jobPath = jobPath;
+  if (jobPath) {
+    const tree = JOB_TREE[jobPath];
+    const stage = tree.stages.find(s => s.level <= level) || tree.stages[0];
+    baseChar.job = stage.name;
+  }
+
+  // 属性加点：按职业成长比例分配总属性点
+  // 总属性点 = (level-1) * 3
+  const totalPoints = (level - 1) * 3;
+  const growth = JOB_TREE[jobPath]?.growth || { atk: 1, def: 1, hp: 1, agi: 1, exp: 0, gold: 0 };
+  // 按 1 / 1 / 1 / 1 基础 + 成长偏差
+  const wAtk = 1.0 * (growth.atk || 1);
+  const wDef = 1.0 * (growth.def || 1);
+  const wHp  = 1.0 * (growth.hp  || 1);
+  const wAgi = 1.0 * (growth.agi || 1);
+  const wSum = wAtk + wDef + wHp + wAgi;
+  const pointsAtk = Math.floor(totalPoints * wAtk / wSum);
+  const pointsDef = Math.floor(totalPoints * wDef / wSum);
+  const pointsHp  = Math.floor(totalPoints * wHp  / wSum);
+  const pointsAgi = totalPoints - pointsAtk - pointsDef - pointsHp;
+
+  baseChar.attributes = {
+    atk: 5 + pointsAtk,
+    def: 4 + pointsDef,
+    hp:  5 + pointsHp,
+    agi: 8 + pointsAgi
+  };
+
+  // 装备：根据等级档位选装备（Lv.<20 普通，<40 精良，<60 史诗，≥60 传说）
+  const targetQuality = level >= 60 ? 'legend' : level >= 30 ? 'epic' : level >= 15 ? 'fine' : 'normal';
+  const eqPool = Object.values(EQUIP_TEMPLATES).filter(t =>
+    t.reqLevel <= level && t.quality === targetQuality
+  );
+  const slotMap = { weapon: null, armor: null, accessory: null };
+  for (const slot of ['weapon', 'armor', 'accessory']) {
+    const candidates = eqPool.filter(t => t.slot === slot);
+    if (candidates.length > 0) {
+      const tpl = pickRandom(candidates);
+      slotMap[slot] = {
+        uid: `bot_eq_${idx}_${slot}_${Math.floor(Math.random() * 10000)}`,
+        templateId: tpl.id || tpl.name,
+        name: tpl.name,
+        slot: tpl.slot,
+        quality: tpl.quality,
+        reqLevel: tpl.reqLevel,
+        stats: { ...tpl.stats },
+        enchants: []
+      };
+    }
+  }
+  baseChar.equipped = slotMap;
+  baseChar.equips = Object.values(slotMap).filter(Boolean);
+  baseChar.inventory = [];
+
+  // 词条：根据等级解锁词条池随机挑 1 主动 + N 被动（被动数 = min(职业阶段, 5)）
+  const affixLvls = getUnlockedAffixLevels(level);
+  const jobStage = jobPath ? JOB_TREE[jobPath].stages.findIndex(s => s.level <= level) + 1 : 0;
+  const passiveCount = jobPath ? Math.min(jobStage, 5) : 1;
+
+  const allActiveIds = [];
+  const allPassiveIds = [];
+  for (const lv of affixLvls) {
+    const tree = AFFIX_TREE[lv] || [];
+    for (const a of tree) {
+      if (a.slot === 'active') allActiveIds.push(a.id);
+      else allPassiveIds.push(a.id);
+    }
+  }
+
+  // 主动词条槽：如果有可解锁的，从池中随机选 1 个
+  const botActive = allActiveIds.length > 0 ? pickRandom(allActiveIds) : null;
+  // 被动词条：从池中随机选 passiveCount 个
+  const botPassive = [];
+  if (allPassiveIds.length > 0) {
+    const copy = [...allPassiveIds];
+    for (let i = 0; i < Math.min(passiveCount, copy.length); i++) {
+      const idx2 = Math.floor(Math.random() * copy.length);
+      botPassive.push(copy.splice(idx2, 1)[0]);
+    }
+  }
+  baseChar.affixes = { active: botActive, passive: botPassive };
+
+  // 种族：默认鹰人；Lv.30+ 随机进化到翼人；Lv.80+ 进化到天使
+  let race = '鹰人';
+  let raceStage = 0;
+  if (level >= 80) { race = '天使'; raceStage = 2; }
+  else if (level >= 30) { race = '翼人'; raceStage = 1; }
+  baseChar.race = race;
+  baseChar.raceStage = raceStage;
+
+  // 经验回满到当前等级（防止被动升级）
+  baseChar.exp = 0;
+  // 重算 HP/MP（依赖等级、属性、装备、词条）
+  recalcMaxStats(baseChar);
+  baseChar.hp = baseChar.maxHp;
+  baseChar.mp = baseChar.maxMp;
+
+  // 注入 PVP 积分（用作 Bot 的初始积分）
+  if (!baseChar.pvpStats) baseChar.pvpStats = {};
+  baseChar.pvpStats.wins = 0;
+  baseChar.pvpStats.losses = 0;
+  baseChar.pvpStats.rating = rating;
+  baseChar.pvpStats.streak = 0;
+  baseChar.pvpStats.bestStreak = 0;
+  baseChar.pvpStats.lastPvpAt = 0;
+
+  // 标记 isBot
+  baseChar.isBot = true;
+  baseChar.botRating = rating;
+
+  return baseChar;
+}
+
+// 动态生成 3 个 Bot（对手）
+function generateArenaBots(playerLevel, playerRating) {
+  const bots = [];
+  for (let i = 0; i < 3; i++) {
+    // 积分略高于玩家 0~100 之间随机
+    const rating = playerRating + Math.floor(Math.random() * 200) - 50;
+    const bot = createBot(i, playerLevel, Math.max(800, rating));
+    bots.push(bot);
+  }
+  return bots;
+}
+
+// ====== 赛季结算：根据当前排名快照发奖（竞技币自动入账） ======
+// meta: store.getMeta() 的引用
+// period: 'daily' | 'weekly' | 'monthly'
+// rankingList: [{ username, rating, ... }]
+// 写入到 meta.arenaRewards[period][yyyymmdd] = { username: { tier, coins } }
+function settleArenaRewards(meta, period, rankingList) {
+  if (!period || !rankingList || rankingList.length === 0) return { rewarded: 0 };
+  const key = period === 'daily' ? getDailyKey()
+    : period === 'weekly' ? getWeeklyKey()
+    : getMonthlyKey();
+  if (!meta.arenaRewards) meta.arenaRewards = {};
+  if (!meta.arenaRewards[period]) meta.arenaRewards[period] = {};
+  // 同周期只结算一次
+  if (meta.arenaRewards[period][key]) return { rewarded: 0, already: true, key };
+
+  const rewards = {};
+  let rewardedCount = 0;
+  for (let i = 0; i < rankingList.length && i < 100; i++) {
+    const p = rankingList[i];
+    const rank = i + 1;
+    const tier = getRankTier(period, rank);
+    if (!tier) continue;
+    rewards[p.username] = { tier: tier.tier, rank, coins: tier.coins };
+    rewardedCount++;
+  }
+  meta.arenaRewards[period][key] = rewards;
+  return { rewarded: rewardedCount, key, rewards };
+}
+
+// 赛季重置（每 3 个月清空积分与赛季数据）
+function maybeResetSeason(meta) {
+  const currentSeason = getSeasonKey();
+  if (!meta.currentSeason) {
+    meta.currentSeason = currentSeason;
+    return { reset: false };
+  }
+  if (meta.currentSeason !== currentSeason) {
+    const old = meta.currentSeason;
+    meta.currentSeason = currentSeason;
+    // 清空所有玩家的 pvpStats.rating/streak 等，wins/losses 保留（赛季累计战绩）
+    meta.lastResetFrom = old;
+    meta.lastResetAt = getNow();
+    return { reset: true, from: old, to: currentSeason };
+  }
+  return { reset: false };
+}
+
+// 应用赛季重置到所有玩家
+function applySeasonResetToPlayers(store) {
+  const players = store.getAllPlayers();
+  for (const p of players) {
+    if (!p.pvpStats) continue;
+    // 保留历史战绩（wins/losses/bestStreak），重置积分和连胜
+    p.pvpStats.rating = 1000;
+    p.pvpStats.streak = 0;
+    p.pvpStats.lastPvpAt = 0;
+    // 竞技币保留（竞技币不会因赛季重置而清空？题目要求"竞技币赛季重置"，故也清零）
+    if (PVP_CURRENCY_KEY in p) p[PVP_CURRENCY_KEY] = 0;
+  }
+}
+
+// ====== 竞技场装备购买（消耗竞技币） ======
+function buyArenaItem(player, itemId) {
+  const item = ARENA_EQUIPMENT.find(e => e.id === itemId);
+  if (!item) return { success: false, message: '装备不存在' };
+  if ((player.level || 1) < item.reqLevel) {
+    return { success: false, message: `需要 Lv.${item.reqLevel} 才能购买` };
+  }
+  const coins = player[PVP_CURRENCY_KEY] || 0;
+  if (coins < item.price) {
+    return { success: false, message: `竞技币不足，需要 ${item.price} 币` };
+  }
+  // 扣币
+  player[PVP_CURRENCY_KEY] = coins - item.price;
+  // 生成装备实例（参考 createEquipItem）
+  const newItem = {
+    uid: genUid(),
+    templateId: item.id,
+    name: item.name,
+    slot: item.slot,
+    quality: item.quality,
+    reqLevel: item.reqLevel,
+    stats: { ...item.stats },
+    enchants: []
+  };
+  player.equips = player.equips || [];
+  player.equips.push(newItem);
+  player.logs = player.logs || [];
+  player.logs.push({
+    time: getNow(),
+    type: 'arena',
+    text: `竞技商店购买：${item.name} [传说]`
+  });
+  return { success: true, item: newItem };
+}
+
 // ====== 挂机收益计算 ======
 function calculateIdle(player) {
   player = migratePlayer(player);
@@ -1744,5 +2082,11 @@ module.exports = {
   getNow, __setNow, __setRandom, __setDropRandom, __resetSeams,
   createDailyQuests, refreshDailyIfNeeded, updateDailyProgress, grantGold, grantExpWithLevelUp, checkAchievements,
   claimDaily, claimChest, claimAchievement, getTodayKey,
-  normalizeTutorialStep, updateTutorialStep
+  normalizeTutorialStep, updateTutorialStep,
+  getSeasonKey, getSeasonIndex, getSeasonDaysLeft,
+  getDailyKey, getWeeklyKey, getMonthlyKey,
+  getRankTier,
+  createBot, generateArenaBots,
+  settleArenaRewards, maybeResetSeason, applySeasonResetToPlayers,
+  buyArenaItem
 };

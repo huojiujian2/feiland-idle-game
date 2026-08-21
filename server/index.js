@@ -4,7 +4,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const store = require('./store');
-const { AREAS, JOB_TREE, SHOP_ITEMS, EQUIP_TEMPLATES, QUALITY_COLORS, MATERIAL_PRICES, MONSTER_SKILLS, ENCHANT_RECIPES, RACE_EVOLUTION, LAWS, AFFIX_TREE, AFFIX_LEVELS, STRATEGIES, STRATEGY_CD_MS } = require('./data');
+const { AREAS, JOB_TREE, SHOP_ITEMS, EQUIP_TEMPLATES, QUALITY_COLORS, MATERIAL_PRICES, MONSTER_SKILLS, ENCHANT_RECIPES, RACE_EVOLUTION, LAWS, AFFIX_TREE, AFFIX_LEVELS, STRATEGIES, STRATEGY_CD_MS, PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, ARENA_EQUIPMENT } = require('./data');
 const {
   createCharacter, calculateIdle, allocateAttributes, getPlayerView,
   chooseJob, equipItem, unequipItem, useConsumable, buyItem,
@@ -16,6 +16,12 @@ const {
   claimDaily, claimChest, claimAchievement,
   updateTutorialStep,
   simulatePvP, calcPvpRating, calcPvpRewards,
+  getSeasonKey, getSeasonIndex, getSeasonDaysLeft,
+  getDailyKey, getWeeklyKey, getMonthlyKey,
+  getRankTier,
+  createBot, generateArenaBots,
+  settleArenaRewards, maybeResetSeason, applySeasonResetToPlayers,
+  buyArenaItem,
   getNow
 } = require('./engine');
 
@@ -454,18 +460,21 @@ app.get('/api/leaderboard', (req, res) => {
 });
 
 // ====== PVP 竞技场 ======
-const PVP_CD_MS = 3 * 60 * 1000; // 挑战冷却 3 分钟
-const PVP_LEVEL_RANGE = 5; // 匹配等级差 ±5
 
-// 获取对手列表
+// 获取对手列表（动态生成 3 个 Bot）
 app.get('/api/arena/opponents/:username', (req, res) => {
   const player = store.getPlayer(req.params.username);
   if (!player) return res.json({ success: false, message: '角色不存在' });
 
   const myLevel = player.level || 1;
-  const allPlayers = store.getAllPlayers();
+  const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
 
-  const opponents = allPlayers
+  // 动态生成 3 个 Bot（±5 等级内）
+  const bots = generateArenaBots(myLevel, myRating);
+
+  // 同时混入真实玩家（如果有同等级的其他玩家）
+  const allPlayers = store.getAllPlayers();
+  const realOpponents = allPlayers
     .filter(p => p.username !== player.username && p.level)
     .filter(p => Math.abs((p.level || 1) - myLevel) <= PVP_LEVEL_RANGE)
     .map(p => {
@@ -481,11 +490,32 @@ app.get('/api/arena/opponents/:username', (req, res) => {
         power,
         pvpRating: (rp.pvpStats && rp.pvpStats.rating) || 1000,
         pvpWins: (rp.pvpStats && rp.pvpStats.wins) || 0,
-        pvpLosses: (rp.pvpStats && rp.pvpStats.losses) || 0
+        pvpLosses: (rp.pvpStats && rp.pvpStats.losses) || 0,
+        isBot: false
       };
-    })
+    });
+
+  // Bot 视图
+  const botOpponents = bots.map(b => ({
+    username: b.username,
+    name: b.name,
+    level: b.level,
+    race: b.race,
+    job: b.job || '无',
+    godhood: b.godhood || null,
+    power: getPowerScore(b),
+    pvpRating: b.pvpStats.rating,
+    pvpWins: 0,
+    pvpLosses: 0,
+    isBot: true,
+    activeAffix: b.affixes?.active || null,
+    passiveCount: (b.affixes?.passive || []).length
+  }));
+
+  // 合并：Bot 优先 + 真实玩家
+  const opponents = [...botOpponents, ...realOpponents]
     .sort((a, b) => Math.abs(a.level - myLevel) - Math.abs(b.level - myLevel))
-    .slice(0, 20);
+    .slice(0, 10);
 
   const cdRemaining = player.pvpStats && player.pvpStats.lastPvpAt
     ? Math.max(0, PVP_CD_MS - (getNow() - player.pvpStats.lastPvpAt))
@@ -495,19 +525,21 @@ app.get('/api/arena/opponents/:username', (req, res) => {
     success: true,
     data: {
       opponents,
-      myRating: (player.pvpStats && player.pvpStats.rating) || 1000,
+      bots: botOpponents, // 单独的 Bot 列表
+      myRating,
       myWins: (player.pvpStats && player.pvpStats.wins) || 0,
       myLosses: (player.pvpStats && player.pvpStats.losses) || 0,
       myStreak: (player.pvpStats && player.pvpStats.streak) || 0,
       myBestStreak: (player.pvpStats && player.pvpStats.bestStreak) || 0,
+      arenaCoins: player[PVP_CURRENCY_KEY] || 0,
       cdRemaining
     }
   });
 });
 
-// 挑战对手
+// 挑战对手（Bot 或真实玩家）
 app.post('/api/arena/challenge', (req, res) => {
-  const { username, targetUsername } = req.body;
+  const { username, targetUsername, isBot } = req.body;
   if (!username || !targetUsername) {
     return res.json({ success: false, message: '缺少参数' });
   }
@@ -525,8 +557,22 @@ app.post('/api/arena/challenge', (req, res) => {
     return res.json({ success: false, message: `冷却中，还需 ${Math.ceil(cdRemaining / 1000)} 秒` });
   }
 
-  const target = store.getPlayer(targetUsername);
-  if (!target) return res.json({ success: false, message: '对手不存在' });
+  let target;
+  let botRecord = null;
+
+  if (isBot) {
+    // Bot 模式：动态生成 Bot 进行战斗
+    const myLevel = player.level || 1;
+    const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
+    const rating = myRating + Math.floor(Math.random() * 200) - 50;
+    const bots = generateArenaBots(myLevel, Math.max(800, rating));
+    // 找到 username 匹配的 Bot（client 传回的 bot username）
+    target = bots.find(b => b.username === targetUsername) || bots[0];
+    botRecord = { username: target.username, name: target.name, level: target.level, rating: target.pvpStats.rating };
+  } else {
+    target = store.getPlayer(targetUsername);
+    if (!target) return res.json({ success: false, message: '对手不存在' });
+  }
 
   // 等级差检查
   const levelDiff = Math.abs((player.level || 1) - (target.level || 1));
@@ -558,28 +604,23 @@ app.post('/api/arena/challenge', (req, res) => {
     player.pvpStats.streak = 0;
   }
 
-  // 更新被挑战者 PVP 统计（被动防守）
-  if (!target.pvpStats) target.pvpStats = {};
-  const targetRatingResult = calcPvpRating(enemyRating, myRating, !isWin);
-  target.pvpStats.rating = targetRatingResult.newRating;
+  // 奖励（基础奖励）
+  const baseRewards = calcPvpRewards(player.level || 1, isWin, player.pvpStats.streak || 0);
+  player.gold = (player.gold || 0) + baseRewards.gold;
+  player.exp = (player.exp || 0) + baseRewards.exp;
+
+  // 胜利额外竞技币（10 基础 + 等级×1 + 连胜奖励）
+  let coinsEarned = 0;
   if (isWin) {
-    target.pvpStats.losses = (target.pvpStats.losses || 0) + 1;
-    target.pvpStats.streak = 0;
+    const streakBonus = Math.min(player.pvpStats.streak || 0, 5);
+    coinsEarned = 10 + (player.level || 1) + streakBonus * 5;
+    player[PVP_CURRENCY_KEY] = (player[PVP_CURRENCY_KEY] || 0) + coinsEarned;
   } else {
-    target.pvpStats.wins = (target.pvpStats.wins || 0) + 1;
-    target.pvpStats.streak = (target.pvpStats.streak || 0) + 1;
-    if (target.pvpStats.streak > (target.pvpStats.bestStreak || 0)) {
-      target.pvpStats.bestStreak = target.pvpStats.streak;
-    }
+    coinsEarned = 2;
+    player[PVP_CURRENCY_KEY] = (player[PVP_CURRENCY_KEY] || 0) + coinsEarned;
   }
 
-  // 奖励
-  const rewards = calcPvpRewards(player.level || 1, isWin, player.pvpStats.streak || 0);
-  player.gold = (player.gold || 0) + rewards.gold;
-  // 经验奖励简化处理
-  player.exp = (player.exp || 0) + rewards.exp;
-
-  // 战斗记录
+  // 战斗记录（Bot 也写记录，但不写被挑战者）
   const meta = store.getMeta();
   if (!Array.isArray(meta.pvpRecords)) meta.pvpRecords = [];
   meta.pvpRecords.unshift({
@@ -587,10 +628,11 @@ app.post('/api/arena/challenge', (req, res) => {
     attacker: username,
     defender: targetUsername,
     attackerName: player.name,
-    defenderName: target.name,
+    defenderName: target.name || target.username,
     result: isWin ? 'win' : 'lose',
     ratingChange: ratingResult.change,
-    rewards
+    rewards: { ...baseRewards, coins: coinsEarned },
+    isBot: !!isBot
   });
   if (meta.pvpRecords.length > 200) meta.pvpRecords = meta.pvpRecords.slice(0, 200);
   store.setMeta(meta);
@@ -601,12 +643,12 @@ app.post('/api/arena/challenge', (req, res) => {
     time: getNow(),
     type: 'pvp',
     text: isWin
-      ? `竞技场胜利！击败了 ${target.name}，获得 ${rewards.gold} 金币 ${rewards.exp} 经验`
-      : `竞技场失败...被 ${target.name} 击败，获得 ${rewards.gold} 金币 ${rewards.exp} 经验`
+      ? `竞技场胜利！击败了 ${target.name || target.username}，+${baseRewards.gold}金币 +${baseRewards.exp}经验 +${coinsEarned}竞技币`
+      : `竞技场失败...被 ${target.name || target.username} 击败，+${coinsEarned}竞技币`
   });
 
+  // 只写攻击者（Bot 不持久化）
   store.setPlayer(player.username, player);
-  store.setPlayer(target.username, target);
   store.save();
 
   res.json({
@@ -614,9 +656,12 @@ app.post('/api/arena/challenge', (req, res) => {
     data: {
       battle,
       isWin,
-      rewards,
+      rewards: { ...baseRewards, coins: coinsEarned },
       ratingChange: ratingResult.change,
       newRating: player.pvpStats.rating,
+      arenaCoins: player[PVP_CURRENCY_KEY] || 0,
+      targetName: target.name || target.username,
+      targetLevel: target.level,
       player: getPlayerView(player)
     }
   });
@@ -660,6 +705,167 @@ app.get('/api/arena/records/:username', (req, res) => {
     .slice(0, 20);
 
   res.json({ success: true, data: { records } });
+});
+
+// ====== 竞技场商店 ======
+
+// 获取商店物品列表（按等级分组）
+app.get('/api/arena/shop', (req, res) => {
+  const grouped = {};
+  for (const item of ARENA_EQUIPMENT) {
+    if (!grouped[item.reqLevel]) grouped[item.reqLevel] = [];
+    grouped[item.reqLevel].push(item);
+  }
+  res.json({ success: true, data: { items: ARENA_EQUIPMENT, grouped } });
+});
+
+// 购买竞技场装备
+app.post('/api/arena/buy', (req, res) => {
+  const { username, itemId } = req.body;
+  if (!username || !itemId) {
+    return res.json({ success: false, message: '缺少参数' });
+  }
+  const player = store.getPlayer(username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+
+  const result = buyArenaItem(player, itemId);
+  if (!result.success) return res.json(result);
+
+  store.setPlayer(username, player);
+  store.save();
+
+  res.json({
+    success: true,
+    data: {
+      item: result.item,
+      arenaCoins: player[PVP_CURRENCY_KEY] || 0,
+      player: getPlayerView(player)
+    }
+  });
+});
+
+// ====== 赛季信息与奖励 ======
+
+// 获取赛季信息
+app.get('/api/arena/season', (req, res) => {
+  const meta = store.getMeta();
+  const currentSeason = getSeasonKey();
+  const seasonIdx = getSeasonIndex();
+
+  // 确保 meta 上有赛季字段
+  if (!meta.currentSeason) meta.currentSeason = currentSeason;
+  // 检查是否需要跨赛季重置（同步在后台任务中执行，这里也兜底一次）
+  const reset = maybeResetSeason(meta);
+  if (reset.reset) {
+    applySeasonResetToPlayers(store);
+    store.save();
+  }
+
+  // 当前周期的"昨日/上周/上月"奖励是否已发（用于UI显示"未领取"等）
+  const dailyKey = getDailyKey();
+  const yesterday = new Date(getNow() - 24 * 60 * 60 * 1000);
+  const yKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+  res.json({
+    success: true,
+    data: {
+      currentSeason,
+      seasonIdx,
+      daysLeft: getSeasonDaysLeft(),
+      monthsPerSeason: 3,
+      arenaCoins: store.getPlayer(req.query.username || '')?.[PVP_CURRENCY_KEY] || 0,
+      lastResetFrom: meta.lastResetFrom || null,
+      lastResetAt: meta.lastResetAt || null
+    }
+  });
+});
+
+// 获取当前周期的奖励快照（用于UI显示"你的当前排名可能获奖金"）
+app.get('/api/arena/rewards/:period', (req, res) => {
+  const period = req.params.period;
+  if (!['daily', 'weekly', 'monthly'].includes(period)) {
+    return res.json({ success: false, message: '无效的奖励周期' });
+  }
+  const meta = store.getMeta();
+  const rankingList = store.getAllPlayers()
+    .filter(p => p.level)
+    .map(p => {
+      const rp = getReadonlyPlayer(p);
+      return { username: rp.username, rating: (rp.pvpStats && rp.pvpStats.rating) || 1000 };
+    })
+    .sort((a, b) => b.rating - a.rating);
+
+  const top100 = rankingList.slice(0, 100);
+  const rewardMap = {};
+  for (let i = 0; i < top100.length; i++) {
+    const rank = i + 1;
+    const tier = getRankTier(period, rank);
+    if (tier) rewardMap[top100[i].username] = { rank, tier: tier.tier, coins: tier.coins };
+  }
+
+  // 当前周期的 key
+  const periodKey = period === 'daily' ? getDailyKey()
+    : period === 'weekly' ? getWeeklyKey()
+    : getMonthlyKey();
+  const settled = (meta.arenaRewards && meta.arenaRewards[period] && meta.arenaRewards[period][periodKey]) || null;
+
+  res.json({
+    success: true,
+    data: {
+      period,
+      periodKey,
+      ranking: top100,
+      myReward: req.query.username ? rewardMap[req.query.username] : null,
+      rewardMap,
+      settled: !!settled,
+      settledRewards: settled,
+      rules: {
+        S: '1 名 · 1/2-3/4-10/11-20/21-50/51-100',
+        tiers: { S: '1', A: '2-3', B: '4-10', C: '11-20', D: '21-50', E: '51-100' }
+      }
+    }
+  });
+});
+
+// 手动触发一次周期结算（管理/调试用，前端也可调）
+app.post('/api/arena/settle', (req, res) => {
+  const { period } = req.body;
+  if (!['daily', 'weekly', 'monthly'].includes(period)) {
+    return res.json({ success: false, message: '无效的奖励周期' });
+  }
+  const meta = store.getMeta();
+  const rankingList = store.getAllPlayers()
+    .filter(p => p.level)
+    .map(p => {
+      const rp = getReadonlyPlayer(p);
+      return { username: rp.username, rating: (rp.pvpStats && rp.pvpStats.rating) || 1000 };
+    })
+    .sort((a, b) => b.rating - a.rating);
+
+  const result = settleArenaRewards(meta, period, rankingList);
+  if (result.already) {
+    return res.json({ success: true, data: { already: true, key: result.key } });
+  }
+
+  // 自动入账竞技币（每个获奖玩家）
+  let credited = 0;
+  for (const [username, info] of Object.entries(result.rewards)) {
+    const p = store.getPlayer(username);
+    if (!p) continue;
+    p[PVP_CURRENCY_KEY] = (p[PVP_CURRENCY_KEY] || 0) + info.coins;
+    p.logs = p.logs || [];
+    p.logs.push({
+      time: getNow(),
+      type: 'arena-reward',
+      text: `【${period === 'daily' ? '日结' : period === 'weekly' ? '周结' : '月结'}奖励】${info.tier} 级 (第 ${info.rank} 名) +${info.coins} 竞技币`
+    });
+    store.setPlayer(username, p);
+    credited++;
+  }
+  store.setMeta(meta);
+  store.save();
+
+  res.json({ success: true, data: { ...result, creditedCount: credited } });
 });
 
 // ====== 转生（为转生榜提供真实写入；完整 T-010 落地前为最小可用） ======
@@ -794,6 +1000,98 @@ if (require.main === module) {
   setInterval(() => maybeResetWeeklyBossKills(store), 60 * 1000);
 
   setInterval(() => store.save(), 30000);
+
+  // ====== 竞技场周期结算（每分钟检查一次日/周/月边界） ======
+  // 仅在跨过周期边界的分钟才执行结算
+  let lastDailyKey = getDailyKey();
+  let lastWeeklyKey = getWeeklyKey();
+  let lastMonthlyKey = getMonthlyKey();
+  let lastSeasonKey = getSeasonKey();
+
+  function tryAutoSettle() {
+    const meta = store.getMeta();
+    const curSeason = getSeasonKey();
+    if (curSeason !== lastSeasonKey) {
+      const resetInfo = maybeResetSeason(meta);
+      if (resetInfo.reset) {
+        applySeasonResetToPlayers(store);
+        console.log(`[赛季重置] ${resetInfo.from} → ${resetInfo.to}`);
+      }
+      lastSeasonKey = curSeason;
+      store.setMeta(meta);
+      store.save();
+    }
+
+    const curDaily = getDailyKey();
+    if (curDaily !== lastDailyKey) {
+      const ranking = store.getAllPlayers()
+        .filter(p => p.level)
+        .map(p => ({ username: p.username, rating: (p.pvpStats && p.pvpStats.rating) || 1000 }))
+        .sort((a, b) => b.rating - a.rating);
+      const r = settleArenaRewards(meta, 'daily', ranking);
+      if (r.rewarded > 0) {
+        for (const [username, info] of Object.entries(r.rewards)) {
+          const p = store.getPlayer(username);
+          if (!p) continue;
+          p[PVP_CURRENCY_KEY] = (p[PVP_CURRENCY_KEY] || 0) + info.coins;
+          p.logs = p.logs || [];
+          p.logs.push({ time: getNow(), type: 'arena-reward', text: `【日结奖励】${info.tier}级 (第 ${info.rank} 名) +${info.coins} 竞技币` });
+          store.setPlayer(username, p);
+        }
+        console.log(`[竞技场日结] ${r.rewarded} 人获奖金 (${curDaily})`);
+      }
+      lastDailyKey = curDaily;
+      store.setMeta(meta);
+      store.save();
+    }
+
+    const curWeekly = getWeeklyKey();
+    if (curWeekly !== lastWeeklyKey) {
+      const ranking = store.getAllPlayers()
+        .filter(p => p.level)
+        .map(p => ({ username: p.username, rating: (p.pvpStats && p.pvpStats.rating) || 1000 }))
+        .sort((a, b) => b.rating - a.rating);
+      const r = settleArenaRewards(meta, 'weekly', ranking);
+      if (r.rewarded > 0) {
+        for (const [username, info] of Object.entries(r.rewards)) {
+          const p = store.getPlayer(username);
+          if (!p) continue;
+          p[PVP_CURRENCY_KEY] = (p[PVP_CURRENCY_KEY] || 0) + info.coins;
+          p.logs = p.logs || [];
+          p.logs.push({ time: getNow(), type: 'arena-reward', text: `【周结奖励】${info.tier}级 (第 ${info.rank} 名) +${info.coins} 竞技币` });
+          store.setPlayer(username, p);
+        }
+        console.log(`[竞技场周结] ${r.rewarded} 人获奖金 (${curWeekly})`);
+      }
+      lastWeeklyKey = curWeekly;
+      store.setMeta(meta);
+      store.save();
+    }
+
+    const curMonthly = getMonthlyKey();
+    if (curMonthly !== lastMonthlyKey) {
+      const ranking = store.getAllPlayers()
+        .filter(p => p.level)
+        .map(p => ({ username: p.username, rating: (p.pvpStats && p.pvpStats.rating) || 1000 }))
+        .sort((a, b) => b.rating - a.rating);
+      const r = settleArenaRewards(meta, 'monthly', ranking);
+      if (r.rewarded > 0) {
+        for (const [username, info] of Object.entries(r.rewards)) {
+          const p = store.getPlayer(username);
+          if (!p) continue;
+          p[PVP_CURRENCY_KEY] = (p[PVP_CURRENCY_KEY] || 0) + info.coins;
+          p.logs = p.logs || [];
+          p.logs.push({ time: getNow(), type: 'arena-reward', text: `【月结奖励】${info.tier}级 (第 ${info.rank} 名) +${info.coins} 竞技币` });
+          store.setPlayer(username, p);
+        }
+        console.log(`[竞技场月结] ${r.rewarded} 人获奖金 (${curMonthly})`);
+      }
+      lastMonthlyKey = curMonthly;
+      store.setMeta(meta);
+      store.save();
+    }
+  }
+  setInterval(tryAutoSettle, 60 * 1000); // 每分钟检查一次
 
   // ====== 生产模式：托管前端构建产物 ======
   const distPath = path.join(__dirname, '..', 'client', 'dist');
