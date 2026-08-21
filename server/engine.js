@@ -365,6 +365,14 @@ function migratePlayer(player) {
   if (!Number.isFinite(player.reincPoints)) player.reincPoints = 0;
   if (!Number.isFinite(player.tutorialStep)) player.tutorialStep = 0;
   player.tutorialStep = normalizeTutorialStep(player.tutorialStep);
+  // PVP 竞技场数据
+  if (!player.pvpStats || typeof player.pvpStats !== 'object') player.pvpStats = {};
+  if (!Number.isFinite(player.pvpStats.wins)) player.pvpStats.wins = 0;
+  if (!Number.isFinite(player.pvpStats.losses)) player.pvpStats.losses = 0;
+  if (!Number.isFinite(player.pvpStats.rating)) player.pvpStats.rating = 1000;
+  if (!Number.isFinite(player.pvpStats.streak)) player.pvpStats.streak = 0;
+  if (!Number.isFinite(player.pvpStats.bestStreak)) player.pvpStats.bestStreak = 0;
+  if (!Number.isFinite(player.pvpStats.lastPvpAt)) player.pvpStats.lastPvpAt = 0;
   // 迁移旧数据兼容：若 achievements 空但已有角色，补初次冒险
   if (!player.achievements['first']) {
     player.achievements['first'] = { unlocked: true, claimed: false, unlockAt: player.createdAt || getNow() };
@@ -956,6 +964,195 @@ function simulateBattle(player, monster) {
     agiRatio: agiRatio.toFixed(2),
     combatStats: { atk: combat.atk, def: combat.def, agi: combat.agi, crit: combat.crit, dodge: combat.dodge }
   };
+}
+
+// ====== PVP 竞技场：玩家 vs 玩家战斗模拟 ======
+function simulatePvP(playerA, playerB) {
+  const combatA = getCombatStats(playerA);
+  const combatB = getCombatStats(playerB);
+
+  let hpA = combatA.maxHp;
+  let hpB = combatB.maxHp;
+
+  const agiA = Math.floor(combatA.agi * (1 + (combatA.firstTurnAgi || 0)));
+  const agiB = Math.floor(combatB.agi * (1 + (combatB.firstTurnAgi || 0)));
+  const aFirst = agiA >= agiB;
+
+  let stackAgiA = 0, stackAgiB = 0;
+  let deathShieldA = combatA.deathShield, deathShieldB = combatB.deathShield;
+  let revivedA = false, revivedB = false;
+
+  const rounds = [];
+  const maxRounds = 30;
+  let result = 'timeout';
+
+  const doPvPAction = (atkCombat, defCombat, attacker) => {
+    if (hpA <= 0 || hpB <= 0) return;
+    const isA = attacker === 'A';
+
+    if (_rand() < (defCombat.dodge || 0)) {
+      rounds.length; // no-op to keep structure
+      const r = rounds[rounds.length - 1];
+      r.actions.push({ actor: attacker, skill: '闪避!', dodge: true, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) });
+      return;
+    }
+
+    const skill = pickPlayerSkill(atkCombat);
+    let mult = 1;
+    let skillName = '普通攻击';
+
+    if (skill) {
+      const eff = skill.effect;
+      skillName = skill.name;
+      if (eff.type === 'damage') {
+        mult = eff.mult || 1;
+        if (eff.atk_buff) atkCombat.atk = Math.floor(atkCombat.atk * (1 + eff.atk_buff));
+        if (eff.agi_buff) atkCombat.agi = Math.floor(atkCombat.agi * (1 + eff.agi_buff));
+        if (eff.crit_buff) atkCombat.crit += eff.crit_buff;
+      } else if (eff.type === 'heal') {
+        const heal = Math.floor(atkCombat.maxHp * eff.value);
+        if (isA) hpA = Math.min(combatA.maxHp, hpA + heal);
+        else hpB = Math.min(combatB.maxHp, hpB + heal);
+        const r = rounds[rounds.length - 1];
+        r.actions.push({ actor: attacker, skill: skillName, heal, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) });
+        return;
+      } else if (eff.type === 'atk_buff') {
+        atkCombat.atk = Math.floor(atkCombat.atk * (1 + eff.value));
+        const r = rounds[rounds.length - 1];
+        r.actions.push({ actor: attacker, skill: skillName + '(增益)', buff: true, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) });
+        return;
+      } else if (eff.type === 'def_buff') {
+        atkCombat.def = Math.floor(atkCombat.def * (1 + eff.value));
+        const r = rounds[rounds.length - 1];
+        r.actions.push({ actor: attacker, skill: skillName + '(防御)', buff: true, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) });
+        return;
+      } else if (eff.type === 'agi_buff') {
+        atkCombat.agi = Math.floor(atkCombat.agi * (1 + eff.value));
+        const r = rounds[rounds.length - 1];
+        r.actions.push({ actor: attacker, skill: skillName + '(加速)', buff: true, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) });
+        return;
+      } else if (eff.type === 'crit_buff') {
+        atkCombat.crit += eff.value;
+        const r = rounds[rounds.length - 1];
+        r.actions.push({ actor: attacker, skill: skillName + '(暴击)', buff: true, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) });
+        return;
+      }
+    }
+
+    const dmgResult = calcDamage(
+      atkCombat.atk, defCombat.def, mult,
+      atkCombat.dmgBonus, 0, atkCombat.ignoreDef,
+      atkCombat.crit, atkCombat.critDmg
+    );
+
+    if (isA) {
+      hpB -= dmgResult.value;
+      if (atkCombat.lifesteal > 0) hpA = Math.min(combatA.maxHp, hpA + Math.floor(dmgResult.value * atkCombat.lifesteal));
+      if (defCombat.thorns > 0) hpA -= Math.floor(dmgResult.value * defCombat.thorns);
+    } else {
+      hpA -= dmgResult.value;
+      if (atkCombat.lifesteal > 0) hpB = Math.min(combatB.maxHp, hpB + Math.floor(dmgResult.value * atkCombat.lifesteal));
+      if (defCombat.thorns > 0) hpB -= Math.floor(dmgResult.value * defCombat.thorns);
+    }
+
+    const r = rounds[rounds.length - 1];
+    r.actions.push({
+      actor: attacker, skill: skillName, damage: dmgResult.value,
+      crit: dmgResult.isCrit, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB)
+    });
+  };
+
+  for (let round = 1; round <= maxRounds; round++) {
+    const actions = [];
+    rounds.push({ round, actions, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) });
+
+    if (combatA.stackAgi && round > 1) stackAgiA += combatA.stackAgi;
+    if (combatB.stackAgi && round > 1) stackAgiB += combatB.stackAgi;
+    const curAgiA = Math.floor(agiA * (1 + stackAgiA));
+    const curAgiB = Math.floor(agiB * (1 + stackAgiB));
+
+    const aActions = getActionCount(curAgiA, curAgiB);
+    const bActions = getActionCount(curAgiB, curAgiA);
+
+    const queue = [];
+    const maxLen = Math.max(aActions, bActions);
+    const first = (round === 1) ? aFirst : (curAgiA >= curAgiB);
+    for (let i = 0; i < maxLen; i++) {
+      if (first) {
+        if (i < aActions) queue.push('A');
+        if (i < bActions) queue.push('B');
+      } else {
+        if (i < bActions) queue.push('B');
+        if (i < aActions) queue.push('A');
+      }
+    }
+
+    for (const actor of queue) {
+      if (hpA <= 0 || hpB <= 0) break;
+      if (actor === 'A') doPvPAction(combatA, combatB, 'A');
+      else doPvPAction(combatB, combatA, 'B');
+    }
+
+    // 回血
+    if (combatA.regen > 0 && hpA > 0) hpA = Math.min(combatA.maxHp, hpA + Math.floor(combatA.maxHp * combatA.regen));
+    if (combatB.regen > 0 && hpB > 0) hpB = Math.min(combatB.maxHp, hpB + Math.floor(combatB.maxHp * combatB.regen));
+
+    // 免死护盾
+    if (hpB <= 0 && deathShieldB > 0) { hpB = Math.floor(combatB.maxHp * deathShieldB); deathShieldB = 0; rounds[rounds.length - 1].actions.push({ actor: 'B', skill: '免死护盾!', shield: true, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) }); }
+    if (hpA <= 0 && deathShieldA > 0) { hpA = Math.floor(combatA.maxHp * deathShieldA); deathShieldA = 0; rounds[rounds.length - 1].actions.push({ actor: 'A', skill: '免死护盾!', shield: true, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) }); }
+
+    // 更新回合 HP 快照
+    const cur = rounds[rounds.length - 1];
+    cur.hpA = Math.max(0, hpA);
+    cur.hpB = Math.max(0, hpB);
+
+    if (hpB <= 0) { result = 'win'; break; }
+    if (hpA <= 0) {
+      if (combatA.revive > 0 && !revivedA) {
+        hpA = Math.floor(combatA.maxHp * combatA.revive);
+        revivedA = true;
+        cur.actions.push({ actor: 'A', skill: '圣光复生!', revive: true, hpA: Math.max(0, hpA), hpB: Math.max(0, hpB) });
+      } else {
+        result = 'lose';
+        break;
+      }
+    }
+  }
+
+  return {
+    result,
+    rounds,
+    myHp: Math.max(0, hpA),
+    myMaxHp: combatA.maxHp,
+    enemyHp: Math.max(0, hpB),
+    enemyMaxHp: combatB.maxHp,
+    myStats: { atk: combatA.atk, def: combatA.def, agi: combatA.agi, crit: combatA.crit, dodge: combatA.dodge },
+    enemyStats: { atk: combatB.atk, def: combatB.def, agi: combatB.agi, crit: combatB.crit, dodge: combatB.dodge },
+    enemyName: playerB.name || playerB.username,
+    enemyJob: playerB.job || '无',
+    enemyRace: playerB.race || '鹰人',
+    enemyLevel: playerB.level || 1
+  };
+}
+
+// ====== PVP 积分计算（ELO） ======
+function calcPvpRating(myRating, enemyRating, isWin) {
+  const expected = 1 / (1 + Math.pow(10, (enemyRating - myRating) / 400));
+  const score = isWin ? 1 : 0;
+  const K = 32;
+  const change = Math.round(K * (score - expected));
+  return { newRating: myRating + change, change };
+}
+
+// ====== PVP 奖励计算 ======
+function calcPvpRewards(playerLevel, isWin, streak) {
+  if (isWin) {
+    const streakBonus = Math.min(0.5, streak * 0.1);
+    const gold = Math.floor((50 + playerLevel * 5) * (1 + streakBonus));
+    const exp = Math.floor((30 + playerLevel * 3) * (1 + streakBonus));
+    return { gold, exp };
+  }
+  return { gold: 10, exp: 5 + playerLevel };
 }
 
 // ====== 挂机收益计算 ======
@@ -1553,6 +1750,7 @@ function getPlayerView(player) {
     strategy, strategyChangedAt, strategyCdRemaining, strategies,
     titles: player.titles || [], currentTitle: player.currentTitle || null,
     questView,
+    pvpStats: player.pvpStats,
     tutorialStep: normalizeTutorialStep(player.tutorialStep), tutorialDone: normalizeTutorialStep(player.tutorialStep)===6
   };
 }
@@ -1576,7 +1774,8 @@ module.exports = {
   migratePlayer, getReadonlyPlayer, chooseJob, equipItem, unequipItem,
   useConsumable, buyItem, recalcMaxStats, sellMaterial, sellEquip,
   evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,
-  simulateBattle, getCombatStats, getTotalStats, getPowerScore, getStageFull,
+  simulateBattle, simulatePvP, calcPvpRating, calcPvpRewards,
+  getCombatStats, getTotalStats, getPowerScore, getStageFull,
   getCurrentWeekKey, maybeResetWeeklyBossKills,
   equipAffix, unequipAffix, findAffix, getPassiveSlots, getJobStage,
   buildBattleMonster, shouldDrop,

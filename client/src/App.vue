@@ -92,12 +92,14 @@
             @sellEquip="handleSellEquip" @equip="handleEquip" @enchant="handleEnchant" />
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
             @select="handleAreaChange" @strategy-change="handleStrategyChange"
-            @goRank="activeTab = 'rank'" />
+            @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" />
           <CodexView v-else-if="activeTab === 'codex'" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend" />
           <LeaderboardView v-else-if="activeTab === 'rank'" :currentUser="currentUserRef" />
           <QuestView v-else-if="activeTab === 'quest'" :player="player" :currentUser="currentUserRef" @refresh="player = $event" />
+          <PvPView v-else-if="activeTab === 'pvp'" :player="player" :currentUser="currentUserRef"
+            @goBack="activeTab = 'map'" @updatePlayer="player = $event" />
         </div>
       </transition>
     </main>
@@ -187,6 +189,7 @@ import CodexView from './components/CodexView.vue'
 import EvolutionView from './components/EvolutionView.vue'
 import LeaderboardView from './components/LeaderboardView.vue'
 import QuestView from './components/QuestView.vue'
+import PvPView from './components/PvPView.vue'
 import TutorialOverlay from './components/TutorialOverlay.vue'
 
 const player = ref(null)
@@ -224,7 +227,7 @@ const mainTabs = computed(() => [
 ])
 const transitionName = ref('slide-left')
 
-const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest']
+const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp']
 
 watch(activeTab, (newTab, oldTab) => {
   const newIdx = tabOrder.indexOf(newTab)

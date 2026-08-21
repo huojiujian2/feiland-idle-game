@@ -15,6 +15,7 @@ const {
   maybeResetWeeklyBossKills,
   claimDaily, claimChest, claimAchievement,
   updateTutorialStep,
+  simulatePvP, calcPvpRating, calcPvpRewards,
   getNow
 } = require('./engine');
 
@@ -450,6 +451,215 @@ app.get('/api/leaderboard', (req, res) => {
     myRank = rankedFull.find(p => p.username === queryUser) || null;
   }
   res.json({ success: true, data: { type, total: players.length, list: ranked, myRank } });
+});
+
+// ====== PVP 竞技场 ======
+const PVP_CD_MS = 3 * 60 * 1000; // 挑战冷却 3 分钟
+const PVP_LEVEL_RANGE = 5; // 匹配等级差 ±5
+
+// 获取对手列表
+app.get('/api/arena/opponents/:username', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+
+  const myLevel = player.level || 1;
+  const allPlayers = store.getAllPlayers();
+
+  const opponents = allPlayers
+    .filter(p => p.username !== player.username && p.level)
+    .filter(p => Math.abs((p.level || 1) - myLevel) <= PVP_LEVEL_RANGE)
+    .map(p => {
+      const rp = getReadonlyPlayer(p);
+      const power = getPowerScore(rp);
+      return {
+        username: rp.username,
+        name: rp.name,
+        level: rp.level,
+        race: rp.race,
+        job: rp.job || '无',
+        godhood: rp.godhood || null,
+        power,
+        pvpRating: (rp.pvpStats && rp.pvpStats.rating) || 1000,
+        pvpWins: (rp.pvpStats && rp.pvpStats.wins) || 0,
+        pvpLosses: (rp.pvpStats && rp.pvpStats.losses) || 0
+      };
+    })
+    .sort((a, b) => Math.abs(a.level - myLevel) - Math.abs(b.level - myLevel))
+    .slice(0, 20);
+
+  const cdRemaining = player.pvpStats && player.pvpStats.lastPvpAt
+    ? Math.max(0, PVP_CD_MS - (getNow() - player.pvpStats.lastPvpAt))
+    : 0;
+
+  res.json({
+    success: true,
+    data: {
+      opponents,
+      myRating: (player.pvpStats && player.pvpStats.rating) || 1000,
+      myWins: (player.pvpStats && player.pvpStats.wins) || 0,
+      myLosses: (player.pvpStats && player.pvpStats.losses) || 0,
+      myStreak: (player.pvpStats && player.pvpStats.streak) || 0,
+      myBestStreak: (player.pvpStats && player.pvpStats.bestStreak) || 0,
+      cdRemaining
+    }
+  });
+});
+
+// 挑战对手
+app.post('/api/arena/challenge', (req, res) => {
+  const { username, targetUsername } = req.body;
+  if (!username || !targetUsername) {
+    return res.json({ success: false, message: '缺少参数' });
+  }
+  if (username === targetUsername) {
+    return res.json({ success: false, message: '不能挑战自己' });
+  }
+
+  const player = store.getPlayer(username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+
+  // 冷却检查
+  const lastPvp = (player.pvpStats && player.pvpStats.lastPvpAt) || 0;
+  const cdRemaining = lastPvp ? Math.max(0, PVP_CD_MS - (getNow() - lastPvp)) : 0;
+  if (cdRemaining > 0) {
+    return res.json({ success: false, message: `冷却中，还需 ${Math.ceil(cdRemaining / 1000)} 秒` });
+  }
+
+  const target = store.getPlayer(targetUsername);
+  if (!target) return res.json({ success: false, message: '对手不存在' });
+
+  // 等级差检查
+  const levelDiff = Math.abs((player.level || 1) - (target.level || 1));
+  if (levelDiff > PVP_LEVEL_RANGE) {
+    return res.json({ success: false, message: `等级差超过 ${PVP_LEVEL_RANGE} 级，无法挑战` });
+  }
+
+  // 模拟 PVP 战斗
+  const battle = simulatePvP(player, target);
+  const isWin = battle.result === 'win';
+
+  // ELO 积分变化
+  const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
+  const enemyRating = (target.pvpStats && target.pvpStats.rating) || 1000;
+  const ratingResult = calcPvpRating(myRating, enemyRating, isWin);
+
+  // 更新攻击者 PVP 统计
+  if (!player.pvpStats) player.pvpStats = {};
+  player.pvpStats.rating = ratingResult.newRating;
+  player.pvpStats.lastPvpAt = getNow();
+  if (isWin) {
+    player.pvpStats.wins = (player.pvpStats.wins || 0) + 1;
+    player.pvpStats.streak = (player.pvpStats.streak || 0) + 1;
+    if (player.pvpStats.streak > (player.pvpStats.bestStreak || 0)) {
+      player.pvpStats.bestStreak = player.pvpStats.streak;
+    }
+  } else {
+    player.pvpStats.losses = (player.pvpStats.losses || 0) + 1;
+    player.pvpStats.streak = 0;
+  }
+
+  // 更新被挑战者 PVP 统计（被动防守）
+  if (!target.pvpStats) target.pvpStats = {};
+  const targetRatingResult = calcPvpRating(enemyRating, myRating, !isWin);
+  target.pvpStats.rating = targetRatingResult.newRating;
+  if (isWin) {
+    target.pvpStats.losses = (target.pvpStats.losses || 0) + 1;
+    target.pvpStats.streak = 0;
+  } else {
+    target.pvpStats.wins = (target.pvpStats.wins || 0) + 1;
+    target.pvpStats.streak = (target.pvpStats.streak || 0) + 1;
+    if (target.pvpStats.streak > (target.pvpStats.bestStreak || 0)) {
+      target.pvpStats.bestStreak = target.pvpStats.streak;
+    }
+  }
+
+  // 奖励
+  const rewards = calcPvpRewards(player.level || 1, isWin, player.pvpStats.streak || 0);
+  player.gold = (player.gold || 0) + rewards.gold;
+  // 经验奖励简化处理
+  player.exp = (player.exp || 0) + rewards.exp;
+
+  // 战斗记录
+  const meta = store.getMeta();
+  if (!Array.isArray(meta.pvpRecords)) meta.pvpRecords = [];
+  meta.pvpRecords.unshift({
+    time: getNow(),
+    attacker: username,
+    defender: targetUsername,
+    attackerName: player.name,
+    defenderName: target.name,
+    result: isWin ? 'win' : 'lose',
+    ratingChange: ratingResult.change,
+    rewards
+  });
+  if (meta.pvpRecords.length > 200) meta.pvpRecords = meta.pvpRecords.slice(0, 200);
+  store.setMeta(meta);
+
+  // 日志
+  player.logs = player.logs || [];
+  player.logs.push({
+    time: getNow(),
+    type: 'pvp',
+    text: isWin
+      ? `竞技场胜利！击败了 ${target.name}，获得 ${rewards.gold} 金币 ${rewards.exp} 经验`
+      : `竞技场失败...被 ${target.name} 击败，获得 ${rewards.gold} 金币 ${rewards.exp} 经验`
+  });
+
+  store.setPlayer(player.username, player);
+  store.setPlayer(target.username, target);
+  store.save();
+
+  res.json({
+    success: true,
+    data: {
+      battle,
+      isWin,
+      rewards,
+      ratingChange: ratingResult.change,
+      newRating: player.pvpStats.rating,
+      player: getPlayerView(player)
+    }
+  });
+});
+
+// PVP 排行榜
+app.get('/api/arena/ranking', (req, res) => {
+  const players = store.getAllPlayers()
+    .filter(p => p.level)
+    .map(p => {
+      const rp = getReadonlyPlayer(p);
+      const stats = rp.pvpStats || {};
+      return {
+        username: rp.username,
+        name: rp.name,
+        level: rp.level,
+        race: rp.race,
+        job: rp.job || '无',
+        godhood: rp.godhood || null,
+        rating: stats.rating || 1000,
+        wins: stats.wins || 0,
+        losses: stats.losses || 0,
+        bestStreak: stats.bestStreak || 0,
+        winRate: (stats.wins || 0) + (stats.losses || 0) > 0
+          ? Math.round((stats.wins || 0) / ((stats.wins || 0) + (stats.losses || 0)) * 100)
+          : 0
+      };
+    })
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, 50)
+    .map((p, i) => ({ rank: i + 1, ...p }));
+
+  res.json({ success: true, data: { list: players } });
+});
+
+// PVP 战斗记录
+app.get('/api/arena/records/:username', (req, res) => {
+  const meta = store.getMeta();
+  const records = (meta.pvpRecords || [])
+    .filter(r => r.attacker === req.params.username || r.defender === req.params.username)
+    .slice(0, 20);
+
+  res.json({ success: true, data: { records } });
 });
 
 // ====== 转生（为转生榜提供真实写入；完整 T-010 落地前为最小可用） ======

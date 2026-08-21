@@ -272,7 +272,7 @@
       </div>
     </div>
 
-    <!-- 右侧折叠面板：排行 -->
+    <!-- 右侧折叠面板：排行+竞技场 -->
     <div class="side-panel" :class="{ expanded: sideOpen }">
       <button class="side-toggle" @click="sideOpen = !sideOpen">
         <span class="side-arrow">{{ sideOpen ? '›' : '‹' }}</span>
@@ -282,6 +282,10 @@
           <div class="side-tab-item" @click="$emit('goRank')">
             <span class="side-tab-icon">🏆</span>
             <span class="side-tab-label">排行榜</span>
+          </div>
+          <div class="side-tab-item" @click="$emit('goPvP')">
+            <span class="side-tab-icon">⚔️</span>
+            <span class="side-tab-label">竞技场</span>
           </div>
         </div>
       </transition>
@@ -293,7 +297,7 @@
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 
 const props = defineProps(['player', 'areas'])
-defineEmits(['select', 'strategy-change', 'goRank'])
+defineEmits(['select', 'strategy-change', 'goRank', 'goPvP'])
 
 const strategyCdRemaining = ref(0)
 const sideOpen = ref(false)

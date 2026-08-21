@@ -76,5 +76,11 @@ export default {
   claimAchievement(username, achId) { return request(`/player/${username}/quest/achievement/${achId}/claim`, { method: 'POST' }) },
 
   // 引导
-  updateTutorial(username, step) { return request(`/player/${username}/tutorial`, { method: 'POST', body: JSON.stringify({ step }) }) }
+  updateTutorial(username, step) { return request(`/player/${username}/tutorial`, { method: 'POST', body: JSON.stringify({ step }) }) },
+
+  // 竞技场
+  getOpponents(username) { return request(`/arena/opponents/${username}`) },
+  challenge(username, targetUsername) { return request('/arena/challenge', { method: 'POST', body: JSON.stringify({ username, targetUsername }) }) },
+  getArenaRanking() { return request('/arena/ranking') },
+  getArenaRecords(username) { return request(`/arena/records/${username}`) }
 }
