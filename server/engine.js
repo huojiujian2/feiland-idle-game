@@ -929,6 +929,14 @@ function simulateBattle(player, monster) {
   };
 }
 
+// ====== PVP 竞技场辅助：根据 T-005 接口触发主动词条 ======
+function pickPvPSkill(combat, round, cd) {
+  if (!combat.activeSkill || !cd || round < 1) return null;
+  // 与 T-005 一致：回合数能被 cd 整除则触发，否则普攻
+  if (round % cd !== 0) return null;
+  return combat.activeSkill;
+}
+
 // ====== PVP 竞技场：玩家 vs 玩家战斗模拟 ======
 function simulatePvP(playerA, playerB) {
   const combatA = getCombatStats(playerA);
@@ -945,6 +953,12 @@ function simulatePvP(playerA, playerB) {
   let deathShieldA = combatA.deathShield, deathShieldB = combatB.deathShield;
   let revivedA = false, revivedB = false;
 
+  // T-005 主动词条 CD
+  const activeAffixA = playerA.affixes?.active ? findAffix(playerA.affixes.active) : null;
+  const cdA = activeAffixA ? getActiveSkillCd(activeAffixA.level) : null;
+  const activeAffixB = playerB.affixes?.active ? findAffix(playerB.affixes.active) : null;
+  const cdB = activeAffixB ? getActiveSkillCd(activeAffixB.level) : null;
+
   const rounds = [];
   const maxRounds = 30;
   let result = 'timeout';
@@ -960,7 +974,7 @@ function simulatePvP(playerA, playerB) {
       return;
     }
 
-    const skill = pickPlayerSkill(atkCombat);
+    const skill = pickPvPSkill(atkCombat, round, atkCombat === combatA ? cdA : cdB);
     let mult = 1;
     let skillName = '普通攻击';
 
@@ -1642,6 +1656,67 @@ function allocateAttributes(player, allocation) {
   return { success: true };
 }
 
+// ====== 一键自动加点 ======
+// 策略：按玩家职业成长权重分配；无职业时按均衡加点。
+function autoAllocateAttributes(player) {
+  player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
+  if (!player.attrPoints || player.attrPoints <= 0) {
+    return { success: false, message: '没有可分配的属性点' };
+  }
+
+  // 根据职业选择权重
+  let weights;
+  if (player.jobPath && JOB_TREE[player.jobPath]) {
+    const growth = JOB_TREE[player.jobPath].growth || {};
+    // growth 系数直接作为权重
+    weights = {
+      atk: Math.max(0.1, growth.atk || 1),
+      def: Math.max(0.1, growth.def || 1),
+      hp:  Math.max(0.1, growth.hp  || 1),
+      agi: Math.max(0.1, growth.agi || 1)
+    };
+  } else {
+    // 无职业：偏 ATK + AGI（挂机伤害+速度优先）
+    weights = { atk: 1.2, def: 1.0, hp: 1.0, agi: 1.1 };
+  }
+
+  const total = weights.atk + weights.def + weights.hp + weights.agi;
+  const points = player.attrPoints;
+
+  // 按权重分配（四舍五入，余数补给权重最高的）
+  let atk = Math.floor(points * weights.atk / total);
+  let def = Math.floor(points * weights.def / total);
+  let hp  = Math.floor(points * weights.hp  / total);
+  let agi = points - atk - def - hp;
+
+  // 取最大权重项追加余数（agi 是减项，已通过 floor 处理；这里保险一下）
+  // 重新分布：如果 atk+def+hp+agi !== points（已经保证相等），补到权重最高的属性
+  const sum = atk + def + hp + agi;
+  if (sum !== points) {
+    const maxKey = Object.keys(weights).reduce((a, b) => weights[a] >= weights[b] ? a : b);
+    if (maxKey === 'atk') atk += (points - sum);
+    else if (maxKey === 'def') def += (points - sum);
+    else if (maxKey === 'hp')  hp  += (points - sum);
+    else agi += (points - sum);
+  }
+
+  player.attributes.atk += atk;
+  player.attributes.def += def;
+  player.attributes.hp  += hp;
+  player.attributes.agi += agi;
+  player.attrPoints = 0;
+  recalcMaxStats(player);
+  updateDailyProgress(player, 'alloc1', 1);
+  checkAchievements(player);
+
+  return {
+    success: true,
+    allocated: { atk, def, hp, agi },
+    job: player.jobPath || null
+  };
+}
+
 function recalcMaxStats(player) {
   const eq = getEquipBonus(player);
   const affix = getAffixBonus(player);
@@ -2070,7 +2145,7 @@ function getReadonlyPlayer(player) {
 }
 
 module.exports = {
-  createCharacter, calculateIdle, allocateAttributes, getPlayerView,
+  createCharacter, calculateIdle, allocateAttributes, autoAllocateAttributes, getPlayerView,
   migratePlayer, getReadonlyPlayer, chooseJob, equipItem, unequipItem,
   useConsumable, buyItem, recalcMaxStats, sellMaterial, sellEquip,
   evolveRace, enchantItem, learnLaw, attemptAscension, doReincarnate,

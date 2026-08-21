@@ -22,6 +22,7 @@ const {
   createBot, generateArenaBots,
   settleArenaRewards, maybeResetSeason, applySeasonResetToPlayers,
   buyArenaItem,
+  autoAllocateAttributes,
   getNow
 } = require('./engine');
 
@@ -145,6 +146,23 @@ app.post('/api/player/:username/attributes', (req, res) => {
   if (!result.success) return res.json({ success: false, message: result.message });
   store.setPlayer(player.username, player);
   res.json({ success: true, data: getPlayerView(player) });
+});
+
+// ====== 一键自动加点 ======
+app.post('/api/player/:username/auto-allocate', (req, res) => {
+  const player = store.getPlayer(req.params.username);
+  if (!player) return res.json({ success: false, message: '角色不存在' });
+  const result = autoAllocateAttributes(player);
+  if (!result.success) return res.json({ success: false, message: result.message });
+  store.setPlayer(player.username, player);
+  res.json({
+    success: true,
+    data: {
+      allocated: result.allocated,
+      job: result.job,
+      player: getPlayerView(player)
+    }
+  });
 });
 
 // ====== 职业相关 ======

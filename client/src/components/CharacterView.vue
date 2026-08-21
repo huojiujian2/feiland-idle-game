@@ -73,6 +73,9 @@
         <span class="cs-item" v-if="player.totalStats.dodge">💨 {{ (player.totalStats.dodge * 100).toFixed(0) }}%</span>
       </div>
       <button v-if="hasPending" class="btn btn-primary confirm-btn" data-alloc-available @click="confirmAllocate">确认分配</button>
+      <div v-else-if="player.attrPoints > 0" class="auto-alloc-row" data-alloc-available>
+        <button class="btn btn-secondary auto-btn" @click="autoAllocate">✨ 一键加点（按职业权重）</button>
+      </div>
     </div>
 
     <!-- 职业区块 -->
@@ -247,7 +250,7 @@
 import { ref, computed, reactive } from 'vue'
 
 const props = defineProps(['player', 'jobTree'])
-const emit = defineEmits(['allocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest'])
+const emit = defineEmits(['allocate', 'autoAllocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest'])
 
 const pending = ref({})
 const detailItem = ref(null)
@@ -314,6 +317,11 @@ function adjust(key, amount) {
 function confirmAllocate() {
   emit('allocate', { ...pending.value })
   pending.value = {}
+}
+
+function autoAllocate() {
+  if (props.player.attrPoints <= 0) return
+  emit('autoAllocate')
 }
 
 function showEquipDetail(slotKey) {
@@ -413,6 +421,9 @@ function handleEnchant(recipeId) {
 .adj-btn.minus:hover { background: var(--danger); color: #fff; }
 .pending-val { font-size: 0.78rem; color: var(--success); font-weight: 600; min-width: 20px; text-align: center; }
 .confirm-btn { width: 100%; margin-top: 0.5rem; padding: 0.5rem; }
+.auto-alloc-row { margin-top: 0.5rem; }
+.auto-btn { width: 100%; padding: 0.5rem; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0e0f1c; font-weight: 700; border: none; }
+.auto-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(212,175,94,0.4); }
 .combat-summary { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--rule); }
 .cs-item { font-size: 0.72rem; color: var(--accent2); background: rgba(157,140,240,0.08); padding: 0.1rem 0.4rem; border-radius: 4px; }
 

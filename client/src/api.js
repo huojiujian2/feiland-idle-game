@@ -19,6 +19,7 @@ export default {
   getPlayer(username) { return request(`/player/${username}`) },
   changeArea(username, areaId) { return request(`/player/${username}/area`, { method: 'POST', body: JSON.stringify({ areaId }) }) },
   allocateAttributes(username, allocation) { return request(`/player/${username}/attributes`, { method: 'POST', body: JSON.stringify(allocation) }) },
+  autoAllocate(username) { return request(`/player/${username}/auto-allocate`, { method: 'POST' }) },
 
   // 职业
   chooseJob(username, jobPath) { return request(`/player/${username}/job`, { method: 'POST', body: JSON.stringify({ jobPath }) }) },

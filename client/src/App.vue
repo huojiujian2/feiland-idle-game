@@ -79,6 +79,7 @@
         <div :key="activeTab" class="page-slide">
           <CharacterView v-if="activeTab === 'char'" :player="player" :jobTree="jobTree"
             @allocate="handleAllocate"
+            @autoAllocate="handleAutoAllocate"
             @equip="handleEquip" @unequip="handleUnequip" @enchant="handleEnchant"
             @chooseJob="handleChooseJob"
             @goSkill="activeTab = 'skill'"
@@ -396,6 +397,29 @@ async function handleAllocate(a) {
     } else alert(r.message)
   }catch(e){
     alert(e.message || '分配失败')
+  }
+}
+
+async function handleAutoAllocate() {
+  if (!player.value || player.value.attrPoints <= 0) return
+  const pts = player.value.attrPoints
+  if (!confirm(`使用 ${pts} 个属性点一键按职业权重加点？`)) return
+  try {
+    const r = await api.autoAllocate(currentUser)
+    if (r.success) {
+      player.value = r.data.player
+      const info = r.data.allocated
+      const jobName = r.data.job ? `（职业：${r.data.job}）` : ''
+      alert(`一键加点成功${jobName}\n攻+${info.atk} 防+${info.def} 体+${info.hp} 敏+${info.agi}`)
+      const done = player.value?.questView?.dailyQuests?.find(x => x.id === 'alloc1')?.done
+      if (player.value?.tutorialStep === 2 && done) {
+        updateTutorial(3)
+      }
+    } else {
+      alert(r.message || '一键加点失败')
+    }
+  } catch (e) {
+    alert(e.message || '一键加点失败')
   }
 }
 async function handleAreaChange(id) { const r = await api.changeArea(currentUser, id); if (r.success) player.value = r.data; else alert(r.message) }
