@@ -145,6 +145,7 @@
                         <span class="combo-dmg" :class="{ crit: hit.crit }">{{ hit.damage }}</span>
                         <span v-if="hit.crit" class="crit-tag">暴击!</span>
                         <span v-if="hit.heal !== undefined || hit.selfHeal !== undefined" class="combo-heal">+{{ hit.heal || hit.selfHeal }} HP</span>
+                        <span v-if="hit.selfHp !== undefined" class="combo-hp">→ HP {{ hit.selfHp }}/{{ hit.healTargetHp || hit.targetMaxHp }}</span>
                       </div>
                       <div class="combo-total">总伤害: {{ item.totalDamage }}</div>
                     </div>
@@ -697,6 +698,8 @@ function dropQuality(name) {
 /* 行动叙述 */
 .action-narrative { display: flex; align-items: baseline; gap: 0.2rem; font-size: 0.7rem; padding: 0.12rem 0.3rem; border-radius: 4px; margin-bottom: 0.08rem; flex-wrap: wrap; }
 .action-narrative.skill-action { background: var(--skill-bg); border-left: 2px solid var(--skill-border); }
+.action-narrative.skill-action .skill-name { color: var(--skill-icon); }
+.combo-hit.skill-action .combo-skill.skill-used { color: var(--skill-icon); }
 .action-narrative.player-dmg { background: rgba(157,140,240,0.06); }
 .action-narrative.player-heal { background: rgba(94,218,122,0.06); }
 .action-narrative.player-buff { background: rgba(212,175,94,0.06); }
@@ -720,17 +723,18 @@ function dropQuality(name) {
 .shield-highlight { font-size: 0.75rem; font-weight: 700; color: var(--accent2); padding: 0.15rem 0.3rem; background: rgba(157,140,240,0.1); border-radius: 4px; margin: 0.1rem 0; }
 .revive-highlight { font-size: 0.75rem; font-weight: 700; color: var(--accent); padding: 0.15rem 0.3rem; background: rgba(212,175,94,0.1); border-radius: 4px; margin: 0.1rem 0; }
 
-/* 连击风暴 */
-.combo-block { margin: 0.15rem 0; padding: 0.2rem 0.3rem; border-radius: 5px; background: rgba(157,140,240,0.08); border-left: 2px solid var(--accent2); }
-.combo-header { font-size: 0.72rem; font-weight: 700; color: var(--accent2); margin-bottom: 0.1rem; }
+/* 连击风暴（T-005：仅 var(--skill-*)） */
+.combo-block { margin: 0.15rem 0; padding: 0.2rem 0.3rem; border-radius: 5px; background: var(--skill-bg); border-left: 2px solid var(--skill-border); }
+.combo-header { font-size: 0.72rem; font-weight: 700; color: var(--skill-highlight); margin-bottom: 0.1rem; }
 .combo-hit { display: flex; align-items: center; gap: 0.2rem; font-size: 0.68rem; padding: 0.06rem 0.2rem; }
 .combo-hit.skill-action { background: var(--skill-bg); border-radius: 3px; }
 .combo-num { font-size: 0.6rem; color: var(--dim); width: 14px; }
 .combo-skill { color: var(--muted); flex: 1; }
-.combo-skill.skill-used { color: var(--accent2); font-weight: 600; }
+.combo-skill.skill-used { color: var(--skill-highlight); font-weight: 600; }
 .combo-dmg { font-weight: 700; color: var(--danger); }
 .combo-dmg.crit { color: #ff6b3d; font-size: 0.75rem; }
 .combo-heal { color: var(--success); font-weight: 600; }
+.combo-hp { color: var(--muted); font-size: 0.62rem; }
 .crit-tag { font-size: 0.6rem; color: #ff6b3d; font-weight: 600; }
 .combo-total { font-size: 0.68rem; font-weight: 700; color: var(--danger); margin-top: 0.05rem; }
 

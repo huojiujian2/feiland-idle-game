@@ -682,15 +682,6 @@ function getCombatStats(player) {
   };
 }
 
-// ====== 选择玩家战斗技能（使用主动词条） ======
-function pickPlayerSkill(combat, isCounter = false) {
-  if (!combat.activeSkill) return null;
-  if (_rand() < (isCounter ? 0.35 : 0.6)) {
-    return combat.activeSkill;
-  }
-  return null;
-}
-
 // ====== 选择怪物战斗技能 ======
 function pickMonsterSkill(monster) {
   if (!monster.skills || monster.skills.length === 0) return null;
@@ -787,27 +778,27 @@ function simulateBattle(player, monster) {
     buffs = remain;
   }
   function doPlayerNormalAction(actions){
-    const r = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
-    mCurHp -= r.value;
-    if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(r.value*combat.lifesteal));
-    actions.push({ actor:'player', skill:'普通攻击', damage:r.value, crit:r.isCrit, targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
-    return r;
+    const damageResult = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
+    mCurHp -= damageResult.value;
+    if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(damageResult.value*combat.lifesteal));
+    actions.push({ actor:'player', skill:'普通攻击', damage:damageResult.value, crit:damageResult.isCrit, targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
+    return damageResult;
   }
   function doMonsterNormalAction(actions){
     if(_rand() < (combat.dodge||0)){
       actions.push({ actor:'player', skill:'闪避!', dodge:true, targetHp:pHp, targetMaxHp:combat.maxHp });
       if(combat.dodgeAtk){
-        const c = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, 1, combat.critDmg);
-        mCurHp -= c.value;
-        actions.push({ actor:'player', skill:'闪避反击', damage:c.value, type:'passive', source:'dodgeAtk', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
+        const counterResult = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, 1, combat.critDmg);
+        mCurHp -= counterResult.value;
+        actions.push({ actor:'player', skill:'闪避反击', damage:counterResult.value, type:'passive', source:'dodgeAtk', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
       }
       return;
     }
-    const mSkill = pickMonsterSkill(monster);
-    let mult=1, skillName='普通攻击';
-    if(mSkill){ mult=mSkill.mult; skillName=mSkill.name; }
-    const d = calcDamage(mAtk, combat.def, mult, 0, combat.defBonus, 0, 0, 0);
-    let dmg=d.value; if(combat.dmgTaken) dmg=Math.floor(dmg*(1+combat.dmgTaken));
+    const monsterSkill = pickMonsterSkill(monster);
+    let skillMult=1, skillName='普通攻击';
+    if(monsterSkill){ skillMult=monsterSkill.mult; skillName=monsterSkill.name; }
+    const monsterDamage = calcDamage(mAtk, combat.def, skillMult, 0, combat.defBonus, 0, 0, 0);
+    let dmg=monsterDamage.value; if(combat.dmgTaken) dmg=Math.floor(dmg*(1+combat.dmgTaken));
     pHp -= dmg;
     if(combat.thorns>0) mCurHp -= Math.floor(dmg*combat.thorns);
     if(combat.regen>0 && pHp>0) pHp=Math.min(combat.maxHp, pHp+Math.floor(combat.maxHp*combat.regen));
@@ -859,35 +850,35 @@ function simulateBattle(player, monster) {
         doPlayerNormalAction(actions);
         firstPlayerNormalIdx = beforeLen;
         if(roundShouldTrigger && mCurHp>0 && pHp>0){
-          const eff = activeAffix.effect;
+          const skillEffect = activeAffix.effect;
           let skillPushed = false;
-          if(eff.type==='damage'){
-            const d = calcDamage(combat.atk, mDef, eff.mult, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
-            mCurHp -= d.value;
-            if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(d.value*combat.lifesteal));
-            actions.push({ actor:'player', skill:activeAffix.name, damage:d.value, crit:d.isCrit, type:'skill', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
+          if(skillEffect.type==='damage'){
+            const skillDamage = calcDamage(combat.atk, mDef, skillEffect.mult, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
+            mCurHp -= skillDamage.value;
+            if(combat.lifesteal>0) pHp = Math.min(combat.maxHp, pHp + Math.floor(skillDamage.value*combat.lifesteal));
+            actions.push({ actor:'player', skill:activeAffix.name, damage:skillDamage.value, crit:skillDamage.isCrit, type:'skill', targetHp:Math.max(0,mCurHp), targetMaxHp:mHp });
             skillPushed = true;
-          } else if(eff.type==='heal'){
-            const h=Math.floor(combat.maxHp*eff.value); pHp=Math.min(combat.maxHp,pHp+h);
-            actions.push({ actor:'player', skill:activeAffix.name, heal:h, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp, healTargetHp:pHp });
+          } else if(skillEffect.type==='heal'){
+            const healAmount=Math.floor(combat.maxHp*skillEffect.value); pHp=Math.min(combat.maxHp,pHp+healAmount);
+            actions.push({ actor:'player', skill:activeAffix.name, heal:healAmount, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp, healTargetHp:pHp });
             skillPushed = true;
-          } else if(['atk_buff','def_buff','agi_buff'].includes(eff.type)){
-            const key=eff.type.split('_')[0]; applyBuff(key, eff.value, eff.turns, round);
-            actions.push({ actor:'player', skill:activeAffix.name, buff:eff.value, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+          } else if(['atk_buff','def_buff','agi_buff'].includes(skillEffect.type)){
+            const buffKey=skillEffect.type.split('_')[0]; applyBuff(buffKey, skillEffect.value, skillEffect.turns, round);
+            actions.push({ actor:'player', skill:activeAffix.name, buff:skillEffect.value, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
             skillPushed = true;
-          } else if(eff.type==='gold_buff'){
-            skillGoldBonus += eff.value;
-            actions.push({ actor:'player', skill:activeAffix.name, buff:eff.value, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
+          } else if(skillEffect.type==='gold_buff'){
+            skillGoldBonus += skillEffect.value;
+            actions.push({ actor:'player', skill:activeAffix.name, buff:skillEffect.value, type:'skill', targetHp:pHp, targetMaxHp:combat.maxHp });
             skillPushed = true;
           } else {
-            actions.push({ actor:'player', skill:activeAffix.name, type:'skill', note:eff.type, targetHp:pHp, targetMaxHp:combat.maxHp });
+            actions.push({ actor:'player', skill:activeAffix.name, type:'skill', note:skillEffect.type, targetHp:pHp, targetMaxHp:combat.maxHp });
             skillPushed = true;
           }
-          if(skillPushed && eff.heal){
-            const h=Math.floor(combat.maxHp*eff.heal); pHp=Math.min(combat.maxHp,pHp+h);
-            const last = actions[actions.length-1];
-            if(last.heal) last.heal += h; else last.heal = h;
-            last.selfHeal = h; last.selfHp = pHp; last.healTargetHp = pHp;
+          if(skillPushed && skillEffect.heal){
+            const healAmount=Math.floor(combat.maxHp*skillEffect.heal); pHp=Math.min(combat.maxHp,pHp+healAmount);
+            const lastAction = actions[actions.length-1];
+            if(lastAction.heal) lastAction.heal += healAmount; else lastAction.heal = healAmount;
+            lastAction.selfHeal = healAmount; lastAction.selfHp = pHp; lastAction.healTargetHp = pHp;
           }
         }
       } else if(actor==='monster'){
