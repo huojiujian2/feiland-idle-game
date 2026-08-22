@@ -2,7 +2,7 @@
 
 # ⚡ 费兰德世界
 
-### 挂机文字成长游戏 · v0.4
+### 挂机文字成长游戏 · v0.5
 
 <img src="https://img.shields.io/badge/Vue-3.4-42b883?logo=vuedotjs&logoColor=white" alt="Vue 3.4">
 <img src="https://img.shields.io/badge/Vite-5.2-646cff?logo=vite&logoColor=white" alt="Vite 5.2">
@@ -27,7 +27,7 @@
 | 3 | [docs/README/03-areas-and-equipment.md](docs/README/03-areas-and-equipment.md) | 11 区域 + 35+ 装备 + 24 怪物技能 |
 | 4 | [docs/README/04-quickstart.md](docs/README/04-quickstart.md) | 启动与部署（4 种方式 + Docker） |
 | 5 | [docs/README/05-architecture.md](docs/README/05-architecture.md) | 项目结构 + 技术栈 + UI/UX 规范 |
-| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v0.4） |
+| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v0.5） |
 
 ---
 
@@ -64,6 +64,11 @@
 | 📜 任务成就 | 每日任务 + 永久成就，奖励 + 称号 |
 | 💥 伤害飘字 | 暴击放大+抖动 |
 | ⚔️ 战斗策略 | 6 种策略模式 |
+| 🎨 **AI 生图** | 28 个暗黑 RPG 图标 + 3 张主背景图（v0.5） |
+| 🍞 **全局 UI 桥接** | 自定义 Toast / Modal，替代浏览器原生 alert/confirm（v0.5） |
+| 🖼️ **沉浸式背景** | 紫夜城堡主背景 + 魔法卷轴 Header + 雕花 TabBar（v0.5） |
+| 🧙 **头像 + 名牌** | TopBar 头像金边 + 属性 chip 系统（v0.5） |
+| ⭐ **品质徽章** | 传说/史诗/稀有/普通 品质色边框与发光（v0.5） |
 
 **完整特性详解**：[02-systems.md](docs/README/02-systems.md)
 

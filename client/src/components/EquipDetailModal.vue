@@ -123,6 +123,5 @@ function isEnchantDisabled(recipe) {
 .recipe-cost { font-size: 0.68rem; color: var(--accent); font-family: monospace; }
 .detail-actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
 .detail-actions .btn { flex: 1; padding: 0.5rem; font-size: 0.82rem; }
-.btn-danger { background: var(--danger); color: white; border: none; border-radius: 6px; cursor: pointer; }
-.btn-danger:hover { filter: brightness(1.1); }
+/* .btn-danger 已统一在 style.css 全局定义，此处不再重复 */
 </style>

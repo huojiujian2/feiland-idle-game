@@ -43,6 +43,7 @@
 import { ref, computed, onMounted } from 'vue';
 import IconBase from './icons/IconBase.vue';
 import api from '../api.js';
+import { toast, modalConfirm } from '../ui-bridge.js';
 import RaceTab from './evolution/RaceTab.vue';
 import LawTab from './evolution/LawTab.vue';
 import AscendTab from './evolution/AscendTab.vue';
@@ -94,38 +95,38 @@ function switchReincTab() {
 }
 
 async function doReincarnate() {
-  if (!confirm('确认转生？等级、经验、属性点将重置（永久加成保留）')) return;
+  if (!await modalConfirm('确认转生？等级、经验、属性点将重置（永久加成保留）')) return;
   reincLoading.value = true;
   try {
     const res = await api.reincarnate(props.player.username);
     if (res.success) {
       emit('reincarnated', res.data);
       await fetchReincInfo();
-      alert(`转生成功！第 ${res.reincarnation} 轮回，获得 ${res.earnedPoints} 转生点`);
+      toast.success(`转生成功！第 ${res.reincarnation} 轮回，获得 ${res.earnedPoints} 转生点`);
     } else {
-      alert(res.message || '转生失败');
+      toast.error(res.message || '转生失败');
     }
   } catch (e) {
-    alert('转生失败：' + (e.message || '网络错误'));
+    toast.error('转生失败：' + (e.message || '网络错误'));
   } finally {
     reincLoading.value = false;
   }
 }
 
 async function handleBuyReincItem(item) {
-  if (!confirm(`兑换「${item.name}」将消耗 ${item.cost} 转生点，继续？`)) return;
+  if (!await modalConfirm(`兑换「${item.name}」将消耗 ${item.cost} 转生点，继续？`)) return;
   shopBuying.value = true;
   try {
     const res = await api.buyReincShopItem(props.player.username, item.id);
     if (res.success) {
       emit('reincarnated', res.data);
       await fetchReincInfo();
-      alert(res.message || '兑换成功');
+      toast.success(res.message || '兑换成功');
     } else {
-      alert(res.message || '兑换失败');
+      toast.error(res.message || '兑换失败');
     }
   } catch (e) {
-    alert('兑换失败：' + (e.message || '网络错误'));
+    toast.error('兑换失败：' + (e.message || '网络错误'));
   } finally {
     shopBuying.value = false;
   }

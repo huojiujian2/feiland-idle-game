@@ -28,7 +28,7 @@
   /* 布局 */
   --radius: 10px;
   --radius-sm: 6px;
-  --tabbar-h: 58px;
+  --tabbar-h: 64px;
   --header-h: 50px;
 
   /* 字体 */
@@ -95,16 +95,49 @@
   --lb-rank-bg: rgba(157,140,240,0.06);
 }
 
+/* ===== 全局重置 ===== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
+*::-webkit-scrollbar { width: 4px; height: 4px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(157,140,240,0.4);
+  border-radius: 2px;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+/* Firefox 滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(157,140,240,0.4) transparent;
+}
+/* 移动端 tap 高亮 + 浏览器默认 outline 抑制（自定义 :focus-visible） */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+*:focus { outline: none; }
+*:focus-visible {
+  /* 不要键盘焦点紫线（点击触发的金/紫 outline） */
+  outline: none;
+}
+button, input, textarea, select {
+  font-family: inherit;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
 
 html, body {
   font-family: var(--font);
   color: var(--ink);
   background: var(--bg);
   background-image:
-    radial-gradient(ellipse at 15% 5%, rgba(157,140,240,0.06), transparent 50%),
-    radial-gradient(ellipse at 85% 90%, rgba(212,175,94,0.05), transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(20,22,42,0.5), transparent 70%);
+    /* 主背景图：紫夜城堡（cover 适配，留深色兜底） */
+    url('/img/bg-main.png'),
+    radial-gradient(ellipse at 15% 5%, rgba(157,140,240,0.10), transparent 50%),
+    radial-gradient(ellipse at 85% 90%, rgba(212,175,94,0.08), transparent 50%),
+    linear-gradient(180deg, #0a0b14 0%, #06070d 100%);
+  background-size: cover, auto, auto, 100% 100%;
+  background-position: center top, center, center, center;
+  background-repeat: no-repeat;
   background-attachment: fixed;
   height: 100%;
   overflow: hidden;
@@ -114,11 +147,114 @@ html, body {
 
 #app { height: 100vh; display: flex; flex-direction: column; }
 
-/* 滚动条 */
+/* ====== 表单控件统一 ====== */
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="email"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+textarea,
+select {
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  background: rgba(20,22,42,0.7);
+  color: var(--ink);
+  border: 1px solid rgba(157,140,240,0.18);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-family: inherit;
+  outline: none;
+  transition: all var(--duration-normal) var(--ease-out);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+input::placeholder, textarea::placeholder { color: var(--dim); }
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent2);
+  background: rgba(20,22,42,0.9);
+  box-shadow: 0 0 0 3px rgba(157,140,240,0.12);
+}
+input:disabled, textarea:disabled, select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(20,22,42,0.3);
+}
+
+/* select 自定义下拉箭头 */
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23d4af5e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+  padding-right: 2rem;
+  cursor: pointer;
+}
+/* select 下拉面板（部分浏览器可定制） */
+select option {
+  background: var(--bg2);
+  color: var(--ink);
+  padding: 6px;
+}
+
+/* ====== 品质边框系统（传说/史诗/稀有/普通） ====== */
+.q-normal {
+  border-color: var(--q-normal);
+  color: var(--q-normal);
+}
+.q-fine {
+  border-color: var(--q-fine);
+  color: var(--q-fine);
+  box-shadow: 0 0 6px rgba(94,218,122,0.2);
+}
+.q-epic {
+  border-color: var(--q-epic);
+  color: var(--q-epic);
+  box-shadow: 0 0 8px rgba(157,140,240,0.3);
+}
+.q-legend {
+  border-color: var(--q-legend);
+  color: var(--q-legend);
+  box-shadow: 0 0 10px rgba(212,175,94,0.4);
+}
+/* 品质徽章 */
+.q-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.5);
+  letter-spacing: 0.05em;
+}
+
+/* ====== 浮动奖励角标 ====== */
+.reward-badge {
+  position: absolute;
+  top: -4px;
+  right: 8px;
+  background: linear-gradient(135deg, var(--danger), #c04545);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(224,88,88,0.5);
+  z-index: 4;
+  animation: reward-pulse 1.5s ease-in-out infinite;
+}
+@keyframes reward-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); box-shadow: 0 2px 10px rgba(224,88,88,0.7); }
+}
+
+/* 滚动条 - 已在全局 * 中统一定义，这里保留兼容兜底 */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent2-dim); }
+::-webkit-scrollbar-thumb { background: rgba(157,140,240,0.4); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
 /* ====== 通用卡片 ====== */
 .card {
@@ -128,17 +264,17 @@ html, body {
   border-radius: var(--radius);
   padding: 0.9rem 1rem;
   position: relative;
-  transition: border-color var(--duration-normal) var(--ease-out);
+  transition: all var(--duration-normal) var(--ease-out);
 }
-.card:hover { border-color: rgba(157,140,240,0.2); }
+.card:hover {
+  border-color: rgba(212,175,94,0.35);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  transform: translateY(-1px);
+}
 
-/* 卡片顶部装饰线 */
+/* 卡片顶部装饰线：已移除金线（用户反馈） */
 .card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 12px; right: 12px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(212,175,94,0.25), transparent);
+  content: none;
 }
 
 /* ====== 按钮系统 ====== */
@@ -155,13 +291,26 @@ html, body {
   white-space: nowrap;
   position: relative;
   overflow: hidden;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 .btn:hover {
   background: rgba(157,140,240,0.16);
   border-color: var(--accent2);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(157,140,240,0.15);
 }
 .btn:active { transform: translateY(0) scale(0.98); }
+.btn:disabled,
+.btn.btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: grayscale(0.4);
+}
 
 .btn-primary {
   background: linear-gradient(135deg, var(--accent), #c49a4a);
@@ -193,6 +342,25 @@ html, body {
 
 .btn-disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
 .btn-sm { padding: 0.3rem 0.7rem; font-size: 0.76rem; border-radius: 5px; }
+.btn-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+}
+.btn-ghost:hover {
+  background: rgba(157,140,240,0.08);
+  border-color: rgba(157,140,240,0.2);
+  color: var(--ink);
+  transform: none;
+  box-shadow: none;
+}
+/* 大尺寸胶囊主操作按钮（适合"开始战斗"等关键 CTA） */
+.btn-lg {
+  padding: 0.8rem 2rem;
+  font-size: 0.95rem;
+  border-radius: 999px;
+  font-weight: 700;
+}
 
 /* ====== 进度条 ====== */
 .bar {
@@ -267,7 +435,7 @@ html, body {
   position: absolute;
   bottom: 0; left: 0; right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent 10%, rgba(212,175,94,0.15) 50%, transparent 90%);
+  background: linear-gradient(90deg, transparent 10%, rgba(212,175,94,0.06) 50%, transparent 90%);
 }
 
 .game-body {
@@ -289,9 +457,12 @@ html, body {
   height: var(--tabbar-h);
   flex-shrink: 0;
   display: flex;
-  background: linear-gradient(0deg, rgba(10,11,20,0.98), rgba(10,11,20,0.9));
+  /* 雕花底座纹理（横向平铺）+ 深色兜底 */
+  background:
+    url('/img/tabbar-bg.png') repeat-x center / auto 100%,
+    linear-gradient(0deg, rgba(10,11,20,0.85), rgba(20,22,42,0.7));
   backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(157,140,240,0.08);
+  border-top: 1px solid rgba(157,140,240,0.25);
   z-index: 100;
   position: relative;
   overflow: visible;
@@ -307,18 +478,11 @@ html, body {
   transition: all var(--duration-normal) var(--ease-out);
   position: relative;
 }
-.tabbar-item::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 50%; transform: translateX(-50%);
-  width: 0; height: 2px;
-  background: var(--accent);
-  transition: width var(--duration-fast, 150ms) var(--ease-out, ease);
-}
+/* tab 顶部金线：已移除（用户反馈）*/
+.tabbar-item::before { content: none; }
 .tabbar-item:hover { background: rgba(157,140,240,0.04); }
-.tabbar-item.active::before { width: 60%; }
-/* 中间凸起的地图 tab：不画顶部边框线（避免视觉错位），改用图标发光指示 */
-.tabbar-center.active::before { display: none; }
+/* 激活态不再显示顶部金线 */
+.tabbar-item.active::before { content: none; width: 0; }
 .tabbar-item.active .tabbar-icon {
   color: var(--accent);
   transform: scale(1.15);

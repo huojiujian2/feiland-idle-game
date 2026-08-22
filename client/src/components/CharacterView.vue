@@ -296,6 +296,7 @@
 import { ref, computed, reactive } from 'vue'
 import IconBase from './icons/IconBase.vue'
 import EquipDetailModal from './EquipDetailModal.vue'
+import { modalConfirm } from '../ui-bridge.js'
 
 const props = defineProps(['player', 'jobTree'])
 const emit = defineEmits(['allocate', 'autoAllocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest', 'refresh'])
@@ -386,7 +387,7 @@ function handleApplyPreset(presetId) {
   emit('applyPreset', presetId)
 }
 async function handleDeletePreset(presetId) {
-  if (!confirm('确认删除该预设？')) return
+  if (!await modalConfirm('确认删除该预设？')) return
   emit('deletePreset', presetId)
 }
 

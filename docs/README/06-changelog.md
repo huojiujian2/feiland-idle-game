@@ -2,6 +2,44 @@
 
 > 📖 主入口：[../README.md](../README.md)
 
+## v0.5 · 2026-08-22
+
+### 🎨 AI 生图全面接入
+
+- **28 个暗黑 RPG 图标重新生成**：全部透明背景，风格统一（魔兽暗黑风）
+- **3 张主背景图**（minimax-m3 生成 + Pillow 裁剪去水印）：
+  - `bg-main.png`：紫夜城堡主背景（1080×1920），body 全局铺底
+  - `header-bg.png`：魔法卷轴纹理（768×80），TopBar 横向平铺
+  - `tabbar-bg.png`：雕花石座 + 紫色符文（768×80），TabBar 横向平铺
+
+### 🍞 全局 UI 桥接系统
+
+- 新增 `client/src/ui-bridge.js`：全局响应式 Toast 栈 + Modal 队列
+- 新增 `client/src/components/UIBridge.vue`：统一渲染层，App.vue 全局挂载
+- API：`toast.success/error/warn/info`、`modalAlert(msg)`、`modalConfirm(msg)`（返回 Promise）
+- 替换全部浏览器原生弹窗：9 处 `confirm()` + 50+ 处 `alert()`（背包/进化/角色/世界BOSS/登录/任务等）
+
+### 🧙 游戏感 UI 增强
+
+- **基础控件游戏化**：按钮 / 输入框 / 下拉框 / 滚动条全局重写（style.css）
+- **TopBar 重构**：金边头像 + 名牌（名字·种族）+ 属性 chip（Lv/职业/神位）+ 金币胶囊
+- **TabBar 重构**：34px 圆形图标底座 + 金色激活态 + 中心地图大按钮 + 徽章脉冲动画
+- **品质边框系统**：`.q-normal / .q-fine / .q-epic / .q-legend` 四档品质色边框与发光
+- **奖励徽章动画**：`.reward-badge` 弹跳入场
+
+### 🐛 Bug 修复
+
+- **TabBar 图标溢出**：`--tabbar-h` 58px → 64px，图标 38px → 34px，中心地图按钮取消凸出
+- **金色渐变线清理**：移除 `.card::before`、`.tabbar-item::before`、`.tabbar-item.active::before`、`*:focus-visible` 等多余金线
+- **EquipDetailModal 重复样式**：清理重复定义的 `.btn-danger`
+
+### ✅ 验证
+
+- `npm run build` 94 modules 转换成功
+- 登录 / 挂机 / 背包 / 转生 / 世界 BOSS 全流程回归正常
+
+---
+
 ## v0.4 · 2026-08-21
 
 ### ✨ 新增功能

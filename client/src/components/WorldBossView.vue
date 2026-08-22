@@ -87,6 +87,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import IconBase from './icons/IconBase.vue'
 import api from '../api.js'
+import { toast } from '../ui-bridge.js'
 
 const props = defineProps(['player', 'currentUser'])
 
@@ -134,10 +135,10 @@ async function doAttack() {
         await refresh()
       }
     } else {
-      alert(res.message)
+      toast.error(res.message)
     }
   } catch (e) {
-    alert('攻击失败：' + e.message)
+    toast.error('攻击失败：' + e.message)
   }
 }
 

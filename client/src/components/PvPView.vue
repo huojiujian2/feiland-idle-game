@@ -40,6 +40,7 @@
 // 4. 数据加载与状态管理
 import { ref, onMounted } from 'vue';
 import api from '../api.js';
+import { toast, modalConfirm } from '../ui-bridge.js';
 import PvPHeader from './pvp/PvPHeader.vue';
 import PvPOpponents from './pvp/PvPOpponents.vue';
 import PvPRanking from './pvp/PvPRanking.vue';
@@ -141,8 +142,8 @@ async function loadSeason() {
 }
 
 async function doChallenge(opp) {
-  if (cdRemaining.value > 0) return alert(`冷却中，还需 ${Math.ceil(cdRemaining.value / 1000)}s`);
-  if (!confirm(`挑战 ${opp.name}？`)) return;
+  if (cdRemaining.value > 0) return toast.warn(`冷却中，还需 ${Math.ceil(cdRemaining.value / 1000)}s`);
+  if (!await modalConfirm(`挑战 ${opp.name}？`)) return;
   try {
     const res = await api.challenge(props.currentUser, opp.username, !!opp.isBot);
     if (res.success) {
@@ -157,25 +158,25 @@ async function doChallenge(opp) {
       props.player && (props.player.arenaCoins = res.data.arenaCoins);
       props.player && (props.player.pvpStats = res.data.player?.pvpStats);
     } else {
-      alert(res.message || '挑战失败');
+      toast.error(res.message || '挑战失败');
     }
-  } catch (e) { alert('挑战出错：' + (e.message || '网络错误')); }
+  } catch (e) { toast.error('挑战出错：' + (e.message || '网络错误')); }
 }
 
 async function doBuy(item) {
-  if (!confirm(`购买 ${item.name} 需 ${item.price} 竞技币？`)) return;
+  if (!await modalConfirm(`购买 ${item.name} 需 ${item.price} 竞技币？`)) return;
   try {
     const res = await api.buyArenaItem(props.currentUser, item.id);
     if (res.success) {
       arenaCoins.value = res.data.arenaCoins || arenaCoins.value;
-      alert(`购买成功！获得 ${item.name}`);
+      toast.success(`购买成功！获得 ${item.name}`);
       // 通知父组件更新 player
       props.player && (props.player.arenaCoins = res.data.arenaCoins);
       if (res.data.player) props.player && Object.assign(props.player, res.data.player);
     } else {
-      alert(res.message || '购买失败');
+      toast.error(res.message || '购买失败');
     }
-  } catch (e) { alert('购买出错：' + (e.message || '网络错误')); }
+  } catch (e) { toast.error('购买出错：' + (e.message || '网络错误')); }
 }
 
 onMounted(async () => {

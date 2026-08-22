@@ -71,6 +71,7 @@
 import { ref, computed, watch } from 'vue'
 import api from '../api.js'
 import IconBase from './icons/IconBase.vue'
+import { toast } from '../ui-bridge.js'
 const props = defineProps(['player','currentUser'])
 const emit = defineEmits(['refresh'])
 const tab = ref('daily')
@@ -100,18 +101,18 @@ function formatReward(r){
 }
 async function onClaimDaily(id){
   const res = await api.claimDaily(props.currentUser, id)
-  if(!res.success) { alert(res.message||'领取失败'); return }
+  if(!res.success) { toast.error(res.message||'领取失败'); return }
   emit('refresh', res.data)
 }
 async function onClaimChest(){
-  if(!canClaimChest.value && !player.value.questView?.chest?.claimed) { alert('需完成5项已领取'); return }
+  if(!canClaimChest.value && !player.value.questView?.chest?.claimed) { toast.warn('需完成5项已领取'); return }
   const res = await api.claimChest(props.currentUser)
-  if(!res.success) { alert(res.message||'领取失败'); return }
+  if(!res.success) { toast.error(res.message||'领取失败'); return }
   emit('refresh', res.data)
 }
 async function onClaimAch(id){
   const res = await api.claimAchievement(props.currentUser, id)
-  if(!res.success) { alert(res.message||'领取失败'); return }
+  if(!res.success) { toast.error(res.message||'领取失败'); return }
   emit('refresh', res.data)
 }
 </script>

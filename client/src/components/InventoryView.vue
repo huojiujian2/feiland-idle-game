@@ -201,6 +201,7 @@
 import { ref, computed, watch } from 'vue'
 import IconBase from './icons/IconBase.vue'
 import api from '../api.js'
+import { toast, modalConfirm } from '../ui-bridge.js'
 
 const props = defineProps(['player', 'qualityColors', 'materialPrices'])
 const emit = defineEmits(['use', 'sellMaterial', 'sellEquip', 'sellEquipsByLevel', 'equip', 'enchant', 'refresh'])
@@ -246,7 +247,7 @@ function canUpgrade() {
 }
 async function handleUpgrade() {
   if (!detailItem.value) return
-  if (!confirm(`确认消耗 ${getUpgradeCost()} 金币 + ${(detailItem.value.upgradeLevel||0)+1} 个 ${getUpgradeMaterial()} 强化到 +${(detailItem.value.upgradeLevel||0)+1}？`)) return
+  if (!await modalConfirm(`确认消耗 ${getUpgradeCost()} 金币 + ${(detailItem.value.upgradeLevel||0)+1} 个 ${getUpgradeMaterial()} 强化到 +${(detailItem.value.upgradeLevel||0)+1}？`)) return
   try {
     const res = await api.upgradeEquipment(props.player.username, detailItem.value.uid)
     if (res.success) {
@@ -254,9 +255,9 @@ async function handleUpgrade() {
       detailItem.value = res.data.equips.find(e => e.uid === detailItem.value.uid)
         || Object.values(res.data.equipped || {}).find(e => e && e.uid === detailItem.value.uid)
         || detailItem.value
-      alert('强化成功！')
-    } else alert(res.message || '强化失败')
-  } catch (e) { alert('强化失败：' + e.message) }
+      toast.success('强化成功！')
+    } else toast.error(res.message || '强化失败')
+  } catch (e) { toast.error('强化失败：' + e.message) }
 }
 function inMergeSlots(uid) { return mergeSlots.value.includes(uid) }
 function toggleMergeSlot(uid) {
@@ -268,21 +269,21 @@ function toggleMergeSlot(uid) {
   }
 }
 async function handleMerge() {
-  if (mergeSlots.value.length !== 3) return alert('需选择 3 件装备')
-  if (!confirm('3 件装备将消失，合成 1 件更高品质装备（强化等级会丢失）。继续？')) return
+  if (mergeSlots.value.length !== 3) return toast.warn('需选择 3 件装备')
+  if (!await modalConfirm('3 件装备将消失，合成 1 件更高品质装备（强化等级会丢失）。继续？')) return
   try {
     const res = await api.mergeEquipment(props.player.username, mergeSlots.value)
     if (res.success) {
       emit('refresh', res.data)
-      alert(`合成成功！获得「${res.newItem.name}」`)
+      toast.success(`合成成功！获得「${res.newItem.name}」`)
       mergeSlots.value = []
       detailItem.value = null
-    } else alert(res.message || '合成失败')
-  } catch (e) { alert('合成失败：' + e.message) }
+    } else toast.error(res.message || '合成失败')
+  } catch (e) { toast.error('合成失败：' + e.message) }
 }
 async function handleReforge() {
   if (!detailItem.value) return
-  if (!confirm('消耗 1000 金币重洗这件装备的词条。继续？')) return
+  if (!await modalConfirm('消耗 1000 金币重洗这件装备的词条。继续？')) return
   try {
     const res = await api.reforgeEquipment(props.player.username, detailItem.value.uid)
     if (res.success) {
@@ -290,9 +291,9 @@ async function handleReforge() {
       detailItem.value = res.data.equips.find(e => e.uid === detailItem.value.uid)
         || Object.values(res.data.equipped || {}).find(e => e && e.uid === detailItem.value.uid)
         || detailItem.value
-      alert('重铸完成！')
-    } else alert(res.message || '重铸失败')
-  } catch (e) { alert('重铸失败：' + e.message) }
+      toast.success('重铸完成！')
+    } else toast.error(res.message || '重铸失败')
+  } catch (e) { toast.error('重铸失败：' + e.message) }
 }
 
 const equipPage = ref(1)
@@ -392,10 +393,10 @@ const bulkSellPreview = computed(() => {
   return { count: matched.length, gold, byQuality }
 })
 
-function confirmBulkSell() {
+async function confirmBulkSell() {
   if (bulkSellPreview.value.count === 0) return
   const label = bulkSellMaxLevel.value == null ? '全部' : `≤ Lv.${bulkSellMaxLevel.value}`
-  if (!confirm(`确认卖出 ${bulkSellPreview.value.count} 件装备（${label}），预计获得 ${bulkSellPreview.value.gold} 金币？此操作不可撤销。`)) return
+  if (!await modalConfirm(`确认卖出 ${bulkSellPreview.value.count} 件装备（${label}），预计获得 ${bulkSellPreview.value.gold} 金币？此操作不可撤销。`)) return
   emit('sellEquipsByLevel', bulkSellMaxLevel.value)
   bulkSellVisible.value = false
 }
