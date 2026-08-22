@@ -56,6 +56,25 @@
 - README.md 重写为 v0.4
 - 拆分到 `docs/README/` 子目录（6 个文件）
 - 删除 GAMEPLAY_TASKS.md（被 README 取代）
+- 新增 [00-code-style.md](00-code-style.md) **代码模块化规范**（行数规则 / 文件清单模板 / 拆分原则）
+
+### 🧱 模块化重构（v0.4 同日）
+
+按代码规范（行数 300-500 为理想 / > 800 必须拆）实施拆分：
+
+- **后端 `server/`**：
+  - `data.js` 987 → 4 行 + `data/` 9 个子模块 + `affixes/` 按等级 4 子文件
+  - `engine.js` 2780 → 4 行 + `engine/` 13 个子模块（state/utils/daily/player/stats/combat/pvp/items/progression/worldboss/idle/view/index）
+  - `index.js` 1160 → 103 行 + `routes/` 11 个路由模块 + `_helpers.js`
+  - 所有文件 ≤ 500 行，循环依赖通过 setHandler 注入模式解耦
+- **前端 `client/src/components/`**：
+  - `MapView.vue` 799 → 87 行（拆为 `map/` 7 个子组件 + `battleLogUtils.js`）
+  - `PvPView.vue` 799 → 171 行（拆为 `pvp/` 7 个子组件 + `pvpUtils.js`）
+  - `EvolutionView.vue` 488 → 134 行（拆为 `evolution/` 4 个 Tab 子组件）
+  - `App.vue` 656 → 327 行（拆出 LoginScreen/TopBar/TabBar/OfflineRewardModal/LevelUpNotice/ShopModal）
+  - `CharacterView.vue` 642 → 560 行（抽出 `EquipDetailModal.vue`）
+- **验证**：`skill.test.js` 19/19 通过；`npm run build` 91 modules 成功；13 个 GET 路由验证 200
+- **兼容性**：所有原 `require('./engine')` / `require('./data')` 通过 4 行重定向壳正常工作，调用方零修改
 
 ---
 

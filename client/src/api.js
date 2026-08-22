@@ -21,6 +21,27 @@ export default {
   allocateAttributes(username, allocation) { return request(`/player/${username}/attributes`, { method: 'POST', body: JSON.stringify(allocation) }) },
   autoAllocate(username) { return request(`/player/${username}/auto-allocate`, { method: 'POST' }) },
 
+  // 属性预设
+  saveAttrPreset(username, name) {
+    return request(`/player/${username}/attr-presets`, {
+      method: 'POST', body: JSON.stringify({ name })
+    })
+  },
+  applyAttrPreset(username, presetId) {
+    return request(`/player/${username}/attr-presets/${presetId}/apply`, { method: 'POST' })
+  },
+  deleteAttrPreset(username, presetId) {
+    return request(`/player/${username}/attr-presets/${presetId}`, { method: 'DELETE' })
+  },
+
+  // 转生点商店
+  getReincShop() { return request('/reinc-shop') },
+  buyReincShopItem(username, itemId) {
+    return request('/reinc-shop/buy', {
+      method: 'POST', body: JSON.stringify({ username, itemId })
+    })
+  },
+
   // 职业
   chooseJob(username, jobPath) { return request(`/player/${username}/job`, { method: 'POST', body: JSON.stringify({ jobPath }) }) },
   getJobs() { return request('/data/jobs') },

@@ -72,9 +72,77 @@
         <span class="cs-item" v-if="player.totalStats.crit"><IconBase name="sparkle" :size="12" class="btn-icon" /> {{ (player.totalStats.crit * 100).toFixed(0) }}%</span>
         <span class="cs-item" v-if="player.totalStats.dodge"><IconBase name="feather" :size="12" class="btn-icon" /> {{ (player.totalStats.dodge * 100).toFixed(0) }}%</span>
       </div>
+
+      <!-- 战斗统计 -->
+      <div class="combat-record" v-if="player.combatStats">
+        <div class="record-title">📊 战斗统计</div>
+        <div class="record-grid">
+          <div class="record-item">
+            <span class="record-label">总击杀</span>
+            <span class="record-value">{{ player.combatStats.totalWins || 0 }}</span>
+          </div>
+          <div class="record-item">
+            <span class="record-label">今日击杀</span>
+            <span class="record-value highlight">{{ player.combatStats.todayKills || 0 }}</span>
+          </div>
+          <div class="record-item">
+            <span class="record-label">本月击杀</span>
+            <span class="record-value highlight">{{ player.combatStats.monthKills || 0 }}</span>
+          </div>
+          <div class="record-item">
+            <span class="record-label">胜/负/平</span>
+            <span class="record-value">
+              <span class="win">{{ player.combatStats.totalWins || 0 }}</span>
+              /
+              <span class="lose">{{ player.combatStats.totalLosses || 0 }}</span>
+              /
+              <span class="draw">{{ player.combatStats.totalDraws || 0 }}</span>
+            </span>
+          </div>
+          <div class="record-item">
+            <span class="record-label">胜率</span>
+            <span class="record-value">{{ winRateText }}%</span>
+          </div>
+        </div>
+      </div>
       <button v-if="hasPending" class="btn btn-primary confirm-btn" data-alloc-available @click="confirmAllocate">确认分配</button>
       <div v-else-if="player.attrPoints > 0" class="auto-alloc-row" data-alloc-available>
         <button class="btn btn-secondary auto-btn" @click="autoAllocate"><IconBase name="sparkle" :size="14" class="btn-icon" /> 一键加点（按职业权重）</button>
+      </div>
+
+      <!-- 属性预设方案 -->
+      <div class="attr-presets">
+        <div class="presets-header" @click="showPresets = !showPresets">
+          <IconBase name="dna" :size="13" class="section-icon" />
+          <span>属性预设方案 ({{ (player.attrPresets || []).length }}/5）</span>
+          <span class="toggle-icon">{{ showPresets ? '▾' : '▸' }}</span>
+        </div>
+        <div v-if="showPresets" class="presets-body">
+          <div class="preset-save-row">
+            <input v-model="newPresetName" class="preset-name-input" placeholder="预设名（最多 12 字）" maxlength="12" />
+            <button class="btn btn-sm btn-primary" :class="{ 'btn-disabled': !newPresetName.trim() }" @click="handleSavePreset">保存当前加点为预设</button>
+          </div>
+          <div v-if="(player.attrPresets || []).length === 0" class="preset-empty">暂无预设，先调整属性并保存</div>
+          <div v-else class="preset-list">
+            <div v-for="p in player.attrPresets" :key="p.id" class="preset-card">
+              <div class="preset-card-top">
+                <span class="preset-name">{{ p.name }}</span>
+                <span class="preset-lv">Lv.{{ p.level }} 保存</span>
+              </div>
+              <div class="preset-attrs">
+                <span class="pa-item atk">攻 {{ p.attributes.atk }}</span>
+                <span class="pa-item def">防 {{ p.attributes.def }}</span>
+                <span class="pa-item hp">体 {{ p.attributes.hp }}</span>
+                <span class="pa-item agi">敏 {{ p.attributes.agi }}</span>
+              </div>
+              <div class="preset-actions">
+                <button class="btn btn-sm btn-primary" :class="{ 'btn-disabled': player.attrPoints <= 0 }"
+                  @click="handleApplyPreset(p.id)">按比例加点</button>
+                <button class="btn btn-sm btn-danger" @click="handleDeletePreset(p.id)">删除</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -208,50 +276,29 @@
     </div>
 
     <!-- 装备详情弹窗（含附魔） -->
-    <div v-if="detailItem" class="equip-detail-overlay" @click.self="detailItem = null">
-      <div class="equip-detail-box">
-        <div class="detail-name" :style="{ color: qualityColors[detailItem.quality] }">{{ detailItem.name }}</div>
-        <div class="detail-quality" :style="{ color: qualityColors[detailItem.quality] }">{{ qualityLabels[detailItem.quality] }} · {{ slotLabels[detailSlot] }}</div>
-        <div class="detail-stats">
-          <div v-for="(val, key) in detailItem.stats" :key="key" class="detail-stat">
-            {{ statLabels[key] || key }} +{{ val }}{{ ['exp','gold'].includes(key) ? '%' : '' }}
-          </div>
-        </div>
-        <div v-if="detailItem.enchants && detailItem.enchants.length > 0" class="enchanted-list">
-          <div class="enchant-header">已附魔（{{ detailItem.enchants.length }}/3）</div>
-          <div v-for="enchId in detailItem.enchants" :key="enchId" class="enchant-item">
-            <span class="enchant-name">{{ getEnchantName(enchId) }}</span>
-            <span class="enchant-desc">{{ getEnchantDesc(enchId) }}</span>
-          </div>
-        </div>
-        <div v-if="availableEnchants.length > 0 && (!detailItem.enchants || detailItem.enchants.length < 3)" class="enchant-section">
-          <div class="enchant-header">可用附魔</div>
-          <div v-for="recipe in availableEnchants" :key="recipe.id" class="enchant-recipe"
-            :class="{ disabled: isEnchantDisabled(recipe) }">
-            <div class="recipe-info">
-              <span class="recipe-name">{{ recipe.name }}</span>
-              <span class="recipe-desc">{{ recipe.desc }}</span>
-              <span class="recipe-cost">{{ recipe.cost }}金 + {{ formatMaterials(recipe.materials) }}</span>
-            </div>
-            <button class="btn btn-sm btn-primary" :class="{ 'btn-disabled': isEnchantDisabled(recipe) }"
-              @click="handleEnchant(recipe.id)">附魔</button>
-          </div>
-        </div>
-        <div class="detail-actions">
-          <button class="btn btn-danger" @click="handleUnequip">卸下</button>
-          <button class="btn" @click="detailItem = null">关闭</button>
-        </div>
-      </div>
-    </div>
+    <EquipDetailModal
+      :item="detailItem"
+      :slot="detailSlot"
+      :qualityColors="qualityColors"
+      :qualityLabels="qualityLabels"
+      :slotLabels="slotLabels"
+      :statLabels="statLabels"
+      :enchantsBySlot="player.enchantsBySlot"
+      :inventory="player.inventory"
+      :playerGold="player.gold"
+      @close="detailItem = null"
+      @unequip="handleUnequip"
+      @enchant="handleEnchant" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, reactive } from 'vue'
 import IconBase from './icons/IconBase.vue'
+import EquipDetailModal from './EquipDetailModal.vue'
 
 const props = defineProps(['player', 'jobTree'])
-const emit = defineEmits(['allocate', 'autoAllocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest'])
+const emit = defineEmits(['allocate', 'autoAllocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest', 'refresh'])
 
 const pending = ref({})
 const detailItem = ref(null)
@@ -259,6 +306,18 @@ const detailSlot = ref(null)
 const selectedJob = ref(null)
 const sideOpen = ref(false)
 const openSections = reactive({ job: true })
+const showPresets = ref(false)
+const newPresetName = ref('')
+
+const winRateText = computed(() => {
+  const cs = props.player.combatStats || {}
+  const wins = cs.totalWins || 0
+  const losses = cs.totalLosses || 0
+  const draws = cs.totalDraws || 0
+  const total = wins + losses + draws
+  if (total === 0) return '0'
+  return Math.round((wins / total) * 100)
+})
 
 const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e' }
 const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说' }
@@ -295,14 +354,6 @@ const questBadge = computed(() => {
   return total > 0 ? total : null
 })
 
-const availableEnchants = computed(() => {
-  if (!detailItem.value) return []
-  const slot = detailItem.value.slot
-  const enchants = props.player.enchantsBySlot?.[slot] || []
-  const existing = detailItem.value.enchants || []
-  return enchants.filter(r => !existing.includes(r.id))
-})
-
 function toggleSection(key) {
   openSections[key] = !openSections[key]
 }
@@ -325,6 +376,20 @@ function autoAllocate() {
   emit('autoAllocate')
 }
 
+async function handleSavePreset() {
+  const name = newPresetName.value.trim()
+  if (!name) return
+  emit('savePreset', name)
+  newPresetName.value = ''
+}
+function handleApplyPreset(presetId) {
+  emit('applyPreset', presetId)
+}
+async function handleDeletePreset(presetId) {
+  if (!confirm('确认删除该预设？')) return
+  emit('deletePreset', presetId)
+}
+
 function showEquipDetail(slotKey) {
   detailItem.value = props.player.equipped[slotKey]
   detailSlot.value = slotKey
@@ -332,45 +397,6 @@ function showEquipDetail(slotKey) {
 
 function handleUnequip() {
   emit('unequip', detailSlot.value)
-  detailItem.value = null
-}
-
-function getAllEnchants() {
-  return [...(props.player.enchantsBySlot?.weapon || []), ...(props.player.enchantsBySlot?.armor || []), ...(props.player.enchantsBySlot?.accessory || [])]
-}
-
-function getEnchantName(id) {
-  const r = getAllEnchants().find(e => e.id === id)
-  return r ? r.name : id
-}
-
-function getEnchantDesc(id) {
-  const r = getAllEnchants().find(e => e.id === id)
-  return r ? r.desc : ''
-}
-
-function formatMaterials(materials) {
-  return materials.map(m => {
-    const count = getMaterialCount(m.name)
-    return `${m.name}×${m.count}(${count})`
-  }).join(' ')
-}
-
-function getMaterialCount(name) {
-  const item = props.player.inventory?.find(i => i.name === name)
-  return item ? item.count : 0
-}
-
-function isEnchantDisabled(recipe) {
-  if (props.player.gold < recipe.cost) return true
-  for (const mat of recipe.materials) {
-    if (getMaterialCount(mat.name) < mat.count) return true
-  }
-  return false
-}
-
-function handleEnchant(recipeId) {
-  emit('enchant', detailItem.value.uid, recipeId)
   detailItem.value = null
 }
 </script>
@@ -425,8 +451,44 @@ function handleEnchant(recipeId) {
 .auto-alloc-row { margin-top: 0.5rem; }
 .auto-btn { width: 100%; padding: 0.5rem; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0e0f1c; font-weight: 700; border: none; }
 .auto-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(212,175,94,0.4); }
+
+/* 属性预设 */
+.attr-presets { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid var(--rule); }
+.presets-header { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--muted); cursor: pointer; padding: 0.3rem 0; user-select: none; }
+.presets-header:hover { color: var(--accent2); }
+.toggle-icon { margin-left: auto; font-size: 0.8rem; }
+.presets-body { padding: 0.4rem 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.preset-save-row { display: flex; gap: 0.3rem; align-items: center; }
+.preset-name-input { flex: 1; padding: 0.3rem 0.5rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 5px; color: var(--text); font-size: 0.78rem; font-family: inherit; outline: none; }
+.preset-name-input:focus { border-color: var(--accent2); }
+.preset-empty { font-size: 0.75rem; color: var(--dim); text-align: center; padding: 0.4rem; font-style: italic; }
+.preset-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.preset-card { padding: 0.5rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; }
+.preset-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+.preset-name { font-size: 0.82rem; font-weight: 700; color: var(--accent); }
+.preset-lv { font-size: 0.65rem; color: var(--dim); }
+.preset-attrs { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.pa-item { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(157,140,240,0.1); }
+.pa-item.atk { color: var(--danger); }
+.pa-item.def { color: var(--accent2); }
+.pa-item.hp { color: var(--success); }
+.pa-item.agi { color: var(--accent); }
+.preset-actions { display: flex; gap: 0.3rem; }
+.preset-actions .btn { flex: 1; padding: 0.3rem; font-size: 0.72rem; }
 .combat-summary { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--rule); }
 .cs-item { font-size: 0.72rem; color: var(--accent2); background: rgba(157,140,240,0.08); padding: 0.1rem 0.4rem; border-radius: 4px; }
+
+/* 战斗统计 */
+.combat-record { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid var(--rule); }
+.record-title { font-size: 0.8rem; color: var(--accent2); font-weight: 700; margin-bottom: 0.4rem; }
+.record-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.3rem; }
+.record-item { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0.5rem; background: rgba(20,22,42,0.5); border-radius: 5px; font-size: 0.72rem; }
+.record-label { color: var(--muted); }
+.record-value { font-weight: 700; color: var(--text); font-family: monospace; }
+.record-value.highlight { color: var(--accent); font-size: 0.85rem; }
+.record-value .win { color: var(--success); }
+.record-value .lose { color: var(--danger); }
+.record-value .draw { color: var(--accent2); }
 
 /* 职业区块 */
 .job-content { padding-top: 0.3rem; }
@@ -500,30 +562,7 @@ function handleEnchant(recipeId) {
 .affix-mini-count { font-size: 0.68rem; color: var(--dim); margin-left: 0.3rem; }
 .affix-mini-names { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
 
-/* 装备详情弹窗 */
-.equip-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
-.equip-detail-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.2rem; max-width: 340px; width: 100%; max-height: 85vh; overflow-y: auto; }
-.detail-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.2rem; }
-.detail-quality { font-size: 0.75rem; margin-bottom: 0.6rem; color: var(--muted); }
-.detail-stats { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.6rem; }
-.detail-stat { font-size: 0.82rem; color: var(--accent2); background: rgba(157,140,240,0.08); padding: 0.15rem 0.4rem; border-radius: 4px; }
-
-/* 附魔 */
-.enchanted-list { margin-bottom: 0.6rem; padding: 0.5rem; background: rgba(212,175,94,0.05); border-radius: 6px; border: 1px solid rgba(212,175,94,0.15); }
-.enchant-header { font-size: 0.78rem; color: var(--accent); font-weight: 600; margin-bottom: 0.3rem; }
-.enchant-item { display: flex; flex-direction: column; gap: 0.1rem; margin-bottom: 0.3rem; }
-.enchant-name { font-size: 0.78rem; color: var(--accent); font-weight: 600; }
-.enchant-desc { font-size: 0.7rem; color: var(--muted); }
-.enchant-section { margin-bottom: 0.6rem; padding: 0.5rem; background: rgba(157,140,240,0.05); border-radius: 6px; border: 1px solid rgba(157,140,240,0.12); }
-.enchant-recipe { display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; padding: 0.35rem 0; border-bottom: 1px solid var(--rule); }
-.enchant-recipe:last-child { border-bottom: none; }
-.enchant-recipe.disabled { opacity: 0.5; }
-.recipe-info { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; }
-.recipe-name { font-size: 0.78rem; font-weight: 600; color: var(--accent2); }
-.recipe-desc { font-size: 0.7rem; color: var(--muted); }
-.recipe-cost { font-size: 0.68rem; color: var(--dim); }
-.detail-actions { display: flex; gap: 0.5rem; }
-.detail-actions .btn { flex: 1; }
+/* 装备详情弹窗样式见 EquipDetailModal.vue */
 
 /* 右侧折叠面板 */
 .side-panel {

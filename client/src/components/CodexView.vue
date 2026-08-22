@@ -9,6 +9,13 @@
       </div>
     </div>
 
+    <!-- 搜索框 -->
+    <div class="search-bar">
+      <IconBase name="scroll" :size="12" class="search-icon" />
+      <input type="text" v-model="searchQuery" class="search-input" :placeholder="searchPlaceholder" />
+      <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
+    </div>
+
     <!-- 材料图鉴 -->
     <div v-if="activeCat === 'material'" class="codex-grid">
       <div v-for="mat in pagedItems" :key="mat.name" class="codex-item"
@@ -153,20 +160,50 @@ const activeCat = ref('material')
 const selected = ref(null)
 const page = ref(1)
 const pageSize = 16
+const searchQuery = ref('')
 const codexData = ref({ materials: [], equips: [], consumables: [], monsters: [] })
 
+const searchPlaceholder = computed(() => {
+  const map = { material: '搜索材料名称...', equip: '搜索装备名称、品质、部位...', consumable: '搜索消耗品名称...', monster: '搜索怪物名称、地点...' }
+  return map[activeCat.value] || '搜索...'
+})
+
 const currentList = computed(() => {
-  if (activeCat.value === 'material') return codexData.value.materials
-  if (activeCat.value === 'equip') return codexData.value.equips
-  if (activeCat.value === 'consumable') return codexData.value.consumables
-  if (activeCat.value === 'monster') return codexData.value.monsters
-  return []
+  let list = []
+  if (activeCat.value === 'material') list = codexData.value.materials
+  else if (activeCat.value === 'equip') list = codexData.value.equips
+  else if (activeCat.value === 'consumable') list = codexData.value.consumables
+  else if (activeCat.value === 'monster') list = codexData.value.monsters
+
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return list
+
+  return list.filter(item => {
+    // 名称搜索（所有类别通用）
+    if (item.name?.toLowerCase().includes(q)) return true
+    // 装备：搜索品质、部位、属性
+    if (activeCat.value === 'equip') {
+      if (qualityLabels[item.quality]?.toLowerCase().includes(q)) return true
+      if (slotLabels[item.slot]?.toLowerCase().includes(q)) return true
+      if (item.stats) {
+        for (const key of Object.keys(item.stats)) {
+          if ((statLabels[key] || key).toLowerCase().includes(q)) return true
+        }
+      }
+    }
+    // 怪物：搜索地点
+    if (activeCat.value === 'monster') {
+      if (item.areaName?.toLowerCase().includes(q)) return true
+    }
+    return false
+  })
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(currentList.value.length / pageSize)))
 const pagedItems = computed(() => currentList.value.slice((page.value - 1) * pageSize, page.value * pageSize))
 
-watch(activeCat, () => { page.value = 1 })
+watch(activeCat, () => { page.value = 1; searchQuery.value = '' })
+watch(searchQuery, () => { page.value = 1 })
 
 const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e' }
 const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说' }
@@ -217,6 +254,30 @@ onMounted(async () => {
 .cat-icon { font-size: 1.1rem; }
 .cat-label { font-size: 0.68rem; color: var(--muted); }
 .codex-tab.active .cat-label { color: var(--accent); font-weight: 600; }
+
+/* 搜索框 */
+.search-bar { position: relative; display: flex; align-items: center; margin-bottom: 0.3rem; }
+.search-icon { position: absolute; left: 0.6rem; color: var(--dim); z-index: 1; }
+.search-input {
+  width: 100%; padding: 0.45rem 2rem 0.45rem 1.8rem;
+  background: rgba(20, 22, 42, 0.6);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-input:focus { border-color: var(--accent2); }
+.search-input::placeholder { color: var(--dim); }
+.search-clear {
+  position: absolute; right: 0.4rem;
+  background: none; border: none;
+  color: var(--dim); font-size: 1rem;
+  cursor: pointer; padding: 0.2rem 0.4rem;
+}
+.search-clear:hover { color: var(--text); }
 
 /* 网格 */
 .codex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 0.4rem; }

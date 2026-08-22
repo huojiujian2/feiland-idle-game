@@ -3,9 +3,14 @@
       <!-- 装备网格 -->
       <div class="card section">
         <div class="section-header">
-          <span><IconBase name="sword" :size="14" class="section-icon" />装备 ({{ player.equips.length }})</span>
+          <span><IconBase name="sword" :size="14" class="section-icon" />装备 ({{ filteredEquips.length }})</span>
         </div>
-        <div v-if="player.equips.length === 0" class="empty-hint">空空如也...去打怪掉装备吧！</div>
+        <div class="search-bar">
+          <IconBase name="scroll" :size="12" class="search-icon" />
+          <input type="text" v-model="equipSearch" class="search-input" placeholder="搜索装备名称、品质、部位..." />
+          <button v-if="equipSearch" class="search-clear" @click="equipSearch = ''">×</button>
+        </div>
+        <div v-if="filteredEquips.length === 0" class="empty-hint">空空如也...去打怪掉装备吧！</div>
         <div v-else class="item-grid">
           <div v-for="item in pagedEquips" :key="item.uid" class="grid-cell"
             :style="{ borderColor: qualityColors[item.quality] + '40' }"
@@ -29,9 +34,14 @@
       <!-- 物品网格 -->
       <div class="card section">
         <div class="section-header">
-          <span><IconBase name="bag" :size="14" class="section-icon" />物品 ({{ player.inventory.length }})</span>
+          <span><IconBase name="bag" :size="14" class="section-icon" />物品 ({{ filteredMats.length }})</span>
         </div>
-        <div v-if="player.inventory.length === 0" class="empty-hint">暂无物品</div>
+        <div class="search-bar">
+          <IconBase name="scroll" :size="12" class="search-icon" />
+          <input type="text" v-model="matSearch" class="search-input" placeholder="搜索物品名称..." />
+          <button v-if="matSearch" class="search-clear" @click="matSearch = ''">×</button>
+        </div>
+        <div v-if="filteredMats.length === 0" class="empty-hint">暂无物品</div>
         <div v-else class="item-grid">
           <div v-for="item in pagedMats" :key="item.name" class="grid-cell"
             @click="showItemDetail(item)">
@@ -167,6 +177,9 @@ const emit = defineEmits(['use', 'sellMaterial', 'sellEquip', 'equip', 'enchant'
 const detailItem = ref(null)
 const itemDetail = ref(null)
 const useQty = ref({})
+// 搜索关键词
+const equipSearch = ref('')
+const matSearch = ref('')
 // 合成槽（最多 3 件同品质装备）
 const mergeSlots = ref([])
 
@@ -257,14 +270,45 @@ const slotLabels = { weapon: '武器', armor: '护甲', accessory: '饰品' }
 const statLabels = { atk: '攻击', def: '防御', hp: 'HP', mp: 'MP', str: '力量', con: '体质', spi: '精神', agi: '敏捷', cha: '魅力', exp: '经验', gold: '金币' }
 const equipSlotIcons = { weapon: 'sword', armor: 'shield', accessory: 'gem' }
 
-const equipTotalPages = computed(() => Math.max(1, Math.ceil(props.player.equips.length / pageSize)))
-const pagedEquips = computed(() => props.player.equips.slice((equipPage.value - 1) * pageSize, equipPage.value * pageSize))
+// 搜索过滤
+const filteredEquips = computed(() => {
+  const q = equipSearch.value.trim().toLowerCase()
+  if (!q) return props.player.equips
+  return props.player.equips.filter(item => {
+    if (item.name?.toLowerCase().includes(q)) return true
+    if (qualityLabels[item.quality]?.toLowerCase().includes(q)) return true
+    if (slotLabels[item.slot]?.toLowerCase().includes(q)) return true
+    if (item.quality?.toLowerCase().includes(q)) return true
+    if (item.slot?.toLowerCase().includes(q)) return true
+    // 搜索属性名
+    if (item.stats) {
+      for (const key of Object.keys(item.stats)) {
+        if ((statLabels[key] || key).toLowerCase().includes(q)) return true
+      }
+    }
+    return false
+  })
+})
 
-const matTotalPages = computed(() => Math.max(1, Math.ceil(props.player.inventory.length / pageSize)))
-const pagedMats = computed(() => props.player.inventory.slice((matPage.value - 1) * pageSize, matPage.value * pageSize))
+const filteredMats = computed(() => {
+  const q = matSearch.value.trim().toLowerCase()
+  if (!q) return props.player.inventory
+  return props.player.inventory.filter(item =>
+    item.name?.toLowerCase().includes(q)
+  )
+})
 
-watch(() => props.player.equips.length, () => { if (equipPage.value > equipTotalPages.value) equipPage.value = 1 })
-watch(() => props.player.inventory.length, () => { if (matPage.value > matTotalPages.value) matPage.value = 1 })
+const equipTotalPages = computed(() => Math.max(1, Math.ceil(filteredEquips.value.length / pageSize)))
+const pagedEquips = computed(() => filteredEquips.value.slice((equipPage.value - 1) * pageSize, equipPage.value * pageSize))
+
+const matTotalPages = computed(() => Math.max(1, Math.ceil(filteredMats.value.length / pageSize)))
+const pagedMats = computed(() => filteredMats.value.slice((matPage.value - 1) * pageSize, matPage.value * pageSize))
+
+watch(() => filteredEquips.value.length, () => { if (equipPage.value > equipTotalPages.value) equipPage.value = 1 })
+watch(() => filteredMats.value.length, () => { if (matPage.value > matTotalPages.value) matPage.value = 1 })
+// 搜索时重置页码
+watch(equipSearch, () => { equipPage.value = 1 })
+watch(matSearch, () => { matPage.value = 1 })
 
 function mainStat(item) {
   if (!item.stats) return ''
@@ -349,6 +393,30 @@ function handleEnchant(recipeId) {
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; font-size: 0.85rem; color: var(--muted); }
 .gold-display { color: var(--accent); font-weight: 600; }
 .empty-hint { text-align: center; padding: 1.2rem; color: var(--dim); font-style: italic; font-size: 0.82rem; }
+
+/* 搜索框 */
+.search-bar { position: relative; margin-bottom: 0.5rem; display: flex; align-items: center; }
+.search-icon { position: absolute; left: 0.6rem; color: var(--dim); z-index: 1; }
+.search-input {
+  width: 100%; padding: 0.45rem 2rem 0.45rem 1.8rem;
+  background: rgba(20, 22, 42, 0.6);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-input:focus { border-color: var(--accent2); }
+.search-input::placeholder { color: var(--dim); }
+.search-clear {
+  position: absolute; right: 0.4rem;
+  background: none; border: none;
+  color: var(--dim); font-size: 1rem;
+  cursor: pointer; padding: 0.2rem 0.4rem;
+}
+.search-clear:hover { color: var(--text); }
 
 /* 网格 */
 .item-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; }

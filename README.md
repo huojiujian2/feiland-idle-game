@@ -21,6 +21,7 @@
 | # | 文档 | 内容 |
 |---|------|------|
 | 0 | [本文件（主入口）](#) | 简介 + 目录 + 特性速览 |
+| 0a | [docs/README/00-code-style.md](docs/README/00-code-style.md) | 📐 **代码模块化规范**（行数规则 / 文件清单 / 拆分原则） |
 | 1 | [docs/README/01-gameplay.md](docs/README/01-gameplay.md) | 游戏玩法（职业 / 词条 / 新手指南） |
 | 2 | [docs/README/02-systems.md](docs/README/02-systems.md) | 系统详解（转生 / 锻造 / 世界BOSS / PVP / 数据规模） |
 | 3 | [docs/README/03-areas-and-equipment.md](docs/README/03-areas-and-equipment.md) | 11 区域 + 35+ 装备 + 24 怪物技能 |
