@@ -93,15 +93,23 @@ cd feiland-idle-game
 # 方法一：一键启动（Windows）
 双击 启动游戏.bat
 
-# 方法二：命令行
+# 方法二：开发模式（改代码实时生效）
 npm install
 npm run dev   # 或 pnpm dev
 
-# 方法三：Docker
+# 方法三：生产模式（性能更好）
+npm install
+npm run build
+npm start
+
+# 方法四：Docker
 docker compose up -d --build
 ```
 
 打开 **http://localhost:3000** 即可游玩。
+
+> **端口约定（所有模式统一）**：前端固定 **3000**（浏览器打开的地址），后端 API 固定 **3001**（正常游玩无需关心）。
+> 开发模式下若 3000 被占用，Vite 会直接报错退出（`strictPort`），不会悄悄换端口。
 
 **完整部署文档**：[04-quickstart.md](docs/README/04-quickstart.md)
 

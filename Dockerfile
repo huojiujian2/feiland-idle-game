@@ -41,14 +41,15 @@ COPY --from=builder /app/client/dist ./client/dist
 # 数据持久化目录
 RUN mkdir -p /app/data
 
-# 环境变量
+# 环境变量（端口约定：后端 API 固定 3001，前端固定 3000 由 web-server.js 提供）
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=3001
 ENV DB_PATH=/app/data/db.json
 ENV HOST=0.0.0.0
 
-# 暴露端口
+# 暴露端口（3000=前端页面，3001=后端 API）
 EXPOSE 3000
+EXPOSE 3001
 
 # 数据卷
 VOLUME ["/app/data"]
@@ -57,5 +58,5 @@ VOLUME ["/app/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
 
-# 启动
-CMD ["node", "server/index.js"]
+# 启动（同时拉起后端 3001 + 前端 3000）
+CMD ["node", "server/start-all.js"]

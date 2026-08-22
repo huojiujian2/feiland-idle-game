@@ -33,7 +33,7 @@ pnpm dev:server
 pnpm dev:client
 ```
 
-- 前端 / API：http://localhost:3000
+- 前端：http://localhost:3000 （后端 API 固定在 3001，正常游玩无需关心）
 
 ## 方法四：Docker 部署（推荐生产环境）
 
@@ -87,23 +87,25 @@ docker compose ps              # 查看运行状态
 
 ```bash
 pnpm build      # 构建前端到 client/dist/
-node server/index.js   # 启动后端，自动托管前端静态文件
+npm start       # 一键同时启动：前端(3000) + 后端 API(3001)
 ```
 
 ## 端口配置
 
-本项目默认使用 **3000** 端口（前后端共用，Express托管前端 dist）。
+端口约定（**所有模式统一**）：
 
-后端默认监听 `0.0.0.0`（所有网络接口），Docker 部署时容器外可正常访问。
+| 角色 | 地址 | 说明 |
+|------|------|------|
+| 前端页面 | **http://localhost:3000** | 浏览器打开这个地址游玩 |
+| 后端 API | **http://localhost:3001** | 只处理数据接口，正常游玩无需关心 |
+
+- 开发模式：Vite 占用 3000（`strictPort` 锁死），后端占 3001，`/api` 自动代理
+- 生产模式：`server/web-server.js` 占用 3000 托管构建产物并反代 API，后端占 3001
 
 ### 修改端口
 
-```bash
-# .env 文件方式
-cp .env.example .env
-# 编辑 .env，修改 PORT=8080
-docker compose up -d
+一般不需要改。如确需修改：
 
-# 命令行直接指定
-PORT=8080 docker compose up -d --build
-```
+- **后端端口**：环境变量 `PORT`（默认 3001）
+- **生产前端端口**：环境变量 `WEB_PORT`（默认 3000；开发模式的 Vite 不受它控制）
+- **Docker 宿主机访问端口**：`.env` 文件里的 `PORT`（映射到容器内前端的 3000）

@@ -8,7 +8,7 @@ services:
       - game-data:/app/data
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=3001
       - DB_PATH=/app/data/db.json
       - HOST=0.0.0.0
     restart: unless-stopped

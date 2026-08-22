@@ -9,7 +9,8 @@ const engine = require('./engine');
 const { registerRoutes } = require('./routes');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// 端口约定：后端 API 固定 3001；前端固定 3000（开发时由 Vite 提供，生产时由 server/web-server.js 提供）
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -20,6 +21,11 @@ console.log(`已加载 ${store.getAllPlayers().length} 个角色`);
 
 // 注册所有路由
 registerRoutes(app, store);
+
+// 未匹配的 /api 路径返回 JSON 404（否则请求会被下面的前端兜底路由吞掉而永久挂起）
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, message: `接口不存在: ${req.method} ${req.path}` });
+});
 
 // ====== 定时任务（仅主进程，避免测试挂起） ======
 if (require.main === module) {
@@ -96,9 +102,8 @@ if (require.main === module) {
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      if (!req.path.startsWith('/api')) {
-        res.sendFile(path.join(distPath, 'index.html'));
-      }
+      // /api 已由上方兜底返回 404，这里只负责前端路由回退
+      res.sendFile(path.join(distPath, 'index.html'));
     });
     console.log(`  静态文件: ${distPath}`);
   }
@@ -106,10 +111,10 @@ if (require.main === module) {
   const HOST = process.env.HOST || '0.0.0.0';
   app.listen(PORT, HOST, () => {
     console.log(`\n========================================`);
-    console.log(`  费兰德世界 - 挂机服务器已启动 v0.4`);
-    console.log(`  访问: http://localhost:${PORT}`);
+    console.log(`  费兰德世界 - 后端 API 已启动 v0.4`);
+    console.log(`  API 地址: http://localhost:${PORT}`);
+    console.log(`  游戏页面: http://localhost:3000 (前端)`);
     console.log(`  监听: ${HOST}:${PORT}`);
-    console.log(`  模块化: server/{engine,routes}/`);
     console.log(`========================================\n`);
   });
 }

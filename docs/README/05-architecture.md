@@ -17,7 +17,9 @@
 ```
 game-mvp/
 ├── server/                    # 后端服务
-│   ├── index.js                # Express 服务器入口 (端口 3000)
+│   ├── index.js                # Express 服务器入口 (API 端口固定 3001)
+│   ├── web-server.js           # 生产模式前端服务器 (端口固定 3000，托管 dist + 反代 /api)
+│   ├── start-all.js            # 生产一键编排：同时拉起 index.js + web-server.js
 │   ├── store.js                # JSON 文件数据存储
 │   ├── data.js                 # 游戏静态数据 (区域/怪物/装备/职业/词条/法则/BOSS/世界BOSS/转生/锻造)
 │   └── engine.js               # 游戏引擎 (挂机/战斗/升级/进化/登神/转生/世界BOSS/PVP)

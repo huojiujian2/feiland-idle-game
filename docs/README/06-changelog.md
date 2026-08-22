@@ -93,6 +93,15 @@
   - 前端：`InventoryView.vue` 装备区加"批量出售"按钮 + 弹窗（≤Lv.30/50/100/150/全部 五档快捷选择 + 实时预览件数/金币/品质分布）
   - 安全保障：只卖 `player.equips`（背包中的），不影响 `player.equipped`（穿戴中的）；写入操作日志
 
+### 🔧 端口方案统一（2026-08-22）
+
+- **端口约定（所有模式统一）**：前端固定 **3000**（浏览器打开的地址），后端 API 固定 **3001**
+- `server/index.js`：默认端口 3000 → **3001**（纯 API 服务，不再托管前端）
+- `vite.config.js`：新增 `strictPort: true` 锁死 3000（被占用时报错而非自动跳端口）；`/api` 代理默认指向 3001
+- 新增 `server/web-server.js`：生产模式前端服务器，监听 3000 托管 `client/dist` 并把 `/api` 反代到 3001（零第三方依赖）
+- 新增 `server/start-all.js` + `package.json` 的 `npm start`：一键同时拉起前后端，任一退出则整体停止
+- Docker：`ENV PORT=3001`、新增 `EXPOSE 3001`、`CMD node server/start-all.js`；宿主机访问端口仍由 compose 的 `${PORT:-3000}` 映射到容器内前端 3000
+
 ---
 
 ## v0.3 · 2026-08-20
