@@ -1,6 +1,6 @@
 <template>
   <!-- 登录/注册/创建角色界面 -->
-  <LoginScreen v-if="!player" :player="player"
+  <LoginScreen ref="loginScreenRef" v-if="!player" :player="player"
     @login="handleLogin"
     @register="handleRegister"
     @create="handleCreateChar" />
@@ -69,6 +69,9 @@
       :playerGold="player.gold"
       @close="closeShop"
       @buy="handleBuy" />
+
+    <!-- 全局 Toast + Modal（取代 alert/confirm） -->
+    <UIBridge />
   </div>
 </template>
 
@@ -87,6 +90,8 @@
 // 6. 组合 10+ 子组件：LoginScreen / TopBar / TabBar / 9 个业务页 / 3 个弹窗
 import { ref, computed, watch, onUnmounted } from 'vue';
 import api from './api.js';
+import { toast, modalAlert, modalConfirm } from './ui-bridge.js';
+import UIBridge from './components/UIBridge.vue';
 import LoginScreen from './components/LoginScreen.vue';
 import TopBar from './components/TopBar.vue';
 import TabBar from './components/TabBar.vue';
@@ -114,6 +119,7 @@ const materialPrices = ref({});
 const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e' };
 
 const levelUpNotice = ref(null);
+const loginScreenRef = ref(null); // 登录界面引用：登录后无角色时切换到创建角色步骤
 const offlineSummary = ref({ visible: false, data: null });
 const activeTab = ref('char');
 const showShop = ref(false);
@@ -144,7 +150,7 @@ watch(activeTab, (newTab, oldTab) => {
 // ====== 登录/注册/创建角色 ======
 async function handleLogin({ username, password }) {
   const res = await api.login(username, password);
-  if (!res.success) { alert(res.message); return; }
+  if (!res.success) { toast.error(res.message); return; }
   currentUser = username;
   currentUserRef.value = username;
   if (res.hasCharacter) {
@@ -156,25 +162,25 @@ async function handleLogin({ username, password }) {
     loadStaticData();
     startPolling();
   } else {
-    // 需要创建角色：父组件切换 loginStep
-    // 这里通过重新触发 LoginScreen 的 create 流程
+    // 账号还没有角色：切换登录界面到"创建角色"步骤
+    loginScreenRef.value?.setStep('create');
   }
 }
 
 async function handleRegister({ username, password }) {
   const res = await api.register(username, password);
-  if (!res.success) { alert(res.message); return; }
-  alert('注册成功！请登录');
+  if (!res.success) { toast.error(res.message); return; }
+  toast.success('注册成功！请登录');
 }
 
 async function handleCreateChar({ charName }) {
   if (!currentUser) {
     // 当前没有登录态（LoginScreen 直接 create 流程），先注册
-    alert('请先注册或登录账号');
+    toast.warn('请先注册或登录账号');
     return;
   }
   const res = await api.createCharacter(currentUser, charName);
-  if (!res.success) { alert(res.message); return; }
+  if (!res.success) { toast.error(res.message); return; }
   player.value = res.data;
   prevLevel = res.data.level;
   currentUserRef.value = currentUser;
@@ -191,6 +197,7 @@ async function loadStaticData() {
 }
 
 async function startPolling() {
+  if (pollTimer) return; // 防重入：已有轮询在跑时不再叠加新定时器
   pollTimer = setInterval(async () => {
     if (!player.value) return;
     const res = await api.getPlayer(currentUser);
@@ -240,93 +247,93 @@ function handleTutorialSkip() { updateTutorial(6); }
 // ====== 业务事件 ======
 async function handleAllocate(allocation) {
   const r = await api.allocateAttributes(currentUser, allocation);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleAutoAllocate() {
   const r = await api.autoAllocate(currentUser);
-  if (r.success && r.data?.player) player.value = r.data.player; else alert(r.message || '一键加点失败');
+  if (r.success && r.data?.player) player.value = r.data.player; else toast.error(r.message || '一键加点失败');
 }
 async function handleSavePreset(name) {
   const r = await api.saveAttrPreset(currentUser, name);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleApplyPreset(presetId) {
   const r = await api.applyAttrPreset(currentUser, presetId);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleDeletePreset(presetId) {
   const r = await api.deleteAttrPreset(currentUser, presetId);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleEquip(itemUid) {
   const r = await api.equip(currentUser, itemUid);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleUnequip(slot) {
   const r = await api.unequip(currentUser, slot);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleEnchant(itemUid, recipeId) {
   const r = await api.enchant(currentUser, itemUid, recipeId);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleChooseJob(jobPath) {
   const r = await api.chooseJob(currentUser, jobPath);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleEquipAffix(affixId, slot) {
   const r = await api.equipAffix(currentUser, affixId, slot);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleUnequipAffix(affixId) {
   const r = await api.unequipAffix(currentUser, affixId);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleUseItem(itemId, count) {
   const r = await api.useItem(currentUser, itemId, count);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleSellMaterial(name, count) {
   const r = await api.sellMaterial(currentUser, name, count);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleSellEquip(itemUid) {
   const r = await api.sellEquip(currentUser, itemUid);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleSellEquipsByLevel(maxLevel) {
   const r = await api.sellEquipsByLevel(currentUser, maxLevel);
   if (r.success) {
     player.value = r.data;
-    alert(`批量出售成功：卖出 ${r.sold} 件，获得 ${r.gold} 金币，剩余 ${r.remaining} 件`);
+    toast.success(`批量出售 ${r.sold} 件，获得 ${r.gold} 金币，剩余 ${r.remaining} 件`);
   } else {
-    alert(r.message || '批量出售失败');
+    toast.error(r.message || '批量出售失败');
   }
 }
 async function handleAreaChange(areaId) {
   const r = await api.changeArea(currentUser, areaId);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleStrategyChange(strategy) {
   const r = await api.setStrategy(currentUser, strategy);
   if (r.success || r.data) player.value = r.data;
-  if (!r.success) alert(r.message);
+  if (!r.success) toast.error(r.message);
 }
 async function handleEvolve() {
   const r = await api.evolve(currentUser);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleLearnLaw(lawId) {
   const r = await api.learnLaw(currentUser, lawId);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleAscend() {
   const r = await api.ascend(currentUser);
-  if (r.success) player.value = r.data; else alert(r.message);
+  if (r.success) player.value = r.data; else toast.error(r.message);
 }
 async function handleBuy(itemId, count) {
   const r = await api.buy(currentUser, itemId, count);
-  if (r.success) player.value = r.data; else alert(r.message || '购买失败');
+  if (r.success) player.value = r.data; else toast.error(r.message || '购买失败');
 }
 
 function closeShop() { showShop.value = false; }

@@ -18,6 +18,11 @@ function registerPvpRoutes(app, store) {
     const myLevel = player.level || 1;
     const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
     const bots = generateArenaBots(myLevel, myRating);
+    // 缓存本次生成的机器人，保证玩家看到的对手与实际挑战到的是同一个
+    const metaForCache = store.getMeta();
+    if (!metaForCache.arenaBots || typeof metaForCache.arenaBots !== 'object') metaForCache.arenaBots = {};
+    metaForCache.arenaBots[player.username] = { time: getNow(), bots };
+    store.setMeta(metaForCache);
     const realOpponents = store.getAllPlayers()
       .filter(p => p.username !== player.username && p.level)
       .filter(p => Math.abs((p.level || 1) - myLevel) <= PVP_LEVEL_RANGE)
@@ -75,11 +80,23 @@ function registerPvpRoutes(app, store) {
 
     let target;
     if (isBot) {
-      const myLevel = player.level || 1;
-      const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
-      const rating = myRating + Math.floor(Math.random() * 200) - 50;
-      const bots = generateArenaBots(myLevel, Math.max(800, rating));
-      target = bots.find(b => b.username === targetUsername) || bots[0];
+      // 优先从对手列表缓存中找玩家实际选中的机器人（缓存 10 分钟内有效）
+      const metaForCache = store.getMeta();
+      const cached = metaForCache.arenaBots && metaForCache.arenaBots[username];
+      const cacheValid = cached && Array.isArray(cached.bots)
+        && (getNow() - cached.time) < 10 * 60 * 1000;
+      target = cacheValid
+        ? cached.bots.find(b => b.username === targetUsername) || null
+        : null;
+      if (!target) {
+        // 缓存过期或未命中：重新生成一次尝试匹配；仍找不到则要求刷新列表，绝不静默换成别的对手
+        const myLevel = player.level || 1;
+        const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
+        const rating = myRating + Math.floor(Math.random() * 200) - 50;
+        const freshBots = generateArenaBots(myLevel, Math.max(800, rating));
+        target = freshBots.find(b => b.username === targetUsername) || null;
+        if (!target) return fail(res, '对手已刷新，请重新打开竞技场获取对手列表');
+      }
     } else {
       target = store.getPlayer(targetUsername);
       if (!target) return fail(res, '对手不存在');

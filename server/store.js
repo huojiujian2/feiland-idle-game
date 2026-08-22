@@ -16,7 +16,19 @@ function load() {
       data = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
     }
   } catch (e) {
-    console.error('加载数据失败:', e.message);
+    // 主存档损坏（多为写盘中途断电/崩溃导致的截断 JSON），尝试从备份恢复
+    console.error('主存档损坏:', e.message);
+    const bakPath = DB_PATH + '.bak';
+    if (fs.existsSync(bakPath)) {
+      try {
+        data = JSON.parse(fs.readFileSync(bakPath, 'utf-8'));
+        console.error('已从备份恢复:', bakPath);
+      } catch (e2) {
+        console.error('备份也损坏，使用空数据启动:', e2.message);
+      }
+    } else {
+      console.error('无可用备份，使用空数据启动');
+    }
   }
   if (!data.accounts) data.accounts = {};
   if (!data.players) data.players = {};
@@ -40,12 +52,23 @@ function markDirty() {
   }
 }
 
+let _lastBakAt = 0;
 function save() {
   if (_disableSave) return;
+  const tmpPath = DB_PATH + '.tmp';
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+    // 原子写：先写临时文件，成功后整体改名替换，杜绝写盘中途崩溃产生截断 JSON
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
+    // 每小时滚动一次 .bak 备份（主档损坏时最多损失 1 小时进度）
+    const nowMs = Date.now();
+    if (fs.existsSync(DB_PATH) && nowMs - _lastBakAt > 60 * 60 * 1000) {
+      fs.copyFileSync(DB_PATH, DB_PATH + '.bak');
+      _lastBakAt = nowMs;
+    }
+    fs.renameSync(tmpPath, DB_PATH);
   } catch (e) {
     console.error('保存数据失败:', e.message);
+    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
   }
 }
 

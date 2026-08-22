@@ -61,6 +61,7 @@
 // @description 游戏启动前的登录界面（登录/注册/创建角色 3 步流程）
 import { ref } from 'vue';
 import IconBase from './icons/IconBase.vue';
+import { toast } from '../ui-bridge.js';
 
 defineProps({
   player: { type: Object, default: null },
@@ -74,18 +75,20 @@ const passwordConfirm = ref('');
 const charNameInput = ref('');
 
 function handleLogin() {
-  if (!usernameInput.value || !passwordInput.value) return alert('请输入账号和密码');
+  if (!usernameInput.value || !passwordInput.value) return toast.warn('请输入账号和密码');
   emit('login', { username: usernameInput.value, password: passwordInput.value });
 }
 function handleRegister() {
-  if (!usernameInput.value || !passwordInput.value) return alert('请填写账号和密码');
-  if (passwordInput.value !== passwordConfirm.value) return alert('两次密码不一致');
+  if (!usernameInput.value || !passwordInput.value) return toast.warn('请填写账号和密码');
+  if (passwordInput.value !== passwordConfirm.value) return toast.warn('两次密码不一致');
   emit('register', { username: usernameInput.value, password: passwordInput.value });
 }
 function handleCreateChar() {
-  if (!charNameInput.value.trim()) return alert('请输入角色名');
+  if (!charNameInput.value.trim()) return toast.warn('请输入角色名');
   emit('create', { charName: charNameInput.value.trim() });
 }
+// 供父组件（App.vue）切换步骤：例如登录成功但账号还没有角色时，跳到创建角色
+defineExpose({ setStep: (s) => { loginStep.value = s; } });
 </script>
 
 <style scoped>

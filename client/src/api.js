@@ -2,11 +2,25 @@
 const BASE = '/api'
 
 async function request(url, options = {}) {
-  const res = await fetch(BASE + url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
-  })
-  return res.json()
+  try {
+    const res = await fetch(BASE + url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options
+    })
+    // 先解析 body（服务器出错时 body 里也可能带 message）
+    let data = null
+    try { data = await res.json() } catch (_) { data = null }
+    if (!res.ok) {
+      return { success: false, message: (data && data.message) || `请求失败 (${res.status})` }
+    }
+    if (!data || typeof data.success === 'undefined') {
+      return { success: false, message: '服务器响应格式异常' }
+    }
+    return data
+  } catch (_) {
+    // 断网 / 后端未启动 / DNS 失败等：统一转为可提示的错误结果，避免 unhandled rejection
+    return { success: false, message: '网络异常：无法连接服务器，请确认后端已启动' }
+  }
 }
 
 export default {

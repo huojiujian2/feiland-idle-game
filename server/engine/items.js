@@ -9,7 +9,7 @@ const {
   UPGRADE_MATERIAL_BY_QUALITY, QUALITY_ORDER, QUALITY_NEXT,
   createEquipItem,
 } = require('../data');
-const { findAffix, getPassiveSlots, getUnlockedAffixLevels, ensureQuestStats, refreshDailyIfNeeded, updateDailyProgress, checkAchievements } = require('./daily');
+const { findAffix, getPassiveSlots, getAvailableAffixLevels, ensureQuestStats, refreshDailyIfNeeded, updateDailyProgress, checkAchievements } = require('./daily');
 const { migratePlayer, grantGold } = require('./player');
 
 // recalcMaxStats 注入
@@ -337,7 +337,7 @@ function reforgeEquipment(player, itemUid, cost = 1000) {
   if ((player.gold || 0) < cost) return { success: false, message: `金币不足，需要 ${cost}` };
   item.enchants = [];
   item.affixes = [];
-  const lvls = getUnlockedAffixLevels(player.level);
+  const lvls = getAvailableAffixLevels(player);
   const affixPool = [];
   for (const lv of lvls) {
     for (const a of (AFFIX_TREE[lv] || [])) {
