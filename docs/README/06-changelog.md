@@ -76,6 +76,11 @@
 - **验证**：`skill.test.js` 19/19 通过；`npm run build` 91 modules 成功；13 个 GET 路由验证 200
 - **兼容性**：所有原 `require('./engine')` / `require('./data')` 通过 4 行重定向壳正常工作，调用方零修改
 
+### 🐛 Bug 修复（v0.4 同日补丁）
+
+- **dev 启动端口冲突修复**：`vite.config.js` 的 `/api` proxy 之前硬编码 `http://localhost:3000`，与 dev:server 同时占用 3000 端口时会启动失败 → 改为读取 `process.env.PORT || 3000`，并通过 `PORT=3001` 启动两个独立进程
+- **启动方式**：手动启动后端 `set PORT=3001 && node server/index.js`，前端 `set PORT=3001 && npx vite --port 3000 --host`
+
 ---
 
 ## v0.3 · 2026-08-20
