@@ -39,7 +39,7 @@
           <button class="qty-btn" @click="changeBuyQty(detail.id, -1)">−</button>
           <span class="qty-val">{{ buyQty[detail.id] || 1 }}</span>
           <button class="qty-btn" @click="changeBuyQty(detail.id, 1)">+</button>
-          <button class="btn btn-sm quick-btn" @click="setBuyQty(detail.id, 10)">×10</button>
+          <button class="btn btn-sm quick-btn" @click="setBuyQty(detail.id, 10)">+10</button>
         </div>
         <div class="sd-total">合计: 💰{{ detail.price * (buyQty[detail.id] || 1) }}</div>
         <button class="btn btn-primary btn-sm sd-buy-btn"
@@ -93,7 +93,7 @@ function changeBuyQty(id, delta) {
   const cur = buyQty.value[id] || 1;
   buyQty.value = { ...buyQty.value, [id]: Math.max(1, cur + delta) };
 }
-function setBuyQty(id, n) { buyQty.value = { ...buyQty.value, [id]: n }; }
+function setBuyQty(id, n) { const cur = buyQty.value[id] || 1; buyQty.value = { ...buyQty.value, [id]: cur + n }; }
 </script>
 
 <style scoped>

@@ -4,6 +4,7 @@
       <div class="card section">
         <div class="section-header">
           <span><IconBase name="sword" :size="14" class="section-icon" />装备 ({{ filteredEquips.length }})</span>
+          <button class="btn btn-sm bulk-sell-btn" @click="openBulkSell">批量出售</button>
         </div>
         <div class="search-bar">
           <IconBase name="scroll" :size="12" class="search-icon" />
@@ -163,6 +164,36 @@
         </div>
       </div>
     </div>
+
+    <!-- 按等级批量出售装备弹窗 -->
+    <div v-if="bulkSellVisible" class="modal-overlay" @click.self="bulkSellVisible = false">
+      <div class="modal-box">
+        <div class="modal-title">
+          <IconBase name="sword" :size="16" class="btn-icon icon-accent2" />按等级批量出售
+        </div>
+        <div class="bulk-hint">选择装备的"需要等级"上限，符合的装备会全部卖出（不会卖已穿戴的）。</div>
+        <div class="bulk-options">
+          <button class="bulk-opt" :class="{ active: bulkSellMaxLevel === 30 }" @click="bulkSellMaxLevel = 30">≤ Lv.30</button>
+          <button class="bulk-opt" :class="{ active: bulkSellMaxLevel === 50 }" @click="bulkSellMaxLevel = 50">≤ Lv.50</button>
+          <button class="bulk-opt" :class="{ active: bulkSellMaxLevel === 100 }" @click="bulkSellMaxLevel = 100">≤ Lv.100</button>
+          <button class="bulk-opt" :class="{ active: bulkSellMaxLevel === 150 }" @click="bulkSellMaxLevel = 150">≤ Lv.150</button>
+          <button class="bulk-opt" :class="{ active: bulkSellMaxLevel === null }" @click="bulkSellMaxLevel = null">全部</button>
+        </div>
+        <div class="modal-row"><span class="ml">将卖出</span><span class="mv">{{ bulkSellPreview.count }} 件</span></div>
+        <div class="modal-row"><span class="ml">预计获得</span><span class="mv"><IconBase name="gold" :size="13" class="icon-accent" /> {{ bulkSellPreview.gold }}</span></div>
+        <div v-if="bulkSellPreview.byQuality.length > 0" class="bulk-quality-list">
+          <span v-for="q in bulkSellPreview.byQuality" :key="q.name" class="bulk-quality-item" :style="{ color: qualityColors[q.name] }">
+            {{ qualityLabels[q.name] }} ×{{ q.count }}
+          </span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-danger btn-sm"
+            :class="{ 'btn-disabled': bulkSellPreview.count === 0 }"
+            @click="confirmBulkSell">确认出售</button>
+          <button class="btn btn-sm" @click="bulkSellVisible = false">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -172,7 +203,7 @@ import IconBase from './icons/IconBase.vue'
 import api from '../api.js'
 
 const props = defineProps(['player', 'qualityColors', 'materialPrices'])
-const emit = defineEmits(['use', 'sellMaterial', 'sellEquip', 'equip', 'enchant', 'refresh'])
+const emit = defineEmits(['use', 'sellMaterial', 'sellEquip', 'sellEquipsByLevel', 'equip', 'enchant', 'refresh'])
 
 const detailItem = ref(null)
 const itemDetail = ref(null)
@@ -182,6 +213,9 @@ const equipSearch = ref('')
 const matSearch = ref('')
 // 合成槽（最多 3 件同品质装备）
 const mergeSlots = ref([])
+// 按等级批量出售弹窗
+const bulkSellVisible = ref(false)
+const bulkSellMaxLevel = ref(30)
 
 // 锻造相关（与后端常量保持一致）
 const UPGRADE_LEVEL_MAX = 10
@@ -336,6 +370,35 @@ function setUseQty(name, n, max) { useQty.value = { ...useQty.value, [name]: Mat
 
 function showEquipDetail(item) { detailItem.value = item }
 function showItemDetail(item) { itemDetail.value = item }
+
+// 装备品质售价（与后端 EQUIP_SELL_PRICES 保持一致）
+const EQUIP_SELL_PRICES_LOCAL = { normal: 20, fine: 80, epic: 300, legend: 1500 }
+
+function openBulkSell() { bulkSellVisible.value = true }
+
+const bulkSellPreview = computed(() => {
+  const all = props.player.equips || []
+  const matched = all.filter(it => bulkSellMaxLevel.value == null || (it.reqLevel || 0) <= bulkSellMaxLevel.value)
+  const byQualityMap = {}
+  let gold = 0
+  for (const it of matched) {
+    gold += EQUIP_SELL_PRICES_LOCAL[it.quality] || 20
+    byQualityMap[it.quality] = (byQualityMap[it.quality] || 0) + 1
+  }
+  const order = ['legend', 'epic', 'fine', 'normal']
+  const byQuality = order
+    .filter(q => byQualityMap[q])
+    .map(q => ({ name: q, count: byQualityMap[q] }))
+  return { count: matched.length, gold, byQuality }
+})
+
+function confirmBulkSell() {
+  if (bulkSellPreview.value.count === 0) return
+  const label = bulkSellMaxLevel.value == null ? '全部' : `≤ Lv.${bulkSellMaxLevel.value}`
+  if (!confirm(`确认卖出 ${bulkSellPreview.value.count} 件装备（${label}），预计获得 ${bulkSellPreview.value.gold} 金币？此操作不可撤销。`)) return
+  emit('sellEquipsByLevel', bulkSellMaxLevel.value)
+  bulkSellVisible.value = false
+}
 
 const availableEnchants = computed(() => {
   if (!detailItem.value) return []
@@ -492,4 +555,14 @@ function handleEnchant(recipeId) {
 .recipe-cost { font-size: 0.68rem; color: var(--dim); }
 .detail-actions { display: flex; gap: 0.3rem; margin-top: 0.4rem; }
 .detail-actions .btn { flex: 1; }
+
+/* 批量出售 */
+.bulk-sell-btn { padding: 0.2rem 0.6rem; font-size: 0.7rem; color: var(--accent2); border-color: rgba(157,140,240,0.2); }
+.bulk-hint { font-size: 0.72rem; color: var(--muted); margin: 0.4rem 0; line-height: 1.5; }
+.bulk-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; margin: 0.4rem 0; }
+.bulk-opt { padding: 0.45rem 0.3rem; font-size: 0.78rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.bulk-opt:hover { border-color: var(--accent2); color: var(--accent2); }
+.bulk-opt.active { background: rgba(212,175,94,0.1); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.bulk-quality-list { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.3rem 0 0.5rem; }
+.bulk-quality-item { padding: 0.15rem 0.4rem; font-size: 0.7rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 3px; font-weight: 600; }
 </style>

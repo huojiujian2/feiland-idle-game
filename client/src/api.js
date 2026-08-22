@@ -63,6 +63,7 @@ export default {
   // 出售
   sellMaterial(username, itemName, count) { return request(`/player/${username}/sell-material`, { method: 'POST', body: JSON.stringify({ itemName, count }) }) },
   sellEquip(username, itemUid) { return request(`/player/${username}/sell-equip`, { method: 'POST', body: JSON.stringify({ itemUid }) }) },
+  sellEquipsByLevel(username, maxLevel) { return request(`/player/${username}/sell-equip-by-level`, { method: 'POST', body: JSON.stringify({ maxLevel }) }) },
 
   // 区域
   getAreas() { return request('/areas') },

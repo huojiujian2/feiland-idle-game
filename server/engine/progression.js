@@ -81,6 +81,9 @@ function doReincarnate(player) {
   player.skillPoints = 0;
   player.attributes = { atk: 5, def: 4, hp: 5, agi: 8 };
 
+  // 转生后回到初始地图（保留 maxClearedArea 作为历史成就记录）
+  player.currentArea = 'gaomanshan';
+
   recalc(player);
   player.hp = player.maxHp;
   player.mp = player.maxMp;

@@ -103,6 +103,9 @@ function useConsumable(player, itemId, count = 1) {
     if (itemId === 'hp_potion') player.hp = Math.min(player.maxHp, player.hp + 100);
     else if (itemId === 'mp_potion') player.mp = Math.min(player.maxMp, player.mp + 50);
     else if (itemId === 'exp_scroll') player.exp += 500;
+    else if (itemId === 'hp_potion_great') player.hp = Math.min(player.maxHp, player.hp + 500);
+    else if (itemId === 'mp_potion_great') player.mp = Math.min(player.maxMp, player.mp + 250);
+    else if (itemId === 'exp_scroll_great') player.exp += 3000;
   }
   return { success: true };
 }
@@ -157,6 +160,29 @@ function sellEquip(player, itemUid) {
   grantGold(player, price);
   player.equips.splice(idx, 1);
   return { success: true, gold: price };
+}
+
+// 按等级批量出售（卖出 reqLevel <= maxLevel 的所有装备，maxLevel=null 视为全部）
+function sellEquipsByLevel(player, maxLevel) {
+  player = migratePlayer(player);
+  refreshDailyIfNeeded(player);
+  const before = player.equips.length;
+  const matched = player.equips.filter(it => maxLevel == null || (it.reqLevel || 0) <= maxLevel);
+  if (matched.length === 0) return { success: false, message: '没有符合条件的装备' };
+  let totalGold = 0;
+  const uids = new Set(matched.map(it => it.uid));
+  for (const it of matched) {
+    totalGold += EQUIP_SELL_PRICES[it.quality] || 20;
+  }
+  player.equips = player.equips.filter(it => !uids.has(it.uid));
+  grantGold(player, totalGold);
+  player.logs = player.logs || [];
+  player.logs.push({
+    time: getNow(),
+    type: 'sell',
+    text: `【批量出售】卖出 ${matched.length} 件装备（≤Lv.${maxLevel ?? '全部'}），获得 ${totalGold} 金币`,
+  });
+  return { success: true, sold: matched.length, gold: totalGold, remaining: before - matched.length };
 }
 
 // 种族进化
@@ -348,7 +374,7 @@ module.exports = {
   equipAffix, unequipAffix,
   equipItem, unequipItem,
   useConsumable, buyItem,
-  sellMaterial, sellEquip,
+  sellMaterial, sellEquip, sellEquipsByLevel,
   evolveRace, enchantItem,
   upgradeEquipment, mergeEquipment, reforgeEquipment,
   learnLaw,

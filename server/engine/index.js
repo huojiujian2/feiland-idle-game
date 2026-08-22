@@ -91,6 +91,7 @@ module.exports = {
   buyItem: items.buyItem,
   sellMaterial: items.sellMaterial,
   sellEquip: items.sellEquip,
+  sellEquipsByLevel: items.sellEquipsByLevel,
   enchantItem: items.enchantItem,
   upgradeEquipment: items.upgradeEquipment,
   mergeEquipment: items.mergeEquipment,

@@ -3,7 +3,7 @@ const {
   equipAffix, unequipAffix,
   equipItem, unequipItem,
   useConsumable, buyItem,
-  sellMaterial, sellEquip,
+  sellMaterial, sellEquip, sellEquipsByLevel,
   upgradeEquipment, mergeEquipment, reforgeEquipment,
   getPlayerView,
 } = require('../engine');
@@ -86,6 +86,19 @@ function registerCombatRoutes(app, store) {
     if (!result.success) return fail(res, result.message);
     savePlayer(store, r.player);
     ok(res, getPlayerView(r.player));
+  });
+
+  // 按等级批量出售装备（maxLevel=null 视为全部）
+  app.post('/api/player/:username/sell-equip-by-level', (req, res) => {
+    const r = loadPlayer(store, req.params.username);
+    if (r.error) return fail(res, r.error);
+    const { maxLevel } = req.body || {};
+    const lv = maxLevel == null ? null : Number(maxLevel);
+    if (lv != null && (Number.isNaN(lv) || lv < 0)) return fail(res, 'maxLevel 非法');
+    const result = sellEquipsByLevel(r.player, lv);
+    if (!result.success) return fail(res, result.message);
+    savePlayer(store, r.player);
+    res.json({ success: true, data: getPlayerView(r.player), sold: result.sold, gold: result.gold, remaining: result.remaining });
   });
 
   // 装备锻造：升级

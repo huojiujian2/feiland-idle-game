@@ -52,14 +52,14 @@
 // @file components/evolution/LawTab
 // @module evolution-law-tab
 // @description 法则 Tab：已学法则加成 + 法则列表（可领悟/锁定）
-defineProps({
+const props = defineProps({
   player: { type: Object, required: true },
   lawBonus: { type: Object, required: true },
 });
 defineEmits(['learnLaw']);
 
 function getMaterialCount(name) {
-  const item = player.value?.inventory?.find(i => i.name === name);
+  const item = props.player.inventory?.find(i => i.name === name);
   return item ? item.count : 0;
 }
 </script>

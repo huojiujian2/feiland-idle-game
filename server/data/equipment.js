@@ -86,12 +86,25 @@ const QUALITY_NEXT = { normal: 'fine', fine: 'epic', epic: 'legend', legend: nul
 
 // 商店物品（可用金币购买）
 const SHOP_ITEMS = [
+  // 消耗品
   { id: 'hp_potion', name: '生命药剂', price: 50, desc: '恢复100HP', type: 'consumable' },
   { id: 'mp_potion', name: '法力药剂', price: 50, desc: '恢复50MP', type: 'consumable' },
   { id: 'exp_scroll', name: '经验卷轴', price: 200, desc: '获得500经验', type: 'consumable' },
+  { id: 'hp_potion_great', name: '大生命药剂', price: 250, desc: '恢复500HP', type: 'consumable' },
+  { id: 'mp_potion_great', name: '大法力药剂', price: 250, desc: '恢复250MP', type: 'consumable' },
+  { id: 'exp_scroll_great', name: '高级经验卷轴', price: 800, desc: '获得3000经验', type: 'consumable' },
+  { id: 'gold_bag', name: '金币袋', price: 100, desc: '打开获得500金币', type: 'consumable' },
+  { id: 'luck_charm', name: '幸运护符', price: 300, desc: '下一场战斗金币+20%', type: 'consumable' },
+  // 装备
   { id: 'wooden_spear', name: '木矛', price: 100, desc: '攻击+3', type: 'equip' },
   { id: 'leather_armor', name: '皮甲', price: 150, desc: '防御+5 HP+20', type: 'equip' },
-  { id: 'beast_tooth', name: '兽牙吊坠', price: 80, desc: '攻击+2 金币+5%', type: 'equip' }
+  { id: 'beast_tooth', name: '兽牙吊坠', price: 80, desc: '攻击+2 金币+5%', type: 'equip' },
+  { id: 'iron_spear', name: '铁制长矛', price: 300, desc: '攻击+18 力量+4', type: 'equip' },
+  { id: 'iron_armor', name: '铁甲', price: 400, desc: '防御+15 HP+50', type: 'equip' },
+  { id: 'crystal_ring', name: '水晶戒指', price: 350, desc: 'MP+30 灵巧+3', type: 'equip' },
+  { id: 'thunder_lance', name: '雷霆长枪', price: 700, desc: '攻击+40 力量+8', type: 'equip' },
+  { id: 'sea_armor', name: '海灵胸甲', price: 900, desc: '防御+35 HP+120', type: 'equip' },
+  { id: 'light_wings', name: '光之翼甲', price: 600, desc: '防御+60 敏捷+10', type: 'equip' },
 ];
 
 // 力量等阶（文字版）

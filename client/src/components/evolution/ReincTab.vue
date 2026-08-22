@@ -65,7 +65,7 @@
             </span>
             <button class="btn btn-sm btn-primary"
               :class="{ 'btn-disabled': (reincInfo.reincPoints || 0) < item.cost || shopBuying }"
-              :click="$emit('buyReincItem', item)">兑换</button>
+              @click="$emit('buyReincItem', item)">兑换</button>
           </div>
         </div>
       </div>

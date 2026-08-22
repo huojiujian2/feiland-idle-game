@@ -25,7 +25,8 @@
           <InventoryView v-else-if="activeTab === 'bag'" :player="player"
             :qualityColors="qualityColors" :materialPrices="materialPrices"
             @use="handleUseItem" @sellMaterial="handleSellMaterial"
-            @sellEquip="handleSellEquip" @equip="handleEquip" @enchant="handleEnchant"
+            @sellEquip="handleSellEquip" @sellEquipsByLevel="handleSellEquipsByLevel"
+            @equip="handleEquip" @enchant="handleEnchant"
             @refresh="player = $event" />
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
             @select="handleAreaChange" @strategy-change="handleStrategyChange"
@@ -292,6 +293,15 @@ async function handleSellMaterial(name, count) {
 async function handleSellEquip(itemUid) {
   const r = await api.sellEquip(currentUser, itemUid);
   if (r.success) player.value = r.data; else alert(r.message);
+}
+async function handleSellEquipsByLevel(maxLevel) {
+  const r = await api.sellEquipsByLevel(currentUser, maxLevel);
+  if (r.success) {
+    player.value = r.data;
+    alert(`批量出售成功：卖出 ${r.sold} 件，获得 ${r.gold} 金币，剩余 ${r.remaining} 件`);
+  } else {
+    alert(r.message || '批量出售失败');
+  }
 }
 async function handleAreaChange(areaId) {
   const r = await api.changeArea(currentUser, areaId);

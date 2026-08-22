@@ -81,6 +81,18 @@
 - **dev 启动端口冲突修复**：`vite.config.js` 的 `/api` proxy 之前硬编码 `http://localhost:3000`，与 dev:server 同时占用 3000 端口时会启动失败 → 改为读取 `process.env.PORT || 3000`，并通过 `PORT=3001` 启动两个独立进程
 - **启动方式**：手动启动后端 `set PORT=3001 && node server/index.js`，前端 `set PORT=3001 && npx vite --port 3000 --host`
 
+### 🐛 Bug 修复 + 功能优化（2026-08-22）
+
+- **法则 Tab 崩溃修复**：`LawTab.vue` 的 `getMaterialCount` 函数引用了未定义的 `player.value`（script setup 中没有 `player` 变量）→ 改为 `const props = defineProps(...)` 并使用 `props.player.inventory`，消除 `ReferenceError: player is not defined` 及其连锁的 3 条 Vue 渲染错误（shapeFlag/subTree/emitsOptions 为 null）
+- **转生按钮误触发兑换修复**：`ReincTab.vue` 兑换按钮的 `:click="$emit('buyReincItem', item)"` 是 prop 绑定而非事件监听（应为 `@click`）→ 修正为 `@click`，修复"点转生触发兑换转生点"的错位行为
+- **转生后地图不重置修复**：`doReincarnate` 函数重置等级/经验/属性但漏了 `currentArea`，转生后仍停留在高等级地图 → 新增 `player.currentArea = 'gaomanshan'`（保留 `maxClearedArea` 历史成就记录不重置，避免破坏二次转生门槛判定）
+- **商店批量购买逻辑修复**：`ShopModal.vue` 的 `setBuyQty` 用 `=` 覆盖数量导致点 `×10` 始终是 10 → 改为 `+=` 累加，按钮文案 `×10` → `+10`
+- **商店商品扩充**：`SHOP_ITEMS` 从 6 个扩到 17 个（消耗品 8 + 装备 9），新增大生命/法力药剂、高级经验卷轴等；装备复用 `EQUIP_TEMPLATES` 已有模板（铁制长矛/铁甲/水晶戒指/雷霆长枪/海灵胸甲/光之翼甲），同步适配 `useConsumable` 支持高级药水
+- **背包批量出售装备**：新增"按等级批量出售"功能
+  - 后端：`sellEquipsByLevel(player, maxLevel)` + 路由 `POST /api/player/:username/sell-equip-by-level`
+  - 前端：`InventoryView.vue` 装备区加"批量出售"按钮 + 弹窗（≤Lv.30/50/100/150/全部 五档快捷选择 + 实时预览件数/金币/品质分布）
+  - 安全保障：只卖 `player.equips`（背包中的），不影响 `player.equipped`（穿戴中的）；写入操作日志
+
 ---
 
 ## v0.3 · 2026-08-20
