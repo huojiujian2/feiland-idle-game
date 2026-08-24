@@ -6,9 +6,6 @@
     <!-- 战斗策略 -->
     <BattleStrategy :player="player" @strategy-change="$emit('strategy-change', $event)" />
 
-    <!-- 战斗属性面板 -->
-    <BattleStatsPanel :player="player" />
-
     <!-- 下半：战斗日志（含飘字 overlay） -->
     <BattleLog :player="player" @show-drops="dropsPopup.items = $event.drops; dropsPopup.visible = true" />
 
@@ -47,7 +44,7 @@
 // @description 地图主视图，组合：区域选择 / 战斗策略 / 战斗属性 / 战斗日志
 //
 // 本文件结构（已模块化拆分后主文件 ~70 行）：
-// 1. 组合子组件：MapAreaSelector + BattleStrategy + BattleStatsPanel + BattleLog
+// 1. 组合子组件：MapAreaSelector + BattleStrategy + BattleLog
 // 2. 通用弹窗：DropsPopup
 // 3. 右侧折叠侧边栏：BOSS / 排行榜 / 竞技场
 // 4. 局部状态：dropsPopup, sideOpen
@@ -58,7 +55,6 @@ import { ref } from 'vue';
 import IconBase from './icons/IconBase.vue';
 import MapAreaSelector from './map/MapAreaSelector.vue';
 import BattleStrategy from './map/BattleStrategy.vue';
-import BattleStatsPanel from './map/BattleStatsPanel.vue';
 import BattleLog from './map/BattleLog.vue';
 import DropsPopup from './map/DropsPopup.vue';
 import {
