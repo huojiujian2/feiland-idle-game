@@ -8,7 +8,7 @@ const { EQUIP_TEMPLATES, QUALITY_COLORS, QUALITY_ORDER, QUALITY_NEXT,
         UPGRADE_LEVEL_MAX, UPGRADE_BASE_GOLD, QUALITY_GOLD_MULT, QUALITY_STAT_MULT,
         UPGRADE_MATERIAL_BY_QUALITY,
         SHOP_ITEMS, SHOP_MATERIALS, MATERIAL_PRICES, EQUIP_SELL_PRICES, INITIAL_MATERIAL_POOL,
-        getStage, expToNext, createEquipItem } = require('./equipment');
+        getStage, expToNext, createEquipItem, registerCustomEquip, unregisterCustomEquip, isCustomEquip } = require('./equipment');
 const { JOB_TREE } = require('./jobs');
 const { AFFIX_LEVELS, AFFIX_TREE } = require('./affixes');
 const { RACE_EVOLUTION, ENCHANT_RECIPES, MAX_ENCHANT_SLOTS, LAWS, ASCENSION } = require('./progression');
@@ -24,7 +24,7 @@ module.exports = {
   UPGRADE_LEVEL_MAX, UPGRADE_BASE_GOLD, QUALITY_GOLD_MULT, QUALITY_STAT_MULT,
   UPGRADE_MATERIAL_BY_QUALITY,
   SHOP_ITEMS, SHOP_MATERIALS, MATERIAL_PRICES, EQUIP_SELL_PRICES, INITIAL_MATERIAL_POOL,
-  getStage, expToNext, createEquipItem,
+  getStage, expToNext, createEquipItem, registerCustomEquip, unregisterCustomEquip, isCustomEquip,
   JOB_TREE,
   AFFIX_LEVELS, AFFIX_TREE,
   RACE_EVOLUTION, ENCHANT_RECIPES, MAX_ENCHANT_SLOTS, LAWS, ASCENSION,

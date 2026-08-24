@@ -34,12 +34,14 @@
           <CodexView v-else-if="activeTab === 'codex'" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend"
-            @reincarnated="player = $event" />
+            @reincarnated="player = $event"
+            @goGenesis="activeTab = 'genesis'" />
           <LeaderboardView v-else-if="activeTab === 'rank'" :currentUser="currentUserRef" />
           <QuestView v-else-if="activeTab === 'quest'" :player="player" :currentUser="currentUserRef" @refresh="player = $event" />
           <PvPView v-else-if="activeTab === 'pvp'" :player="player" :currentUser="currentUserRef"
             @goBack="activeTab = 'map'" @updatePlayer="player = $event" />
           <WorldBossView v-else-if="activeTab === 'boss'" :player="player" :currentUser="currentUserRef" />
+          <GenesisView v-else-if="activeTab === 'genesis'" :player="player" />
         </div>
       </transition>
     </main>
@@ -108,6 +110,7 @@ import LeaderboardView from './components/LeaderboardView.vue';
 import QuestView from './components/QuestView.vue';
 import PvPView from './components/PvPView.vue';
 import WorldBossView from './components/WorldBossView.vue';
+import GenesisView from './components/GenesisView.vue';
 import TutorialOverlay from './components/TutorialOverlay.vue';
 
 // ====== 状态 ======
@@ -125,7 +128,7 @@ const activeTab = ref('char');
 const showShop = ref(false);
 
 const transitionName = ref('slide-left');
-const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp'];
+const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'genesis'];
 
 let pollTimer = null;
 let prevLevel = 0;

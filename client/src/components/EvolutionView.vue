@@ -26,6 +26,7 @@
       :reincLoading="reincLoading"
       :shopBuying="shopBuying"
       @reincarnate="doReincarnate"
+      @goGenesis="$emit('goGenesis')"
       @buyReincItem="handleBuyReincItem" />
   </div>
 </template>

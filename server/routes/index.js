@@ -9,6 +9,7 @@ const { registerPvpRoutes } = require('./pvp');
 const { registerWorldBossRoutes } = require('./worldboss');
 const { registerStrategyRoute } = require('./strategy');
 const { registerQuestRoutes } = require('./quest');
+const { registerGenesisRoutes } = require('./genesis');
 
 function registerRoutes(app, store) {
   registerAuthRoutes(app, store);
@@ -21,6 +22,7 @@ function registerRoutes(app, store) {
   registerWorldBossRoutes(app, store);
   registerStrategyRoute(app, store);
   registerQuestRoutes(app, store);
+  registerGenesisRoutes(app, store);
 }
 
 module.exports = { registerRoutes };

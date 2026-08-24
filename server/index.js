@@ -17,6 +17,7 @@ app.use(express.json());
 
 store.load();
 engine.maybeResetWeeklyBossKills(store);
+engine.setStore(store);   // 把 store.getMeta 注入 idle/genesis（创世系统需要）
 console.log(`已加载 ${store.getAllPlayers().length} 个角色`);
 
 // 注册所有路由

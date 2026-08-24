@@ -166,10 +166,26 @@ const EQUIP_SELL_PRICES = { normal: 20, fine: 80, epic: 300, legend: 1500 };
 // 初始材料池（任务奖励随机抽）
 const INITIAL_MATERIAL_POOL = ['草药', '兽皮', '兽骨', '青铜矿'];
 
+// ====== 创世系统：自创装备运行时注册 ======
+// 自创装备以 custom_ 前缀 key 注册进 EQUIP_TEMPLATES，
+// 从而自动获得掉落(createEquipItem)、合成表(mergeEquipment 筛模板表)、附魔/重铸兼容。
+function registerCustomEquip(tpl) {
+  if (!tpl || !tpl.id || !tpl.name) return false;
+  EQUIP_TEMPLATES[tpl.id] = {
+    name: tpl.name, slot: tpl.slot, quality: tpl.quality || 'epic',
+    reqLevel: tpl.reqLevel || 1, stats: { ...(tpl.stats || {}) },
+    genesis: true, creator: tpl.creator || '', desc: tpl.desc || '',
+  };
+  return true;
+}
+function unregisterCustomEquip(id) { delete EQUIP_TEMPLATES[id]; }
+function isCustomEquip(templateId) { return typeof templateId === 'string' && templateId.startsWith('custom_'); }
+
 module.exports = {
   EQUIP_TEMPLATES, QUALITY_COLORS, QUALITY_ORDER, QUALITY_NEXT,
   UPGRADE_LEVEL_MAX, UPGRADE_BASE_GOLD, QUALITY_GOLD_MULT, QUALITY_STAT_MULT,
   UPGRADE_MATERIAL_BY_QUALITY,
   SHOP_ITEMS, SHOP_MATERIALS, MATERIAL_PRICES, EQUIP_SELL_PRICES, INITIAL_MATERIAL_POOL,
   getStage, expToNext, createEquipItem,
+  registerCustomEquip, unregisterCustomEquip, isCustomEquip,
 };

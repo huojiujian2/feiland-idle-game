@@ -47,6 +47,20 @@
     </button>
     <div class="reinc-warning">⚠ 转生将重置等级、经验、属性点；装备、词条、法则、登神进度、积分、材料保留</div>
 
+    <!-- 二转解锁：创世之书入口 -->
+    <div v-if="(reincInfo.reincarnation || 0) >= 2" class="card reinc-genesis">
+      <div class="genesis-title-row">
+        <span class="genesis-icon">📜</span>
+        <div class="genesis-info">
+          <div class="genesis-name">创世之书</div>
+          <div class="genesis-sub">二转已解锁 · 你可以捏怪物、造装备</div>
+        </div>
+      </div>
+      <button class="btn btn-primary reinc-genesis-btn" @click="$emit('goGenesis')">
+        翻开创世之书 →
+      </button>
+    </div>
+
     <div class="card reinc-shop">
       <div class="shop-title-row">
         <IconBase name="dna" :size="14" class="icon-accent" />
@@ -128,6 +142,16 @@ const boxOptions = reactive({});
 .req-row:not(.met) .req-icon { color: var(--danger); }
 .reinc-btn { width: 100%; padding: 0.6rem; font-weight: 700; }
 .reinc-warning { font-size: 0.7rem; color: var(--dim); text-align: center; line-height: 1.5; }
+.reinc-genesis {
+  margin-top: 0.6rem; padding: 0.8rem;
+  background: linear-gradient(135deg, rgba(94,58,122,0.25), rgba(212,175,94,0.1));
+  border: 1px solid rgba(212,175,94,0.4);
+}
+.genesis-title-row { display:flex; align-items:center; gap:0.6rem; margin-bottom:0.6rem; }
+.genesis-icon { font-size:1.6rem; }
+.genesis-name { color:#d4af5e; font-size:0.9rem; font-weight:600; }
+.genesis-sub { color:var(--dim); font-size:0.72rem; }
+.reinc-genesis-btn { width:100%; }
 
 .reinc-shop { display: flex; flex-direction: column; gap: 0.4rem; }
 .shop-title-row { display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--rule); }

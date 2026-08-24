@@ -13,6 +13,7 @@ const progression = require('./progression');
 const worldboss = require('./worldboss');
 const idle = require('./idle');
 const view = require('./view');
+const genesis = require('./genesis');
 
 // ====== 绑定循环引用 ======
 // recalcMaxStats：与原 engine.js 行为一致（基于词条加成的 baseHp）
@@ -49,6 +50,20 @@ daily.setGrantHandlers({
 idle.setGrantGoldHandler((p, amount) => player.grantGold(p, amount));
 
 // pvp 的 createBot 需要 player.createCharacter + recalcMaxStats
+pvp.setBotCharacterDeps({
+  createCharacter: player.createCharacter,
+  recalcMaxStats: realRecalcMaxStats,
+});
+
+// 创世系统：把 store.getMeta 注入到 idle/genesis 两个引擎
+function setStore(store) {
+  if (!store || !store.getMeta) return;
+  const getter = () => store.getMeta();
+  idle.setMetaGetter(getter);
+  genesis.setMetaGetter(getter);
+  // 启动期把已存档的自创装备同步注册回装备模板表
+  genesis.rehydrateFromMeta(store.getMeta());
+}
 pvp.setBotCharacterDeps({
   createCharacter: player.createCharacter,
   recalcMaxStats: realRecalcMaxStats,
@@ -185,4 +200,13 @@ module.exports = {
   // 授予（player 模块，外部偶尔需要）
   grantGold: player.grantGold,
   grantExpWithLevelUp: player.grantExpWithLevelUp,
+
+  // 创世系统（二转解锁）
+  isGenesisUnlocked: genesis.isUnlocked,
+  listGenesis: genesis.listByPlayer,
+  birthMonster: genesis.birthMonster,
+  forgeEquip: genesis.forgeEquip,
+  deleteGenesis: genesis.deleteCustom,
+  rehydrateGenesis: genesis.rehydrateFromMeta,
+  setStore,
 };

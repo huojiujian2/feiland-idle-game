@@ -3,7 +3,7 @@ const { getPlayerView } = require('../engine');
 const { AREAS, EQUIP_TEMPLATES, JOB_TREE, MONSTER_SKILLS, ENCHANT_RECIPES, MATERIAL_PRICES, SHOP_ITEMS } = require('../data');
 const { ok, fail } = require('./_helpers');
 
-function buildCodexData() {
+function buildCodexData(store) {
   const materials = [];
   const equipMap = new Map();
   const consumables = SHOP_ITEMS.filter(s => s.type === 'consumable').map(s => ({
@@ -69,6 +69,46 @@ function buildCodexData() {
       });
     }
   }
+
+  // 注入自创内容（创世系统：meta.genesis）
+  const meta = store && store.getMeta && store.getMeta();
+  const genesis = meta && meta.genesis;
+  if (genesis) {
+    // 自创装备（id 在 EQUIP_TEMPLATES 里一定有；这里只覆盖 sources 为该自创者投放的地图）
+    for (const e of (genesis.equips || [])) {
+      const tpl = EQUIP_TEMPLATES[e.id];
+      if (tpl) {
+        equipMap.set(e.id, {
+          templateId: e.id,
+          ...tpl,
+          sources: [{ area: e.areaId, areaName: AREAS[e.areaId]?.name || e.areaId, rate: 0 }],
+          shopPrice: null,
+          creator: e.creator,
+          customDesc: e.desc,
+        });
+      }
+    }
+    // 自创怪物
+    for (const m of (genesis.monsters || [])) {
+      monsters.push({
+        name: m.name,
+        area: m.areaId,
+        areaName: AREAS[m.areaId]?.name || m.areaId,
+        areaLevel: AREAS[m.areaId]?.minLevel || 0,
+        hp: m.hp, atk: m.atk, def: m.def, agi: m.agi,
+        exp: m.exp, gold: m.gold,
+        skills: m.skills || [],
+        skillDetails: (m.skills || []).map(sid => {
+          const sk = MONSTER_SKILLS[sid];
+          return sk ? { id: sid, name: sk.name, desc: sk.desc, mult: sk.mult } : null;
+        }).filter(Boolean),
+        isBoss: false,
+        creator: m.creator,
+        customDesc: m.desc,
+      });
+    }
+  }
+
   return { materials, equips: Array.from(equipMap.values()), consumables, monsters };
 }
 
@@ -82,8 +122,8 @@ function registerCodexRoutes(app, store) {
     res.json({ success: true, data: areas });
   });
 
-  // 图鉴（聚合材料/装备/消耗品/怪物）
-  app.get('/api/codex', (req, res) => res.json({ success: true, data: buildCodexData() }));
+  // 图鉴（聚合材料/装备/消耗品/怪物 + 自创内容）
+  app.get('/api/codex', (req, res) => res.json({ success: true, data: buildCodexData(store) }));
 
   // 静态：附魔配方
   app.get('/api/data/enchants', (req, res) => res.json({ success: true, data: ENCHANT_RECIPES }));

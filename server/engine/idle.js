@@ -11,9 +11,15 @@ const { AREAS, AREA_ORDER, STRATEGIES, JOB_TREE, expToNext, createEquipItem } = 
 let _grantGold = (player, amount) => { player.gold += amount; };
 function setGrantGoldHandler(fn) { if (typeof fn === 'function') _grantGold = fn; }
 
+// meta 注入（创世系统读取全服共享 meta）
+let _getMeta = () => ({ genesis: { monsters: [], equips: [] } });
+function setMetaGetter(fn) { if (typeof fn === 'function') _getMeta = fn; }
+
 // 单次战斗
 function _runSingleBattle(player, area) {
-  const monster = area.monsters[Math.floor(getRand()() * area.monsters.length)];
+  const custom = _getMeta().genesis?.monsters?.filter(m => m.areaId === area.id) || [];
+  const pool = [...area.monsters, ...custom];
+  const monster = pool[Math.floor(getRand()() * pool.length)];
   const battleMonster = buildBattleMonster(monster, player.strategy);
   const battle = simulateBattle(player, battleMonster);
   return { monster, battle, battleMonster };
@@ -92,7 +98,14 @@ function calculateIdle(player) {
 
     if (player.godhood) player.faith += Math.floor(monster.exp * 0.1);
 
-    for (const drop of area.drops) {
+    // 地图基础掉落 + 该自创怪自身的掉落（如有）
+    const dropList = [...area.drops];
+    if (Array.isArray(monster.drops) && monster.drops.length > 0) {
+      for (const d of monster.drops) {
+        dropList.push({ type: 'material', name: d.name, rate: d.rate });
+      }
+    }
+    for (const drop of dropList) {
       if (shouldDrop(drop.rate, player.strategy)) {
         if (drop.type === 'material') {
           drops.push(drop.name);
@@ -313,4 +326,5 @@ module.exports = {
   calculateIdle,
   setGrantGoldHandler,
   setRecalcMaxStatsHandler,
+  setMetaGetter,
 };

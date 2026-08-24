@@ -128,6 +128,12 @@ export default {
     return request(`/player/${username}/worldboss/attack`, { method: 'POST' })
   },
 
+  // 创世之书（二转解锁）
+  getGenesis(username) { return request(`/player/${username}/genesis`) },
+  birthMonster(username, draft) { return request(`/player/${username}/genesis/monster`, { method: 'POST', body: JSON.stringify(draft) }) },
+  forgeEquip(username, draft) { return request(`/player/${username}/genesis/equip`, { method: 'POST', body: JSON.stringify(draft) }) },
+  deleteGenesis(username, kind, id) { return request(`/player/${username}/genesis/delete`, { method: 'POST', body: JSON.stringify({ kind, id }) }) },
+
   // 战斗策略
   setStrategy(username, strategy) { return request(`/player/${username}/strategy`, { method: 'POST', body: JSON.stringify({ strategy }) }) },
 

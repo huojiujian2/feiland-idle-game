@@ -33,7 +33,7 @@
         <div class="item-icon" :class="eq.quality">
           <IconBase :name="equipIcons[eq.slot]" :size="28" />
         </div>
-        <div class="item-name" :style="{ color: qualityColors[eq.quality] }">{{ eq.name }}</div>
+        <div class="item-name" :style="{ color: qualityColors[eq.quality] }">{{ eq.name }}<span v-if="eq.creator" class="creator-tag" :title="`造物主：${eq.creator}`">自造</span></div>
         <div class="item-quality" :style="{ color: qualityColors[eq.quality] }">{{ qualityLabels[eq.quality] }}</div>
       </div>
     </div>
@@ -52,10 +52,10 @@
 
     <!-- 怪物图鉴 -->
     <div v-if="activeCat === 'monster'" class="codex-grid">
-      <div v-for="mo in pagedItems" :key="mo.name + mo.area" class="codex-item"
+      <div v-for="mo in pagedItems" :key="mo.name + mo.area + (mo.creator || '')" class="codex-item"
         @click="selectItem(mo)">
         <div class="item-icon mon-icon"><IconBase name="skull" :size="28" /></div>
-        <div class="item-name">{{ mo.name }}</div>
+        <div class="item-name">{{ mo.name }}<span v-if="mo.creator" class="creator-tag" :title="`造物主：${mo.creator}`">自造</span></div>
         <div class="item-area">{{ mo.areaName }}</div>
       </div>
     </div>
@@ -91,7 +91,8 @@
 
         <!-- 装备详情 -->
         <template v-if="activeCat === 'equip'">
-          <div class="detail-title" :style="{ color: qualityColors[selected.quality] }">{{ equipIcons[selected.slot] }} {{ selected.name }}</div>
+          <div class="detail-title" :style="{ color: qualityColors[selected.quality] }">{{ equipIcons[selected.slot] }} {{ selected.name }}<span v-if="selected.creator" class="creator-tag" :title="`造物主：${selected.creator}`">自造</span></div>
+          <div class="detail-row" v-if="selected.customDesc"><span class="dl">神谕</span><span class="dv">{{ selected.customDesc }}</span></div>
           <div class="detail-row"><span class="dl">品质</span><span class="dv" :style="{ color: qualityColors[selected.quality] }">{{ qualityLabels[selected.quality] }}</span></div>
           <div class="detail-row"><span class="dl">类型</span><span class="dv">{{ slotLabels[selected.slot] }}</span></div>
           <div class="detail-row"><span class="dl">需求等级</span><span class="dv">Lv.{{ selected.reqLevel }}</span></div>
@@ -124,7 +125,8 @@
 
         <!-- 怪物详情 -->
         <template v-if="activeCat === 'monster'">
-          <div class="detail-title">👹 {{ selected.name }}</div>
+          <div class="detail-title">👹 {{ selected.name }}<span v-if="selected.creator" class="creator-tag" :title="`造物主：${selected.creator}`">自造</span></div>
+          <div class="detail-row" v-if="selected.customDesc"><span class="dl">神谕</span><span class="dv">{{ selected.customDesc }}</span></div>
           <div class="detail-row"><span class="dl">出没地点</span><span class="dv">{{ selected.areaName }} (Lv.{{ selected.areaLevel }}+)</span></div>
           <div class="detail-section-title">属性</div>
           <div class="monster-stats-grid">
@@ -289,6 +291,14 @@ onMounted(async () => {
 .item-icon.epic { filter: hue-rotate(220deg); }
 .item-icon.legend { filter: hue-rotate(30deg) saturate(1.5); }
 .item-name { font-size: 0.72rem; font-weight: 600; word-break: break-all; line-height: 1.2; }
+.creator-tag {
+  display: inline-block; margin-left: 4px; padding: 0 4px;
+  font-size: 0.55rem; font-weight: 400;
+  background: linear-gradient(135deg, #5e3a7a, #2c1a3e);
+  border: 1px solid #d4af5e; border-radius: 3px;
+  color: #d4af5e; vertical-align: middle; letter-spacing: 0;
+}
+.detail-title .creator-tag { font-size: 0.7rem; padding: 1px 6px; }
 .item-price { font-size: 0.65rem; color: var(--accent); }
 .item-quality { font-size: 0.6rem; }
 .item-area { font-size: 0.6rem; color: var(--dim); }
