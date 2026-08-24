@@ -59,13 +59,16 @@
           :class="{ 'locked': (reincInfo.reincPoints || 0) < item.cost }">
           <div class="shop-item-name">{{ item.name }}</div>
           <div class="shop-item-desc">{{ item.desc }}</div>
+          <select v-if="item.options?.length" v-model="boxOptions[item.id]" class="box-option-select">
+            <option v-for="opt in item.options" :key="opt" :value="opt">{{ opt }} ×5</option>
+          </select>
           <div class="shop-item-bottom">
             <span class="shop-item-cost">
               <IconBase name="dna" :size="12" class="icon-accent" /> {{ item.cost }}
             </span>
             <button class="btn btn-sm btn-primary"
               :class="{ 'btn-disabled': (reincInfo.reincPoints || 0) < item.cost || shopBuying }"
-              @click="$emit('buyReincItem', item)">兑换</button>
+              @click="$emit('buyReincItem', item, boxOptions[item.id])">兑换</button>
           </div>
         </div>
       </div>
@@ -78,6 +81,7 @@
 // @file components/evolution/ReincTab
 // @module evolution-reinc-tab
 // @description 转生 Tab：轮回信息 + 永久加成 + 下一级预览 + 转生条件 + 转生按钮 + 转生点商店
+import { reactive } from 'vue';
 import IconBase from '../icons/IconBase.vue';
 
 defineProps({
@@ -88,7 +92,10 @@ defineProps({
   reincLoading: { type: Boolean, default: false },
   shopBuying: { type: Boolean, default: false },
 });
-defineEmits(['reincarnate', 'buyReincItem']);
+const emit = defineEmits(['reincarnate', 'buyReincItem']);
+
+// 材料宝盒自选：每个宝盒商品的当前选中材料
+const boxOptions = reactive({});
 </script>
 
 <style scoped>

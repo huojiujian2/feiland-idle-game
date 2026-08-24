@@ -1,5 +1,5 @@
 // ====== 职业 / 登神 / 转生 / 转生点商店 / 离线收益汇总 ======
-const { getNow, getRand } = require('./state');
+const { getNow } = require('./state');
 const {
   JOB_TREE, ASCENSION, AREA_ORDER, expToNext,
 } = require('../data');
@@ -126,12 +126,16 @@ function getReincarnationInfo(player) {
 }
 
 // 转生点商店
+// 平衡约定：exp/gold 加成类购买上限 30%（与 doReincarnate 的封顶一致）；
+// 金币礼包与材料盒的「每点转生点期望收益」对齐（约 250~320 金/点）
+const REINC_BUFF_CAP = 0.30;
+const MATERIAL_BOX_OPTIONS = ['法则碎片', '深渊之石', '龙血', '光明晶'];
 const REINC_SHOP_ITEMS = [
-  { id: 'exp_potion', name: '经验药水(50%)', desc: '永久增加 1% 经验加成', cost: 10, type: 'buff', apply: (p) => {
+  { id: 'exp_potion', name: '经验祝福·微', desc: '永久增加 1% 经验加成（累计上限 +30%）', cost: 10, type: 'buff', apply: (p) => {
     p.permanentBuffs = p.permanentBuffs || {};
     p.permanentBuffs.expBonus = (p.permanentBuffs.expBonus || 0) + 0.01;
   }},
-  { id: 'gold_potion', name: '财富药水(50%)', desc: '永久增加 1% 金币加成', cost: 10, type: 'buff', apply: (p) => {
+  { id: 'gold_potion', name: '财富祝福·微', desc: '永久增加 1% 金币加成（累计上限 +30%）', cost: 10, type: 'buff', apply: (p) => {
     p.permanentBuffs = p.permanentBuffs || {};
     p.permanentBuffs.goldBonus = (p.permanentBuffs.goldBonus || 0) + 0.01;
   }},
@@ -151,36 +155,51 @@ const REINC_SHOP_ITEMS = [
     p.permanentBuffs = p.permanentBuffs || {};
     p.permanentBuffs.baseAgiBonus = (p.permanentBuffs.baseAgiBonus || 0) + 5;
   }},
-  { id: 'material_box', name: '材料宝盒', desc: '随机获得 5 个高级材料', cost: 30, type: 'material', apply: (p) => {
-    const mats = ['法则碎片', '深渊之石', '龙血', '光明晶'];
-    const mat = mats[Math.floor(getRand()() * mats.length)];
+  { id: 'material_box', name: '材料宝盒', desc: '自选获得 5 个高级材料（法则碎片/深渊之石/龙血/光明晶）', cost: 20, type: 'material', apply: (p, option) => {
+    const mat = option;
     const existing = p.inventory.find(i => i.name === mat);
     if (existing) existing.count += 5;
     else p.inventory.push({ name: mat, count: 5, type: 'material' });
     return `获得 5 个 ${mat}`;
   }},
-  { id: 'gold_pack', name: '金币大礼包', desc: '直接获得 50000 金币', cost: 15, type: 'gold', apply: (p) => {
-    grantGold(p, 50000);
-    return '获得 50000 金币';
+  { id: 'gold_pack', name: '金币大礼包', desc: '直接获得 9000 金币', cost: 30, type: 'gold', apply: (p) => {
+    grantGold(p, 9000);
+    return '获得 9000 金币';
   }},
 ];
 
 function getReincShop() {
   return REINC_SHOP_ITEMS.map(item => ({
-    id: item.id, name: item.name, desc: item.desc, cost: item.cost, type: item.type
+    id: item.id, name: item.name, desc: item.desc, cost: item.cost, type: item.type,
+    options: item.id === 'material_box' ? MATERIAL_BOX_OPTIONS : undefined
   }));
 }
 
-function buyReincShopItem(player, itemId) {
+function buyReincShopItem(player, itemId, option) {
   player = migratePlayer(player);
   const item = REINC_SHOP_ITEMS.find(i => i.id === itemId);
   if (!item) return { success: false, message: '商品不存在' };
+  // 材料宝盒：必须携带白名单内的自选材料
+  if (item.id === 'material_box') {
+    if (!option || !MATERIAL_BOX_OPTIONS.includes(option)) {
+      return { success: false, message: `请选择要获得的材料（${MATERIAL_BOX_OPTIONS.join('/')}）` };
+    }
+  }
+  // 加成类购买上限保护
+  if (item.id === 'exp_potion') {
+    const cur = (player.permanentBuffs || {}).expBonus || 0;
+    if (cur >= REINC_BUFF_CAP) return { success: false, message: '经验加成已达上限 +30%' };
+  }
+  if (item.id === 'gold_potion') {
+    const cur = (player.permanentBuffs || {}).goldBonus || 0;
+    if (cur >= REINC_BUFF_CAP) return { success: false, message: '金币加成已达上限 +30%' };
+  }
   const points = player.reincPoints || 0;
   if (points < item.cost) {
     return { success: false, message: `转生点不足，需要 ${item.cost} 点（当前 ${points}）` };
   }
   player.reincPoints = points - item.cost;
-  const result = item.apply(player);
+  const result = item.apply(player, option);
   recalc(player);
   player.hp = player.maxHp;
   player.mp = player.maxMp;

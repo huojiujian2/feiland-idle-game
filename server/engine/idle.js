@@ -38,8 +38,9 @@ function calculateIdle(player) {
 
   recalcMaxStatsFromStats(player);
   const { monster, battle, battleMonster } = _runSingleBattle(player, area);
-  player.hp = battle.playerHp;
-  player.mp = battle.playerMp;
+  // 战斗结算后满血满蓝（战斗内掉血只在单场模拟内部生效，不带入下一场）
+  player.hp = player.maxHp;
+  player.mp = player.maxMp;
 
   const total = getTotalStats(player);
   const lawBonus = getLawBonus(player);
@@ -273,12 +274,9 @@ function _calculateIdleBatch(player, area, elapsed) {
     player.maxMp += 10;
     levelUps++;
   }
-  if (levelUps > 0) {
-    player.hp = player.maxHp;
-    player.mp = player.maxMp;
-  } else {
-    player.hp = Math.max(player.hp, Math.floor(player.maxHp * 0.5));
-  }
+  // 离线批量结算同样满血满蓝
+  player.hp = player.maxHp;
+  player.mp = player.maxMp;
 
   const logEntry = {
     time: getNow(), type: 'battle',

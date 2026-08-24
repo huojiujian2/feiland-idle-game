@@ -113,11 +113,11 @@ async function doReincarnate() {
   }
 }
 
-async function handleBuyReincItem(item) {
+async function handleBuyReincItem(item, option) {
   if (!await modalConfirm(`兑换「${item.name}」将消耗 ${item.cost} 转生点，继续？`)) return;
   shopBuying.value = true;
   try {
-    const res = await api.buyReincShopItem(props.player.username, item.id);
+    const res = await api.buyReincShopItem(props.player.username, item.id, option);
     if (res.success) {
       emit('reincarnated', res.data);
       await fetchReincInfo();

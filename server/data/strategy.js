@@ -9,7 +9,7 @@ const STRATEGIES = {
   defensive: { name: '稳健防守', desc: 'DEF+15% ATK-10% 回复+50%', reqLevel: 1, effects: { def: 0.15, atk: -0.10, regen: 0.50 } },
   balanced: { name: '平衡', desc: '无加成', reqLevel: 1, effects: {} },
   greedy: { name: '贪婪掠夺', desc: 'GOLD+30% EXP-20% 掉落+5%', reqLevel: 20, effects: { gold: 0.30, exp: -0.20, drop: 0.05 } },
-  desperate: { name: '背水一战', desc: 'ATK+40% DEF-30% 低血再+20%', reqLevel: 40, effects: { atk: 0.40, def: -0.30, desperateAtk: 0.20, hpThreshold: 0.30 } },
+  desperate: { name: '背水一战', desc: 'ATK+40% DEF-30%', reqLevel: 40, effects: { atk: 0.40, def: -0.30, desperateAtk: 0.20, hpThreshold: 0.30 } },
   training: { name: '极限修炼', desc: 'EXP+50% GOLD-50% 怪物ATK+20%', reqLevel: 60, effects: { exp: 0.50, gold: -0.50, monsterAtk: 0.20 } }
 };
 const STRATEGY_CD_MS = 5 * 60 * 1000;

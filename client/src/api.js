@@ -50,9 +50,9 @@ export default {
 
   // 转生点商店
   getReincShop() { return request('/reinc-shop') },
-  buyReincShopItem(username, itemId) {
+  buyReincShopItem(username, itemId, option) {
     return request('/reinc-shop/buy', {
-      method: 'POST', body: JSON.stringify({ username, itemId })
+      method: 'POST', body: JSON.stringify({ username, itemId, option })
     })
   },
 
@@ -69,8 +69,8 @@ export default {
   equip(username, itemUid) { return request(`/player/${username}/equip`, { method: 'POST', body: JSON.stringify({ itemUid }) }) },
   unequip(username, slot) { return request(`/player/${username}/unequip`, { method: 'POST', body: JSON.stringify({ slot }) }) },
 
-  // 商店
-  getShop() { return request('/shop') },
+  // 商店（携带用户名，后端按等级过滤材料货架）
+  getShop(username) { return request(`/shop${username ? `?username=${encodeURIComponent(username)}` : ''}`) },
   buy(username, itemId, count) { return request(`/player/${username}/buy`, { method: 'POST', body: JSON.stringify({ itemId, count }) }) },
   useItem(username, itemId, count) { return request(`/player/${username}/use`, { method: 'POST', body: JSON.stringify({ itemId, count }) }) },
 

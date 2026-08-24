@@ -49,7 +49,9 @@ const ENCHANT_RECIPES = [
   { id: 'legend_atk', name: '传说·破灭', desc: '攻击+20 力量+10', slot: 'weapon',
     cost: 5000, materials: [{ name: '龙血', count: 1 }, { name: '附魔卷轴', count: 3 }], bonus: { atk: 20, str: 10 } },
   { id: 'legend_def', name: '传说·不朽', desc: '防御+20 体质+10 HP+200', slot: 'armor',
-    cost: 5000, materials: [{ name: '龙鳞', count: 2 }, { name: '附魔卷轴', count: 3 }], bonus: { def: 20, con: 10, hp: 200 } }
+    cost: 5000, materials: [{ name: '龙鳞', count: 2 }, { name: '附魔卷轴', count: 3 }], bonus: { def: 20, con: 10, hp: 200 } },
+  { id: 'myth_spi', name: '神话·灵蕴', desc: '精神+15 MP+200 攻击+10', slot: 'accessory',
+    cost: 8000, materials: [{ name: '深渊之石', count: 1 }, { name: '光明晶', count: 3 }, { name: '附魔卷轴', count: 5 }], bonus: { spi: 15, mp: 200, atk: 10 } }
 ];
 const MAX_ENCHANT_SLOTS = 3;
 

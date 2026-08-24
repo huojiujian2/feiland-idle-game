@@ -11,10 +11,11 @@
           </button>
         </div>
         <div class="shop-grid">
-          <div v-for="item in pagedItems" :key="item.id" class="shop-cell" @click="detail = item">
+          <div v-for="item in pagedItems" :key="item.id" class="shop-cell" :class="{ locked: item.locked }" @click="detail = item">
             <div class="shop-icon">{{ getShopIcon(item) }}</div>
             <div class="shop-name">{{ item.name }}</div>
             <div class="shop-price">💰{{ item.price }}</div>
+            <div v-if="item.locked" class="shop-lock">🔒Lv{{ item.requiredLevel }}</div>
           </div>
         </div>
         <div v-if="totalPages > 1" class="shop-pager">
@@ -30,10 +31,12 @@
   <div v-if="detail" class="shop-detail-overlay" @click.self="detail = null">
     <div class="shop-detail-box">
       <div class="sd-title">{{ getShopIcon(detail) }} {{ detail.name }}</div>
-      <div class="sd-row"><span class="sd-label">类型</span><span class="sd-val">{{ detail.type === 'consumable' ? '消耗品' : '装备' }}</span></div>
+      <div class="sd-row"><span class="sd-label">类型</span><span class="sd-val">{{ getTypeName(detail) }}</span></div>
+      <div v-if="detail.type === 'material'" class="sd-row"><span class="sd-label">产地</span><span class="sd-val">{{ detail.sourceMap }}</span></div>
       <div class="sd-row"><span class="sd-label">价格</span><span class="sd-val">💰{{ detail.price }}</span></div>
       <div class="sd-desc">{{ detail.desc }}</div>
-      <div v-if="detail.type === 'consumable'" class="sd-section">
+      <div v-if="detail.locked" class="sd-locked-tip">🔒 需要 Lv.{{ detail.requiredLevel }} 解锁【{{ detail.sourceMap }}】后购买</div>
+      <div v-else-if="detail.type === 'consumable' || detail.type === 'material'" class="sd-section">
         <div class="sd-section-title">购买数量</div>
         <div class="qty-controls">
           <button class="qty-btn" @click="changeBuyQty(detail.id, -1)">−</button>
@@ -80,14 +83,28 @@ const pagedItems = computed(() => (props.items || []).slice((page.value - 1) * p
 
 function getShopIcon(item) {
   if (item.type === 'consumable') {
-    if (item.id?.includes('hp')) return '🧪';
-    if (item.id?.includes('mp')) return '🔵';
     if (item.id?.includes('exp')) return '📜';
     return '📦';
+  }
+  if (item.type === 'material') {
+    if (item.name?.includes('矿') || item.id?.includes('iron') || item.id?.includes('bronze')) return '🪨';
+    if (item.name?.includes('草')) return '🌿';
+    if (item.name?.includes('皮') || item.name?.includes('骨')) return '🦴';
+    if (item.name?.includes('鳞')) return '🐉';
+    if (item.name?.includes('血')) return '🩸';
+    if (item.name?.includes('晶')) return '💎';
+    if (item.name?.includes('羽') || item.name?.includes('露')) return '🪶';
+    if (item.name?.includes('卷轴')) return '📄';
+    return '🧪';
   }
   if (item.id?.includes('spear') || item.id?.includes('sword') || item.id?.includes('blade') || item.id?.includes('lance')) return '⚔️';
   if (item.id?.includes('armor') || item.id?.includes('wings') || item.id?.includes('cloak')) return '🛡️';
   return '💎';
+}
+function getTypeName(item) {
+  if (item.type === 'consumable') return '消耗品';
+  if (item.type === 'material') return '材料';
+  return '装备';
 }
 function changeBuyQty(id, delta) {
   const cur = buyQty.value[id] || 1;
@@ -105,8 +122,10 @@ function setBuyQty(id, n) { const cur = buyQty.value[id] || 1; buyQty.value = { 
 .sheet-close { width: 32px; height: 32px; }
 
 .shop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; padding: 0.8rem; overflow-y: auto; }
-.shop-cell { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.6rem 0.3rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+.shop-cell { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.6rem 0.3rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; transition: all 0.15s; position: relative; }
 .shop-cell:hover { border-color: var(--accent2); transform: translateY(-1px); }
+.shop-cell.locked { opacity: 0.45; filter: grayscale(0.8); }
+.shop-lock { position: absolute; top: 2px; right: 3px; font-size: 0.6rem; color: var(--muted); }
 .shop-icon { font-size: 1.5rem; }
 .shop-name { font-size: 0.72rem; font-weight: 600; text-align: center; }
 .shop-price { font-size: 0.68rem; color: var(--accent); font-weight: 700; font-family: monospace; }
@@ -126,6 +145,7 @@ function setBuyQty(id, n) { const cur = buyQty.value[id] || 1; buyQty.value = { 
 .sd-label { color: var(--muted); }
 .sd-val { color: var(--text); font-weight: 600; }
 .sd-desc { padding: 0.5rem 0; color: var(--text); font-size: 0.82rem; border-top: 1px solid var(--rule); margin-top: 0.3rem; }
+.sd-locked-tip { padding: 0.5rem; margin-top: 0.3rem; background: rgba(212,175,94,0.08); border: 1px dashed var(--rule); border-radius: 6px; color: var(--muted); font-size: 0.78rem; text-align: center; }
 .sd-section { padding-top: 0.5rem; }
 .sd-section-title { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; }
 .qty-controls { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.4rem; }

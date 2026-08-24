@@ -3,7 +3,8 @@
 // @module data-quests
 // @description 每日任务配置、T-040 成就列表、主动技能 CD 配置
 
-const INITIAL_MATERIAL_POOL = ['草药', '兽皮', '兽骨', '青铜矿'];
+// 初始材料池唯一定义在 equipment.js，此处引用（避免双份定义漂移）
+const { INITIAL_MATERIAL_POOL } = require('./equipment');
 
 // 每日任务（T-040 静态）
 const DAILY_QUESTS = [
@@ -33,4 +34,4 @@ const ACHIEVEMENTS = [
 // 主动技能 CD 配置
 const ACTIVE_SKILL_CD = { 1: 5, 2: 4, 3: 3, 4: 2 };
 
-module.exports = { INITIAL_MATERIAL_POOL, DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS, ACTIVE_SKILL_CD };
+module.exports = { DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS, ACTIVE_SKILL_CD };

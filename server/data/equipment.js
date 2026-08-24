@@ -85,16 +85,11 @@ const UPGRADE_MATERIAL_BY_QUALITY = {
 const QUALITY_NEXT = { normal: 'fine', fine: 'epic', epic: 'legend', legend: null };
 
 // 商店物品（可用金币购买）
+// 设计约定：只卖普通/优良品质装备 + 经验卷轴；血蓝药剂已删除（每场战斗后自动满血满蓝）
 const SHOP_ITEMS = [
   // 消耗品
-  { id: 'hp_potion', name: '生命药剂', price: 50, desc: '恢复100HP', type: 'consumable' },
-  { id: 'mp_potion', name: '法力药剂', price: 50, desc: '恢复50MP', type: 'consumable' },
   { id: 'exp_scroll', name: '经验卷轴', price: 200, desc: '获得500经验', type: 'consumable' },
-  { id: 'hp_potion_great', name: '大生命药剂', price: 250, desc: '恢复500HP', type: 'consumable' },
-  { id: 'mp_potion_great', name: '大法力药剂', price: 250, desc: '恢复250MP', type: 'consumable' },
   { id: 'exp_scroll_great', name: '高级经验卷轴', price: 800, desc: '获得3000经验', type: 'consumable' },
-  { id: 'gold_bag', name: '金币袋', price: 100, desc: '打开获得500金币', type: 'consumable' },
-  { id: 'luck_charm', name: '幸运护符', price: 300, desc: '下一场战斗金币+20%', type: 'consumable' },
   // 装备
   { id: 'wooden_spear', name: '木矛', price: 100, desc: '攻击+3', type: 'equip' },
   { id: 'leather_armor', name: '皮甲', price: 150, desc: '防御+5 HP+20', type: 'equip' },
@@ -102,9 +97,6 @@ const SHOP_ITEMS = [
   { id: 'iron_spear', name: '铁制长矛', price: 300, desc: '攻击+18 力量+4', type: 'equip' },
   { id: 'iron_armor', name: '铁甲', price: 400, desc: '防御+15 HP+50', type: 'equip' },
   { id: 'crystal_ring', name: '水晶戒指', price: 350, desc: 'MP+30 灵巧+3', type: 'equip' },
-  { id: 'thunder_lance', name: '雷霆长枪', price: 700, desc: '攻击+40 力量+8', type: 'equip' },
-  { id: 'sea_armor', name: '海灵胸甲', price: 900, desc: '防御+35 HP+120', type: 'equip' },
-  { id: 'light_wings', name: '光之翼甲', price: 600, desc: '防御+60 敏捷+10', type: 'equip' },
 ];
 
 // 力量等阶（文字版）
@@ -138,7 +130,7 @@ function createEquipItem(templateId, uid) {
 
 // 材料出售价格
 const MATERIAL_PRICES = {
-  '兽皮': 5, '石矛': 10, '草药': 8, '兽骨': 5, '青铜矿': 12,
+  '兽皮': 5, '草药': 8, '兽骨': 5, '青铜矿': 12,
   '泰坦之血碎片': 50, '飞龙鳞片': 30,
   '海灵石': 40, '铁矿': 15, '深海水晶': 60,
   '风羽玉露': 80, '光明晶': 100, '天使之羽': 200,
@@ -146,6 +138,27 @@ const MATERIAL_PRICES = {
   '龙鳞': 300, '龙血': 500,
   '法则碎片': 1000, '深渊之石': 800
 };
+
+// 商店材料货架（解锁对应地图后可见可买）
+// 定价规则：买入价 ≈ 卖出价 ×4（防止买卖套利）；法则碎片/深渊之石不上架（保留终局刷取价值）
+const SHOP_MATERIALS = [
+  { id: 'mat_beast_hide',    name: '兽皮',       price: 20,   requiredLevel: 1,  sourceMap: '高蛮山' },
+  { id: 'mat_herb',          name: '草药',       price: 32,   requiredLevel: 5,  sourceMap: '密语森林' },
+  { id: 'mat_bone',          name: '兽骨',       price: 20,   requiredLevel: 5,  sourceMap: '密语森林' },
+  { id: 'mat_bronze',        name: '青铜矿',     price: 48,   requiredLevel: 15, sourceMap: '瀚海森林' },
+  { id: 'mat_dragon_scale_s',name: '飞龙鳞片',   price: 120,  requiredLevel: 15, sourceMap: '瀚海森林' },
+  { id: 'mat_titan_blood',   name: '泰坦之血碎片', price: 200, requiredLevel: 15, sourceMap: '瀚海森林' },
+  { id: 'mat_iron',          name: '铁矿',       price: 60,   requiredLevel: 30, sourceMap: '东海之滨' },
+  { id: 'mat_sea_stone',     name: '海灵石',     price: 160,  requiredLevel: 30, sourceMap: '东海之滨' },
+  { id: 'mat_deep_crystal',  name: '深海水晶',   price: 240,  requiredLevel: 30, sourceMap: '东海之滨' },
+  { id: 'mat_wind_dew',      name: '风羽玉露',   price: 320,  requiredLevel: 50, sourceMap: '天堂山' },
+  { id: 'mat_light_crystal', name: '光明晶',     price: 400,  requiredLevel: 50, sourceMap: '天堂山' },
+  { id: 'mat_angel_feather', name: '天使之羽',   price: 800,  requiredLevel: 50, sourceMap: '天堂山' },
+  { id: 'mat_scroll',        name: '附魔卷轴',   price: 600,  requiredLevel: 70, sourceMap: '地精王城外围' },
+  { id: 'mat_alchemy',       name: '炼金材料',   price: 320,  requiredLevel: 70, sourceMap: '地精王城外围' },
+  { id: 'mat_dragon_scale',  name: '龙鳞',       price: 1200, requiredLevel: 90, sourceMap: '龙岛' },
+  { id: 'mat_dragon_blood',  name: '龙血',       price: 2000, requiredLevel: 90, sourceMap: '龙岛' },
+];
 
 // 装备出售价格（按品质）
 const EQUIP_SELL_PRICES = { normal: 20, fine: 80, epic: 300, legend: 1500 };
@@ -157,6 +170,6 @@ module.exports = {
   EQUIP_TEMPLATES, QUALITY_COLORS, QUALITY_ORDER, QUALITY_NEXT,
   UPGRADE_LEVEL_MAX, UPGRADE_BASE_GOLD, QUALITY_GOLD_MULT, QUALITY_STAT_MULT,
   UPGRADE_MATERIAL_BY_QUALITY,
-  SHOP_ITEMS, MATERIAL_PRICES, EQUIP_SELL_PRICES, INITIAL_MATERIAL_POOL,
+  SHOP_ITEMS, SHOP_MATERIALS, MATERIAL_PRICES, EQUIP_SELL_PRICES, INITIAL_MATERIAL_POOL,
   getStage, expToNext, createEquipItem,
 };

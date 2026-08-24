@@ -79,10 +79,10 @@ function registerProgressionRoutes(app, store) {
   // 转生点商店
   app.get('/api/reinc-shop', (req, res) => res.json({ success: true, data: getReincShop() }));
   app.post('/api/reinc-shop/buy', (req, res) => {
-    const { username, itemId } = req.body;
+    const { username, itemId, option } = req.body;
     const r = loadPlayer(store, username);
     if (r.error) return fail(res, r.error);
-    const result = buyReincShopItem(r.player, itemId);
+    const result = buyReincShopItem(r.player, itemId, option);
     if (!result.success) return fail(res, result.message);
     savePlayer(store, r.player);
     res.json({ success: true, data: getPlayerView(r.player), message: result.message, reincPoints: result.reincPoints });

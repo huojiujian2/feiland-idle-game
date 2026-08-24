@@ -190,10 +190,22 @@ async function handleCreateChar({ charName }) {
 
 // ====== 数据加载 ======
 async function loadStaticData() {
-  const [areasRes, jobsRes, shopRes] = await Promise.all([api.getAreas(), api.getJobs(), api.getShop()]);
+  const [areasRes, jobsRes] = await Promise.all([api.getAreas(), api.getJobs()]);
   if (areasRes.success) areas.value = areasRes.data;
   if (jobsRes.success) jobTree.value = jobsRes.data;
-  if (shopRes.success) shopItems.value = shopRes.data;
+  await refreshShop();
+}
+
+// 商店数据：消耗品/装备全量；材料全部展示并按等级标记锁定（升级后刷新可看到新解锁）
+async function refreshShop() {
+  const shopRes = await api.getShop(currentUser);
+  if (!shopRes.success) return;
+  const d = shopRes.data || {};
+  const lv = player.value?.level || 1;
+  const materials = (d.allMaterials || d.materials || []).map(m => ({
+    ...m, type: 'material', locked: lv < m.requiredLevel,
+  }));
+  shopItems.value = [...(d.consumables || []), ...(d.equips || []), ...materials];
 }
 
 async function startPolling() {
@@ -206,6 +218,7 @@ async function startPolling() {
         levelUpNotice.value = res.data.level;
         prevLevel = res.data.level;
         setTimeout(() => { levelUpNotice.value = null; }, 2500);
+        refreshShop(); // 升级可能解锁新的商店材料
       }
       player.value = res.data;
     }

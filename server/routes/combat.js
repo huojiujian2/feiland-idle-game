@@ -7,7 +7,7 @@ const {
   upgradeEquipment, mergeEquipment, reforgeEquipment,
   getPlayerView,
 } = require('../engine');
-const { SHOP_ITEMS, EQUIP_TEMPLATES, QUALITY_COLORS, AFFIX_LEVELS, AFFIX_TREE } = require('../data');
+const { SHOP_ITEMS, SHOP_MATERIALS, EQUIP_TEMPLATES, QUALITY_COLORS, AFFIX_LEVELS, AFFIX_TREE } = require('../data');
 const { ok, fail, loadPlayer, savePlayer } = require('./_helpers');
 
 function registerCombatRoutes(app, store) {
@@ -51,8 +51,18 @@ function registerCombatRoutes(app, store) {
   });
   app.get('/api/data/equipments', (req, res) => res.json({ success: true, data: { templates: EQUIP_TEMPLATES, colors: QUALITY_COLORS } }));
 
-  // 商店
-  app.get('/api/shop', (req, res) => res.json({ success: true, data: SHOP_ITEMS }));
+  // 商店（消耗品/装备全量；材料按已解锁地图过滤——与进图门槛一致）
+  app.get('/api/shop', (req, res) => {
+    const r = loadPlayer(store, req.query.username);
+    if (r.error) return ok(res, { consumables: [], equips: [], materials: [] });
+    const lv = r.player.level || 1;
+    return ok(res, {
+      consumables: SHOP_ITEMS.filter(i => i.type === 'consumable'),
+      equips: SHOP_ITEMS.filter(i => i.type === 'equip'),
+      materials: SHOP_MATERIALS.filter(m => lv >= m.requiredLevel),
+      allMaterials: SHOP_MATERIALS,
+    });
+  });
   app.post('/api/player/:username/buy', (req, res) => {
     const r = loadPlayer(store, req.params.username);
     if (r.error) return fail(res, r.error);

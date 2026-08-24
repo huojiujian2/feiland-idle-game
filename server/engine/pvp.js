@@ -214,13 +214,6 @@ const BOT_TITLES = ['初出茅庐', '崭露头角', '身经百战', '老谋深�
 
 function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-function getAvailableAffixLevelsByLv(lv) {
-  const out = [];
-  for (const lv of [1, 2, 3, 4]) {
-    if (lv <= 1 || (lv === 2 && lv >= 31) || (lv === 3 && lv >= 61) || (lv === 4 && lv >= 100)) out.push(lv);
-  }
-  return out;
-}
 function getUnlockedAffixLevels(lv) {
   const out = [1];
   if (lv >= 31) out.push(2);
