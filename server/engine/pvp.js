@@ -56,8 +56,9 @@ function simulatePvP(playerA, playerB) {
   const cdB = activeAffixB ? getActiveSkillCd(activeAffixB.level) : null;
 
   const rounds = [];
-  const maxRounds = 30;
-  let result = 'timeout';
+  // PVP 同样无回合上限，超出记为 draw（平局）
+  const maxRounds = 500;
+  let result = null;
 
   const doPvPAction = (atkCombat, defCombat, attacker) => {
     if (hpA <= 0 || hpB <= 0) return;
@@ -167,6 +168,9 @@ function simulatePvP(playerA, playerB) {
       }
     }
   }
+  // 兜底：500 回合仍未分胜负，记为平局（draw）
+  // 实际中双方配置悬殊或极端反弹堆叠可能触发，按 ELO 平局处理
+  if (!result) result = 'draw';
   return {
     result, rounds,
     myHp: Math.max(0, hpA), myMaxHp: combatA.maxHp,

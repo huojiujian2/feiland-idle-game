@@ -64,6 +64,22 @@
         <button class="btn btn-sm" @click="selected=null">关闭</button>
       </div>
     </div>
+
+    <!-- v0.8+ 创世之书入口：仅二转可见，醒目金色卡片 -->
+    <div
+      v-if="isGenesisUnlocked"
+      class="genesis-portal"
+      @click="$emit('goGenesis')"
+    >
+      <div class="genesis-portal-frame">
+        <div class="genesis-portal-rune" aria-hidden="true">✦</div>
+        <div class="genesis-portal-body">
+          <div class="genesis-portal-title">创世之书 · 第二轮回已解锁</div>
+          <div class="genesis-portal-desc">捏造生灵 · 铸造神器 · 让全服世界见证你的意志</div>
+        </div>
+        <div class="genesis-portal-arrow">›</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -73,12 +89,14 @@ import api from '../api.js'
 import IconBase from './icons/IconBase.vue'
 import { toast } from '../ui-bridge.js'
 const props = defineProps(['player','currentUser'])
-const emit = defineEmits(['refresh'])
+const emit = defineEmits(['refresh', 'goGenesis'])
 const tab = ref('daily')
 const page = ref(1)
 const pageSize = 12
 const selected = ref(null)
 const player = computed(()=> props.player || {})
+// v0.8+：创世之书仅二转（reincarnation >= 2）解锁
+const isGenesisUnlocked = computed(() => (player.value.reincarnation || 0) >= 2);
 const dailyList = computed(()=> player.value.questView?.dailyQuests || [])
 const achList = computed(()=> player.value.questView?.achievements || [])
 const chestNeed = computed(()=> player.value.questView?.chest?.need || 5)
@@ -151,4 +169,59 @@ async function onClaimAch(id){
 .qd-label{ color:var(--muted); }
 .qd-val{ color:var(--accent); font-weight:600; }
 
+/* v0.8+ 创世之书入口：二转后才显示的金色横幅 */
+.genesis-portal {
+  margin-top: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-out, ease);
+}
+.genesis-portal:hover { transform: translateY(-2px); }
+.genesis-portal-frame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 1rem;
+  background: linear-gradient(135deg, rgba(212,175,94,0.15) 0%, rgba(28,30,54,0.85) 100%);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 0 24px rgba(212,175,94,0.25), inset 0 1px 0 rgba(255,235,180,0.18);
+}
+.genesis-portal-rune {
+  font-size: 1.6rem;
+  font-family: var(--font-display, 'Cinzel', serif);
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(212,175,94,0.7);
+  filter: drop-shadow(0 0 8px rgba(212,175,94,0.5));
+  flex-shrink: 0;
+  animation: rune-pulse 2.4s ease-in-out infinite;
+}
+.genesis-portal-body { flex: 1; min-width: 0; }
+.genesis-portal-title {
+  font-family: var(--font-display, 'Cinzel', serif);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(212,175,94,0.35);
+}
+.genesis-portal-desc {
+  font-size: 0.72rem;
+  color: rgba(212,175,94,0.65);
+  letter-spacing: 0.04em;
+  margin-top: 0.15rem;
+  font-style: italic;
+}
+.genesis-portal-arrow {
+  font-size: 1.4rem;
+  color: var(--accent);
+  font-weight: 700;
+  opacity: 0.65;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.genesis-portal:hover .genesis-portal-arrow { opacity: 1; transform: translateX(3px); }
+@keyframes rune-pulse {
+  0%, 100% { text-shadow: 0 0 12px rgba(212,175,94,0.7); transform: scale(1); }
+  50% { text-shadow: 0 0 22px rgba(212,175,94,1); transform: scale(1.08); }
+}
 </style>

@@ -119,8 +119,11 @@ function simulateBattle(player, monster) {
   const activeAffix = player.affixes?.active ? findAffix(player.affixes.active) : null;
   const cd = activeAffix ? getActiveSkillCd(activeAffix.level) : null;
   const rounds = [];
-  const maxRounds = 30;
-  let result = 'timeout';
+  // 挂机战斗无回合限制：打到一方死为止
+  // maxRounds 仅作死循环兜底（500 回合 ≈ 几千次攻击，比任何实际战斗都宽裕）
+  // 触达上限后记 result = 'draw'，前端展示为「平局」
+  const maxRounds = 500;
+  let result = null;
 
   for (let round = 1; round <= maxRounds; round++) {
     const actions = [];
@@ -208,6 +211,10 @@ function simulateBattle(player, monster) {
       }
     }
   }
+
+  // 兜底：超过 500 回合仍未分胜负，记为平局（前端展示「平局」）
+  // 触发场景：极端高反击/闪避/治疗配置让双方都死不了 —— 给玩家 30% 经验补偿
+  if (!result) result = 'draw';
 
   pMp = Math.min(combat.maxMp, pMp + Math.floor(combat.maxMp * 0.1));
 

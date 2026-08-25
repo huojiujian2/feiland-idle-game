@@ -212,6 +212,8 @@ function formatTime(ts) {
 .battle-result.win { background: rgba(94,218,122,0.2); color: var(--success); }
 .battle-result.lose { background: rgba(224,88,88,0.2); color: var(--danger); }
 .battle-result.timeout { background: rgba(212,175,94,0.2); color: var(--accent); }
+/* v0.8+ 平局样式（500 回合兜底或真·平局）—— 与 timeout 视觉一致 */
+.battle-result.draw { background: rgba(212,175,94,0.2); color: var(--accent); }
 .battle-vs { color: var(--muted); font-size: 0.72rem; }
 .monster { color: var(--text); font-weight: 600; }
 .battle-rounds { font-size: 0.68rem; color: var(--dim); }

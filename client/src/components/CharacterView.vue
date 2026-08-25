@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <!-- 属性面板 -->
+    <!-- 属性面板（恢复 v0.7 老逻辑：pending +/- + attrPoints + 确认分配） -->
     <div class="attrs-section card" data-tutorial="alloc-wrap">
       <div class="section-header">
         <span>属性</span>
@@ -106,41 +106,93 @@
         </div>
       </div>
       <button v-if="hasPending" class="btn btn-primary confirm-btn" data-alloc-available @click="confirmAllocate">确认分配</button>
-      <div v-else-if="player.attrPoints > 0" class="auto-alloc-row" data-alloc-available>
-        <button class="btn btn-secondary auto-btn" @click="autoAllocate"><IconBase name="sparkle" :size="14" class="btn-icon" /> 一键加点（按职业权重）</button>
+    </div>
+
+    <!-- 属性预设（v0.8+ 独立卡片：9 点自由 +/-,3 个方案槽位,独立于上方主属性加点） -->
+    <div class="presets-section card">
+      <div class="section-header">
+        <span>属性预设</span>
+        <span :class="['pts-badge', freeRemaining === 0 ? 'pts-badge--zero' : '']">
+          自由 {{ freeRemaining }} / {{ FREE_ATTR_MAX }}
+        </span>
       </div>
 
-      <!-- 属性预设方案 -->
-      <div class="attr-presets">
-        <div class="presets-header" @click="showPresets = !showPresets">
-          <IconBase name="dna" :size="13" class="section-icon" />
-          <span>属性预设方案 ({{ (player.attrPresets || []).length }}/5）</span>
-          <span class="toggle-icon">{{ showPresets ? '▾' : '▸' }}</span>
-        </div>
-        <div v-if="showPresets" class="presets-body">
-          <div class="preset-save-row">
-            <input v-model="newPresetName" class="preset-name-input" placeholder="预设名（最多 12 字）" maxlength="12" />
-            <button class="btn btn-sm btn-primary" :class="{ 'btn-disabled': !newPresetName.trim() }" @click="handleSavePreset">保存当前加点为预设</button>
+      <!-- 独立的 4 维 +/- 调整面板（每项 0~31 直接调） -->
+      <div class="attr-list">
+        <div v-for="attr in attrList" :key="'preset-' + attr.key" class="attr-row">
+          <span class="attr-name">{{ attr.label }}</span>
+          <span class="attr-val">
+            <span class="attr-bonus">{{ attrAdjust[attr.key] }}</span>
+          </span>
+          <div class="attr-controls">
+            <button
+              class="adj-btn minus"
+              :class="{ 'btn-disabled': attrAdjust[attr.key] <= 0 }"
+              :disabled="attrAdjust[attr.key] <= 0"
+              data-alloc-available
+              @click="adjustPreset(attr.key, -1)"
+            >−</button>
+            <button
+              class="adj-btn plus"
+              :class="{ 'btn-disabled': attrAdjust[attr.key] >= FREE_ATTR_PER_KEY || freeRemaining <= 0 }"
+              :disabled="attrAdjust[attr.key] >= FREE_ATTR_PER_KEY || freeRemaining <= 0"
+              data-alloc-available
+              @click="adjustPreset(attr.key, 1)"
+            >+</button>
           </div>
-          <div v-if="(player.attrPresets || []).length === 0" class="preset-empty">暂无预设，先调整属性并保存</div>
-          <div v-else class="preset-list">
-            <div v-for="p in player.attrPresets" :key="p.id" class="preset-card">
-              <div class="preset-card-top">
-                <span class="preset-name">{{ p.name }}</span>
-                <span class="preset-lv">Lv.{{ p.level }} 保存</span>
-              </div>
-              <div class="preset-attrs">
-                <span class="pa-item atk">攻 {{ p.attributes.atk }}</span>
-                <span class="pa-item def">防 {{ p.attributes.def }}</span>
-                <span class="pa-item hp">体 {{ p.attributes.hp }}</span>
-                <span class="pa-item agi">敏 {{ p.attributes.agi }}</span>
-              </div>
-              <div class="preset-actions">
-                <button class="btn btn-sm btn-primary" :class="{ 'btn-disabled': player.attrPoints <= 0 }"
-                  @click="handleApplyPreset(p.id)">按比例加点</button>
-                <button class="btn btn-sm btn-danger" @click="handleDeletePreset(p.id)">删除</button>
-              </div>
-            </div>
+        </div>
+      </div>
+      <p class="presets-hint">
+        每项属性 0~31 自由调整（总上限 31）· 点对应「保存加点」即固化进方案一/二/三，
+        「应用」按比例把角色未来的新属性点加给角色。
+      </p>
+
+      <!-- 3 槽位预设 -->
+      <div class="preset-list">
+        <div
+          v-for="(p, idx) in presetSlots"
+          :key="p.key"
+          class="preset-card"
+        >
+          <div class="preset-card-top">
+            <span class="preset-index">{{ ['一','二','三'][idx] }}</span>
+            <span class="preset-name">属性预设 · 方案{{ ['一','二','三'][idx] }}</span>
+            <span class="preset-filled" v-if="p.attributes">Lv.{{ p.level }} 已存</span>
+            <span class="preset-empty-tag" v-else>空</span>
+          </div>
+          <div v-if="p.attributes" class="preset-attrs">
+            <span class="pa-item atk">攻 {{ p.attributes.atk }}</span>
+            <span class="pa-item def">防 {{ p.attributes.def }}</span>
+            <span class="pa-item hp">体 {{ p.attributes.hp }}</span>
+            <span class="pa-item agi">敏 {{ p.attributes.agi }}</span>
+          </div>
+          <div v-else class="preset-empty-attrs">
+            尚未保存 · 调整上方 +/- 后点下方「保存加点」即写入
+          </div>
+          <div class="preset-actions">
+            <button
+              class="btn btn-sm preset-save"
+              :class="{ 'btn-disabled': !canSavePreset() }"
+              :disabled="!canSavePreset()"
+              data-alloc-available
+              @click="handleSavePreset(idx)"
+            >保存加点</button>
+            <button
+              class="btn btn-sm btn-primary preset-apply"
+              :class="{ 'btn-disabled': !canApplyPreset(p) }"
+              :disabled="!canApplyPreset(p)"
+              data-alloc-available
+              @click="handleApplyPreset(idx)"
+            >应用</button>
+            <button
+              v-if="p.attributes"
+              class="btn btn-sm preset-del"
+              :class="{ 'btn-disabled': false }"
+              data-alloc-available
+              aria-label="删除此预设"
+              title="抹去此预设"
+              @click="handleDeletePreset(idx)"
+            >删</button>
           </div>
         </div>
       </div>
@@ -228,31 +280,7 @@
       </div>
     </div>
 
-    <!-- 词条摘要（完整管理请到「技能」页） -->
-    <div class="affix-summary-card card" @click="$emit('goSkill')">
-      <div class="section-header">
-        <span><IconBase name="sparkle" :size="14" class="section-icon" /> 词条系统</span>
-        <span class="toggle-icon">前往管理 ›</span>
-      </div>
-      <div v-if="!player.jobPath" class="no-job-hint">
-        <p>选择职业后解锁词条系统</p>
-      </div>
-      <template v-else>
-        <div class="affix-mini-row">
-          <span class="affix-mini-label">主动</span>
-          <span v-if="player.equippedAffixes?.active" class="affix-mini-name active">{{ player.equippedAffixes.active.name }}</span>
-          <span v-else class="affix-mini-empty">未装备</span>
-        </div>
-        <div class="affix-mini-row">
-          <span class="affix-mini-label">被动</span>
-          <span class="affix-mini-names">
-            <span v-for="(p, i) in (player.equippedAffixes?.passive || [])" :key="i" class="affix-mini-name">{{ p.name }}</span>
-            <span v-if="!player.equippedAffixes?.passive?.length" class="affix-mini-empty">{{ player.equippedAffixes?.passive?.length || 0 }}/{{ player.passiveSlots }}</span>
-            <span v-else class="affix-mini-count">{{ player.equippedAffixes?.passive?.length || 0 }}/{{ player.passiveSlots }}</span>
-          </span>
-        </div>
-      </template>
-    </div>
+    <!-- v0.8+：词条摘要已删除（独立「技能」页承担全部词条管理） -->
 
     <!-- 右侧折叠面板：进阶/任务 -->
     <div class="side-panel" :class="{ expanded: sideOpen }">
@@ -270,6 +298,16 @@
             <span class="side-tab-icon"><IconBase name="scroll" :size="16" class="icon-accent2" /></span>
             <span class="side-tab-label">任务</span>
             <span v-if="questBadge" class="side-tab-badge">{{ questBadge }}</span>
+          </div>
+          <!-- v0.8+：创世之书入口（仅二转显示；和进阶/任务并列在右侧折叠面板） -->
+          <div
+            v-if="(player.reincarnation || 0) >= 2"
+            class="side-tab-item side-tab-item--genesis"
+            @click="$emit('goGenesis')"
+          >
+            <span class="side-tab-icon"><IconBase name="book" :size="16" class="icon-accent" /></span>
+            <span class="side-tab-label">创世</span>
+            <span class="side-tab-badge side-tab-badge--gold">!</span>
           </div>
         </div>
       </transition>
@@ -299,16 +337,54 @@ import EquipDetailModal from './EquipDetailModal.vue'
 import { modalConfirm } from '../ui-bridge.js'
 
 const props = defineProps(['player', 'jobTree'])
-const emit = defineEmits(['allocate', 'autoAllocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest', 'refresh'])
+const emit = defineEmits(['allocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest', 'goGenesis', 'refresh', 'savePreset', 'applyPresetRatio', 'deletePreset'])
 
 const pending = ref({})
 const detailItem = ref(null)
 const detailSlot = ref(null)
 const selectedJob = ref(null)
 const sideOpen = ref(false)
-const openSections = reactive({ job: true })
+// v0.8+：职业区块默认收起
+const openSections = reactive({ job: false })
 const showPresets = ref(false)
-const newPresetName = ref('')
+
+// v0.8+ 新版属性系统：在「属性预设」独立卡片内生效（与上方主属性 +/- 互不干扰）
+//   上方主属性面板继续用老的 pending / attrPoints / 确认分配逻辑；
+//   下方属性预设面板用 31 点自由 attrAdjust（每项单独 0-31），配 3 槽位预设
+const FREE_ATTR_MAX = 31;
+// 每项单独上限
+const FREE_ATTR_PER_KEY = 31;
+// "属性预设"面板的基础值固定用新生创造角色的初始值（atk5 def4 hp5 agi=8），每项属性从 0 开始自由加减
+const attrBasePreset = computed(() => ({ atk: 5, def: 4, hp: 5, agi: 8 }));
+const attrAdjust = ref({ atk: 0, def: 0, hp: 0, agi: 0 });
+// 总剩余 = 31 - max(4 维中最大值)，保证每项独立可拉到上限但互相不超 31
+const attrAdjustMax = computed(() =>
+  Math.max(attrAdjust.value.atk, attrAdjust.value.def, attrAdjust.value.hp, attrAdjust.value.agi)
+);
+const freeRemaining = computed(() => FREE_ATTR_MAX - attrAdjustMax.value);
+
+// v0.8+：3 个固定"方案一/二/三"槽位（独立于主属性加点）
+const PRESET_SLOT_COUNT = 3;
+const presetSlots = computed(() => {
+  const list = Array.isArray(props.player?.attrPresets) ? props.player.attrPresets : [];
+  const out = [];
+  for (let i = 0; i < PRESET_SLOT_COUNT; i++) {
+    const p = list[i];
+    out.push(p ? { key: i, attributes: p.attributes, level: p.level, name: p.name } : { key: i, attributes: null });
+  }
+  return out;
+});
+
+function canSavePreset() {
+  // 只要任何一项被 +/- 过（>0）才能保存（attrAdjust 直接是 0~31 的独立值，不再限总和 9）
+  return attrAdjust.value.atk > 0 || attrAdjust.value.def > 0 ||
+         attrAdjust.value.hp > 0 || attrAdjust.value.agi > 0;
+}
+function canApplyPreset(slot) {
+  if (!slot.attributes) return false;
+  const a = slot.attributes;
+  return (a.atk + a.def + a.hp + a.agi) > 0;
+}
 
 const winRateText = computed(() => {
   const cs = props.player.combatStats || {}
@@ -343,6 +419,7 @@ const attrList = [
 const hpPct = computed(() => Math.round(props.player.hp / props.player.maxHp * 100))
 const mpPct = computed(() => Math.round(props.player.mp / props.player.maxMp * 100))
 const expPct = computed(() => Math.round(props.player.exp / props.player.expNeeded * 100))
+// v0.7 老逻辑保留：上方"属性"卡片用 pending / hasPending
 const hasPending = computed(() => Object.values(pending.value).some(v => v > 0))
 
 const questBadge = computed(() => {
@@ -359,6 +436,7 @@ function toggleSection(key) {
   openSections[key] = !openSections[key]
 }
 
+// v0.7 老逻辑：上方"属性"卡片用 adjust / confirmAllocate
 function adjust(key, amount) {
   const newVal = (pending.value[key] || 0) + amount
   const total = Object.values(pending.value).reduce((a, b) => a + b, 0) + amount
@@ -372,23 +450,63 @@ function confirmAllocate() {
   pending.value = {}
 }
 
-function autoAllocate() {
-  if (props.player.attrPoints <= 0) return
-  emit('autoAllocate')
+// v0.8+ 新版：下方"属性预设"卡片用 adjustPreset（独立 31 点，每项单独 0-31，总数=max(4 维)）
+function adjustPreset(key, amount) {
+  const cur = attrAdjust.value[key] || 0
+  const next = cur + amount
+  // 单项不能为负，不能超 31
+  if (next < 0) return
+  if (next > FREE_ATTR_PER_KEY) return
+  // 总 max 不能超 31：4 维里最大那项 ≤ 31
+  const probe = { ...attrAdjust.value, [key]: next }
+  const newMax = Math.max(probe.atk, probe.def, probe.hp, probe.agi)
+  if (newMax > FREE_ATTR_MAX) return
+  attrAdjust.value[key] = next
 }
 
-async function handleSavePreset() {
-  const name = newPresetName.value.trim()
-  if (!name) return
-  emit('savePreset', name)
-  newPresetName.value = ''
+function autoAllocate() {
+  // v0.8+：一键加点（按职业权重）已删除 —— 改用下方"属性预设方案"的 4 个模板
 }
-function handleApplyPreset(presetId) {
-  emit('applyPreset', presetId)
+
+// v0.8+：方案一/二/三（3 槽位，独立于主属性加点）。
+// 「保存加点」：把"基础 + 当前 attrAdjust"快照写入 attrPresets[i]（不动 player.attributes）
+// 「应用」：按 attrPresets[i] 的比例，把 player.attrPoints（升级送的点）加到 player.attributes
+function handleSavePreset(slotIdx) {
+  if (attrAdjust.value.atk + attrAdjust.value.def + attrAdjust.value.hp + attrAdjust.value.agi <= 0) return;
+  // attrAdjust 直接是 0~31 的"目标值"，保存 = 把这 4 维数字写到 attrPresets[i]
+  const savedAttributes = {
+    atk: attrAdjust.value.atk,
+    def: attrAdjust.value.def,
+    hp: attrAdjust.value.hp,
+    agi: attrAdjust.value.agi,
+  };
+  emit('savePreset', {
+    slot: slotIdx,
+    name: ['属性预设·方案一', '属性预设·方案二', '属性预设·方案三'][slotIdx] || '方案',
+    attributes: savedAttributes,
+  });
+  // 本地归零 + 重置自由点
+  attrAdjust.value = { atk: 0, def: 0, hp: 0, agi: 0 };
 }
-async function handleDeletePreset(presetId) {
-  if (!await modalConfirm('确认删除该预设？')) return
-  emit('deletePreset', presetId)
+function handleApplyPreset(slotIdx) {
+  const slot = presetSlots.value[slotIdx];
+  if (!slot.attributes) return;
+  // 应用 = 按方案的比例分配 player.attrPoints（需 player.attrPoints > 0）
+  emit('applyPresetRatio', {
+    atk: slot.attributes.atk,
+    def: slot.attributes.def,
+    hp: slot.attributes.hp,
+    agi: slot.attributes.agi,
+  });
+}
+
+// v0.8+：抹去一个方案槽位（按 slot 索引删除，调用后端 deleteAttrPreset）
+async function handleDeletePreset(slotIdx) {
+  const slot = presetSlots.value[slotIdx];
+  if (!slot.attributes) return;
+  const name = ['属性预设·方案一', '属性预设·方案二', '属性预设·方案三'][slotIdx] || `方案${slotIdx + 1}`;
+  if (!await modalConfirm(`确定要抹去「${name}」吗？此操作无法撤销。`)) return;
+  emit('deletePreset', { slot: slotIdx, name });
 }
 
 function showEquipDetail(slotKey) {
@@ -432,50 +550,175 @@ function handleUnequip() {
 .bar-val { font-size: 0.68rem; color: var(--dim); width: 80px; text-align: right; flex-shrink: 0; }
 
 /* 属性 */
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; font-size: 0.82rem; color: var(--muted); cursor: pointer; }
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; font-size: 0.82rem; color: var(--muted); }
 .header-badge { display: flex; align-items: center; gap: 0.4rem; }
 .toggle-icon { font-size: 0.7rem; color: var(--dim); }
-.pts-badge { color: var(--accent); font-size: 0.75rem; font-weight: 600; }
+.pts-badge {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid rgba(212,175,94,0.35);
+  border-radius: 4px;
+  background: rgba(212,175,94,0.06);
+  font-family: monospace;
+  letter-spacing: 0.04em;
+}
+.pts-badge--zero {
+  color: var(--muted);
+  border-color: var(--rule);
+  background: transparent;
+}
 .attr-list { display: flex; flex-direction: column; gap: 0.25rem; }
-.attr-row { display: flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0; }
+.attr-row { display: flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0; border-bottom: 1px dashed rgba(212,175,94,0.1); }
+.attr-row:last-child { border-bottom: 0; }
 .attr-name { font-size: 0.82rem; width: 36px; }
-.attr-val { font-size: 0.85rem; font-weight: 600; color: var(--accent); min-width: 28px; }
-.attr-total { font-size: 0.72rem; color: var(--accent2); }
+.attr-val { font-size: 0.85rem; font-weight: 600; min-width: 36px; }
+.attr-base { color: var(--muted); font-family: monospace; }
+.attr-bonus { color: var(--success); font-family: monospace; margin-left: 0.2rem; font-weight: 700; }
+.attr-bonus--neg { color: var(--danger); }
+.attr-total { font-size: 0.72rem; color: var(--accent2); font-family: monospace; }
 .attr-controls { margin-left: auto; display: flex; align-items: center; gap: 0.3rem; }
-.adj-btn { width: 22px; height: 22px; border-radius: 5px; border: 1px solid; cursor: pointer; font-size: 0.85rem; line-height: 1; font-family: inherit; transition: all 0.15s; }
-.adj-btn.plus { border-color: var(--accent2); background: rgba(157,140,240,0.1); color: var(--accent2); }
-.adj-btn.plus:hover { background: var(--accent2); color: #0e0f1c; }
-.adj-btn.minus { border-color: var(--danger); background: rgba(224,88,88,0.1); color: var(--danger); }
-.adj-btn.minus:hover { background: var(--danger); color: #fff; }
-.pending-val { font-size: 0.78rem; color: var(--success); font-weight: 600; min-width: 20px; text-align: center; }
+.adj-btn {
+  width: 28px; height: 28px;
+  border-radius: 5px;
+  border: 1px solid;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  font-family: inherit;
+  font-weight: 700;
+  transition: all 0.15s;
+}
+.adj-btn.plus {
+  border-color: var(--accent2);
+  background: rgba(157,140,240,0.12);
+  color: var(--accent2);
+}
+.adj-btn.plus:hover:not(:disabled) { background: var(--accent2); color: #0e0f1c; }
+.adj-btn.minus {
+  border-color: var(--danger);
+  background: rgba(224,88,88,0.12);
+  color: var(--danger);
+}
+.adj-btn.minus:hover:not(:disabled) { background: var(--danger); color: #fff; }
+.adj-btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; filter: grayscale(0.5); }
+.attr-hint {
+  font-size: 0.72rem;
+  color: var(--accent);
+  font-style: italic;
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  background: rgba(212,175,94,0.06);
+  border: 1px dashed rgba(212,175,94,0.3);
+  border-radius: 4px;
+  text-align: center;
+}
 .confirm-btn { width: 100%; margin-top: 0.5rem; padding: 0.5rem; }
-.auto-alloc-row { margin-top: 0.5rem; }
 .auto-btn { width: 100%; padding: 0.5rem; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0e0f1c; font-weight: 700; border: none; }
 .auto-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(212,175,94,0.4); }
 
-/* 属性预设 */
+/* 属性预设（v0.8+：4 槽位方案一/二/三/四） */
 .attr-presets { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid var(--rule); }
 .presets-header { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--muted); cursor: pointer; padding: 0.3rem 0; user-select: none; }
 .presets-header:hover { color: var(--accent2); }
 .toggle-icon { margin-left: auto; font-size: 0.8rem; }
 .presets-body { padding: 0.4rem 0; display: flex; flex-direction: column; gap: 0.5rem; }
-.preset-save-row { display: flex; gap: 0.3rem; align-items: center; }
-.preset-name-input { flex: 1; padding: 0.3rem 0.5rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 5px; color: var(--text); font-size: 0.78rem; font-family: inherit; outline: none; }
-.preset-name-input:focus { border-color: var(--accent2); }
-.preset-empty { font-size: 0.75rem; color: var(--dim); text-align: center; padding: 0.4rem; font-style: italic; }
+.presets-hint {
+  font-size: 0.7rem;
+  color: rgba(212,175,94,0.55);
+  font-style: italic;
+  margin: 0;
+  padding: 0.05rem 0.1rem;
+}
+.presets-hint b { color: var(--accent); font-weight: 600; }
 .preset-list { display: flex; flex-direction: column; gap: 0.4rem; }
-.preset-card { padding: 0.5rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; }
-.preset-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
-.preset-name { font-size: 0.82rem; font-weight: 700; color: var(--accent); }
-.preset-lv { font-size: 0.65rem; color: var(--dim); }
-.preset-attrs { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
-.pa-item { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(157,140,240,0.1); }
+.preset-card {
+  padding: 0.5rem 0.6rem;
+  background: rgba(20,22,42,0.5);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+.preset-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.3rem;
+}
+.preset-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #0e0f1c;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.preset-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+  font-family: var(--font-display, 'Cinzel', serif);
+  letter-spacing: 0.08em;
+  flex: 1;
+}
+.preset-filled {
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-family: monospace;
+}
+.preset-empty-tag {
+  font-size: 0.65rem;
+  color: var(--dim);
+  background: rgba(8,8,14,0.5);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.05rem 0.4rem;
+}
+.preset-attrs {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+.pa-item { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(157,140,240,0.1); font-family: monospace; }
 .pa-item.atk { color: var(--danger); }
 .pa-item.def { color: var(--accent2); }
 .pa-item.hp { color: var(--success); }
 .pa-item.agi { color: var(--accent); }
-.preset-actions { display: flex; gap: 0.3rem; }
+.preset-empty-attrs {
+  font-size: 0.7rem;
+  color: var(--dim);
+  font-style: italic;
+  margin-bottom: 0.4rem;
+  padding: 0.3rem;
+  background: rgba(8,8,14,0.3);
+  border-radius: 4px;
+  text-align: center;
+}
+.preset-actions {
+  display: flex;
+  gap: 0.3rem;
+}
 .preset-actions .btn { flex: 1; padding: 0.3rem; font-size: 0.72rem; }
+/* 删除按钮：紧凑、红色描边，占 1/3 宽度（不放 flex 1 让它窄一点） */
+.preset-del {
+  flex: 0 0 32px !important;
+  background: transparent;
+  border: 1px solid rgba(224,88,88,0.4);
+  color: rgba(224,88,88,0.85);
+  font-weight: 600;
+  padding: 0.3rem 0 !important;
+}
+.preset-del:hover {
+  background: rgba(224,88,88,0.15);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.preset-save { background: rgba(157,140,240,0.06); }
 .combat-summary { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--rule); }
 .cs-item { font-size: 0.72rem; color: var(--accent2); background: rgba(157,140,240,0.08); padding: 0.1rem 0.4rem; border-radius: 4px; }
 
@@ -551,17 +794,7 @@ function handleUnequip() {
 .stage-desc { font-size: 0.68rem; color: var(--dim); margin-top: 0.05rem; }
 .next-hint { margin-top: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(212,175,94,0.08); border: 1px solid rgba(212,175,94,0.2); border-radius: 6px; font-size: 0.75rem; color: var(--accent); }
 
-/* 词条摘要 */
-.affix-summary-card { cursor: pointer; transition: all var(--duration-normal) var(--ease-out); }
-.affix-summary-card:hover { border-color: var(--accent2); }
-.no-job-hint { text-align: center; padding: 0.8rem; color: var(--dim); font-size: 0.8rem; }
-.affix-mini-row { display: flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0; }
-.affix-mini-label { font-size: 0.72rem; color: var(--muted); width: 32px; flex-shrink: 0; font-weight: 600; }
-.affix-mini-name { font-size: 0.78rem; font-weight: 600; color: var(--accent2); }
-.affix-mini-name.active { color: var(--accent); }
-.affix-mini-empty { font-size: 0.72rem; color: var(--dim); }
-.affix-mini-count { font-size: 0.68rem; color: var(--dim); margin-left: 0.3rem; }
-.affix-mini-names { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
+/* v0.8+：词条摘要样式已删除（独立「技能」页承担全部词条管理） */
 
 /* 装备详情弹窗样式见 EquipDetailModal.vue */
 
@@ -597,6 +830,19 @@ function handleUnequip() {
   background: var(--danger, #e85d75); color: #fff; font-size: 0.58rem;
   min-width: 14px; height: 14px; line-height: 14px; text-align: center;
   border-radius: 7px; padding: 0 3px; margin-left: auto;
+}
+.side-tab-badge--gold { background: var(--accent, #d4af5e); box-shadow: 0 0 8px rgba(212,175,94,0.4); }
+/* v0.8+ 创世之书专属样式：金边 + 微光，区别于普通任务侧栏 */
+.side-tab-item--genesis {
+  border: 1px solid rgba(212,175,94,0.45);
+  background: linear-gradient(135deg, rgba(212,175,94,0.10) 0%, rgba(28,30,54,0.7) 100%);
+  margin-top: 0.4rem;
+  box-shadow: 0 0 12px rgba(212,175,94,0.18);
+}
+.side-tab-item--genesis:hover {
+  background: linear-gradient(135deg, rgba(212,175,94,0.18) 0%, rgba(28,30,54,0.85) 100%);
+  border-color: var(--accent, #d4af5e);
+  box-shadow: 0 0 18px rgba(212,175,94,0.35);
 }
 .side-slide-enter-active, .side-slide-leave-active {
   transition: all var(--duration-fast, 150ms) var(--ease-out, ease);

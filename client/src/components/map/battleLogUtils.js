@@ -55,7 +55,18 @@ function ratingDesc(log) {
   return { S: '摧枯拉朽！', A: '稳扎稳打', B: '苦战获胜', C: '险象环生' }[ratingLetter(log)];
 }
 function ratingClass(log) { return 'rating-' + ratingLetter(log).toLowerCase(); }
-function resultText(result) { return ({ win: '胜利', lose: '战败', timeout: '超时' })[result] || result; }
+// result 中文文案：
+// - timeout 是旧版本遗留（v0.7 前的 30 回合上限），现在不再产生
+// - draw 是真·平局或 500 回合兜底（v0.8 起）
+// 为了兼容存档里的旧日志，'timeout' 仍显示为「超时」；新发生的统一显示「平局」
+function resultText(result) {
+  return ({
+    win: '胜利',
+    lose: '战败',
+    draw: '平局',
+    timeout: '超时', // 历史日志兜底文案
+  })[result] || result;
+}
 
 // 连击处理（仅主动/普通 damage 进入 combo，passive 不计）
 function processActions(actions) {

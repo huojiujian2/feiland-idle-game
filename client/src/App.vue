@@ -15,11 +15,16 @@
       <transition :name="transitionName" mode="out-in">
         <div :key="activeTab" class="page-slide">
           <CharacterView v-if="activeTab === 'char'" :player="player" :jobTree="jobTree"
-            @allocate="handleAllocate" @autoAllocate="handleAutoAllocate"
-            @savePreset="handleSavePreset" @applyPreset="handleApplyPreset" @deletePreset="handleDeletePreset"
+            @allocate="handleAllocate"
+            @applyPresetRatio="handleApplyPresetRatio"
+            @savePreset="handleSavePreset"
+            @deletePreset="handleDeletePresetBySlot"
             @equip="handleEquip" @unequip="handleUnequip" @enchant="handleEnchant"
             @chooseJob="handleChooseJob"
-            @goSkill="activeTab = 'skill'" @goEvo="activeTab = 'evo'" @goQuest="activeTab = 'quest'" />
+            @goSkill="activeTab = 'skill'"
+            @goEvo="activeTab = 'evo'"
+            @goQuest="activeTab = 'quest'"
+            @goGenesis="activeTab = 'genesis'" />
           <SkillView v-else-if="activeTab === 'skill'" :player="player"
             @equipAffix="handleEquipAffix" @unequipAffix="handleUnequipAffix" />
           <InventoryView v-else-if="activeTab === 'bag'" :player="player"
@@ -37,7 +42,7 @@
             @reincarnated="player = $event"
             @goGenesis="activeTab = 'genesis'" />
           <LeaderboardView v-else-if="activeTab === 'rank'" :currentUser="currentUserRef" />
-          <QuestView v-else-if="activeTab === 'quest'" :player="player" :currentUser="currentUserRef" @refresh="player = $event" />
+          <QuestView v-else-if="activeTab === 'quest'" :player="player" :currentUser="currentUserRef" @refresh="player = $event" @goGenesis="activeTab = 'genesis'" />
           <PvPView v-else-if="activeTab === 'pvp'" :player="player" :currentUser="currentUserRef"
             @goBack="activeTab = 'map'" @updatePlayer="player = $event" />
           <WorldBossView v-else-if="activeTab === 'boss'" :player="player" :currentUser="currentUserRef" />
@@ -265,21 +270,52 @@ async function handleAllocate(allocation) {
   const r = await api.allocateAttributes(currentUser, allocation);
   if (r.success) player.value = r.data; else toast.error(r.message);
 }
-async function handleAutoAllocate() {
-  const r = await api.autoAllocate(currentUser);
-  if (r.success && r.data?.player) player.value = r.data.player; else toast.error(r.message || '一键加点失败');
+// v0.8+：按 4 维比例加点（4 个固定方案槽）
+async function handleApplyPresetRatio(ratio) {
+  const r = await api.applyPresetRatio(currentUser, ratio);
+  if (r.success) {
+    player.value = r.data;
+    const a = r.allocated || {};
+    toast.success(`按比例加点：攻+${a.atk || 0} 防+${a.def || 0} 体+${a.hp || 0} 敏+${a.agi || 0}`);
+  } else {
+    toast.error(r.message || '按比例加点失败');
+  }
 }
-async function handleSavePreset(name) {
-  const r = await api.saveAttrPreset(currentUser, name);
-  if (r.success) player.value = r.data; else toast.error(r.message);
+// v0.8+：保存方案（payload 兼容旧版 name 字符串）
+async function handleSavePreset(payload) {
+  // payload = { slot, name, attributes, delta } | string（旧版只发 name）
+  let body;
+  if (typeof payload === 'string') {
+    body = { name: payload };
+  } else {
+    body = {
+      name: (payload.name || '').trim().slice(0, 24) || '属性预设',
+      slot: payload.slot,
+      attributes: payload.attributes || null,
+      delta: payload.delta || null,
+    };
+  }
+  const r = await api.saveAttrPreset(currentUser, body);
+  if (r.success) {
+    player.value = r.data;
+    const slotName = ['方案一', '方案二', '方案三'][body.slot ?? 0] || '方案';
+    toast.success(`已保存加点到 ${slotName}`);
+  } else {
+    toast.error(r.message || '保存失败');
+  }
 }
-async function handleApplyPreset(presetId) {
-  const r = await api.applyAttrPreset(currentUser, presetId);
-  if (r.success) player.value = r.data; else toast.error(r.message);
-}
-async function handleDeletePreset(presetId) {
-  const r = await api.deleteAttrPreset(currentUser, presetId);
-  if (r.success) player.value = r.data; else toast.error(r.message);
+// v0.8+：删除方案（按 slot 索引）
+async function handleDeletePresetBySlot(payload) {
+  const slot = Number(payload?.slot);
+  if (Number.isNaN(slot)) return;
+  const slotName = ['方案一', '方案二', '方案三'][slot] || '方案';
+  const r = await api.applyPresetBySlot(currentUser, slot);
+  if (r.success) {
+    player.value = r.data;
+    toast.success(`已抹去 ${slotName}`);
+  } else {
+    toast.error(r.message || '删除失败');
+  }
 }
 async function handleEquip(itemUid) {
   const r = await api.equip(currentUser, itemUid);

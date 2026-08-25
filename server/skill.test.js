@@ -363,26 +363,28 @@ describe('T-005 前端 combo 与切片', ()=>{
     assert.equal(resShort.logEntry.detail.length, resShort.logEntry.rounds, 'short detail should equal rounds (≤6)');
     const hasSkillShort = resShort.logEntry.detail.some(r=> (r.actions||[]).some(a=>a.type==='skill'));
     assert.ok(hasSkillShort, `short detail should contain skill for rounds ${resShort.logEntry.rounds} (cd5 at 5)`);
-    // 长场：30 回合 timeout，detail 仅后 6 轮，早期 5 的 skill 不在 detail
+    // 长场：能赢但>6 回合（v0.8 后无回合上限，但仍可 win）
+    // 改用较低攻击力 + 高血怪 模拟长战斗，确保 rounds 超过 6 触发 slice(-6) 截断
     const pLong = engine.createCharacter('s2','n');
-    pLong.level=31; pLong.attributes={ atk:5, def:4, hp:20, agi:8 }; engine.recalcMaxStats(pLong);
+    pLong.level=31; pLong.attributes={ atk:8, def:4, hp:20, agi:8 }; engine.recalcMaxStats(pLong);
     pLong.affixes.active='A1-01'; pLong.hp=pLong.maxHp;
-    // 直接 simulate 30 回合长桩
-    const bLong = engine.simulateBattle(pLong, { name:'长桩', hp:200000, atk:1, def:100, agi:80, skills:[] });
-    assert.equal(bLong.rounds.length, 30, `long should be 30 timeout, got ${bLong.rounds.length}`);
+    // 直接 simulate 一个能赢的长桩（约 12+ 回合 win）
+    const bLong = engine.simulateBattle(pLong, { name:'长桩', hp:1500, atk:1, def:60, agi:80, skills:[] });
+    assert.ok(bLong.rounds.length > 6 && bLong.result==='win', `long should win in >6 rounds, got ${bLong.rounds.length} rounds / ${bLong.result}`);
     const detailLong = bLong.rounds.slice(-6);
     assert.equal(detailLong.length, 6);
-    // 早期 5 的 skill 不在后 6 轮（25-30 含 25,30）
-    const earlyInDetail = detailLong.some(r=>r.round===5);
-    assert.equal(earlyInDetail, false, 'early 5 should be truncated');
+    // 早期回合不应在 detail 里
+    const earlyRound = bLong.rounds[0].round;
+    const earlyInDetail = detailLong.some(r=>r.round===earlyRound);
+    assert.equal(earlyInDetail, false, `early ${earlyRound} should be truncated`);
+    // 长场若有 skill 应在 detail 最后 6 轮内
     const hasSkillInDetail = detailLong.some(r=> (r.actions||[]).some(a=>a.type==='skill'));
-    assert.ok(hasSkillInDetail, 'detail 25-30 should have 25/30 skill');
+    assert.ok(hasSkillInDetail, 'detail (last 6) should contain skill');
     // calculateIdle 的 detail 同为 slice(-6) 且内容为最后六回合
     pLong.currentArea=areaId; pLong.lastTick=0; engine.__setNow(()=>2000000);
-    data.AREAS[areaId].monsters=[{ name:'长桩', hp:200000, atk:1, def:100, agi:80, skills:[], exp:10, gold:10 }];
+    data.AREAS[areaId].monsters=[{ name:'长桩', hp:1500, atk:1, def:60, agi:80, skills:[], exp:10, gold:10 }];
     const resLong = engine.calculateIdle(pLong);
     assert.equal(resLong.logEntry.detail.length, 6);
-    // 内容确为最后六回合（25-30）
     assert.deepEqual(resLong.logEntry.detail.map(r=>r.round), bLong.rounds.slice(-6).map(r=>r.round), 'detail should be last six rounds');
     } finally{ delete data.AREAS[areaId]; }
   });

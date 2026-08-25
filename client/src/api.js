@@ -34,13 +34,21 @@ export default {
   changeArea(username, areaId) { return request(`/player/${username}/area`, { method: 'POST', body: JSON.stringify({ areaId }) }) },
   allocateAttributes(username, allocation) { return request(`/player/${username}/attributes`, { method: 'POST', body: JSON.stringify(allocation) }) },
   autoAllocate(username) { return request(`/player/${username}/auto-allocate`, { method: 'POST' }) },
+  applyPresetRatio(username, ratio) { return request(`/player/${username}/attr-presets/apply-by-ratio`, { method: 'POST', body: JSON.stringify({ ratio }) }) },
 
-  // 属性预设
-  saveAttrPreset(username, name) {
+  // 属性预设（v0.8+：payload 可能是 string 也可能是 {name, slot, attributes, delta} 对象）
+  saveAttrPreset(username, payload) {
+    let body;
+    if (typeof payload === 'string') {
+      body = { name: payload };
+    } else {
+      body = payload; // { name, slot, attributes, delta }
+    }
     return request(`/player/${username}/attr-presets`, {
-      method: 'POST', body: JSON.stringify({ name })
+      method: 'POST', body: JSON.stringify(body)
     })
   },
+  applyPresetBySlot(username, slot) { return request(`/player/${username}/attr-presets/delete-by-slot`, { method: 'POST', body: JSON.stringify({ slot }) }) },
   applyAttrPreset(username, presetId) {
     return request(`/player/${username}/attr-presets/${presetId}/apply`, { method: 'POST' })
   },

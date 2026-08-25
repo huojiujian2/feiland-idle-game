@@ -44,12 +44,16 @@ function buyBtnText(item, playerLevel, arenaCoins) {
   return '购买';
 }
 
-// 战斗记录
+// 战斗记录：result 枚举 win/lose/draw（v0.8 起 draw = 平局）
 function getRecResult(rec) {
-  return rec.result === 'win' ? 'win' : 'lose';
+  if (rec.result === 'win') return 'win';
+  if (rec.result === 'draw') return 'draw';
+  return 'lose';
 }
 function getRecResultText(rec) {
-  return rec.result === 'win' ? '胜' : '负';
+  if (rec.result === 'win') return '胜';
+  if (rec.result === 'draw') return '平';
+  return '负';
 }
 
 export {

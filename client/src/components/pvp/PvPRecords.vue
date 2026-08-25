@@ -50,9 +50,11 @@ function resultText(rec) {
 .rec-row { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; background: var(--bg2); border: 1px solid var(--rule); border-radius: 6px; font-size: 0.78rem; }
 .rec-row.win { border-left: 3px solid var(--success); }
 .rec-row.lose { border-left: 3px solid var(--danger); }
+.rec-row.draw { border-left: 3px solid var(--accent); }
 .rec-result { font-weight: 800; }
 .rec-row.win .rec-result { color: var(--success); }
 .rec-row.lose .rec-result { color: var(--danger); }
+.rec-row.draw .rec-result { color: var(--accent); }
 .rec-vs { color: var(--text); }
 .bot-tag-small { font-size: 0.55rem; padding: 0.05rem 0.25rem; background: rgba(157,140,240,0.2); color: var(--accent2); border-radius: 3px; margin-left: 0.3rem; }
 .rec-change { font-family: monospace; font-weight: 700; }

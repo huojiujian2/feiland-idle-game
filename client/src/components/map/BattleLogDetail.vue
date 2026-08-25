@@ -4,7 +4,7 @@
     <div class="rating-banner" :class="ratingClass(log)">
       <span class="rating-big">{{ ratingLetter(log) }}</span>
       <span class="rating-desc">{{ ratingDesc(log) }}</span>
-      <span class="rating-rounds">{{ log.rounds }}回合{{ log.result === 'win' ? '击杀' : log.result === 'lose' ? '战败' : '超时' }}</span>
+      <span class="rating-rounds">{{ log.rounds }}回合{{ log.result === 'win' ? '击杀' : log.result === 'lose' ? '战败' : (log.result === 'draw' || log.result === 'timeout') ? '平局' : '超时' }}</span>
     </div>
 
     <!-- HP 血条 -->

@@ -93,7 +93,9 @@ module.exports = {
   autoAllocateAttributes: player.autoAllocateAttributes,
   saveAttrPreset: player.saveAttrPreset,
   applyAttrPreset: player.applyAttrPreset,
+  applyAttrPresetByRatio: player.applyAttrPresetByRatio,
   deleteAttrPreset: player.deleteAttrPreset,
+  deleteAttrPresetBySlot: player.deleteAttrPresetBySlot,
   recalcMaxStats: realRecalcMaxStats,
   chooseJob: progression.chooseJob,
 

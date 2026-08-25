@@ -107,12 +107,17 @@ function registerPvpRoutes(app, store) {
 
     const battle = simulatePvP(player, target);
     const isWin = battle.result === 'win';
+    const isDraw = battle.result === 'draw';
     const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
     const enemyRating = (target.pvpStats && target.pvpStats.rating) || 1000;
-    const ratingResult = calcPvpRating(myRating, enemyRating, isWin);
+    // 严格 ELO 平局：score = 0.5（无积分变动）
+    const pvpScore = isWin ? 1 : (isDraw ? 0.5 : 0);
+    const expected = 1 / (1 + Math.pow(10, (enemyRating - myRating) / 400));
+    const K = 32;
+    const ratingChange = Math.round(K * (pvpScore - expected));
 
     if (!player.pvpStats) player.pvpStats = {};
-    player.pvpStats.rating = ratingResult.newRating;
+    player.pvpStats.rating = myRating + ratingChange;
     player.pvpStats.lastPvpAt = getNow();
     if (isWin) {
       player.pvpStats.wins = (player.pvpStats.wins || 0) + 1;
@@ -120,24 +125,31 @@ function registerPvpRoutes(app, store) {
       if (player.pvpStats.streak > (player.pvpStats.bestStreak || 0)) {
         player.pvpStats.bestStreak = player.pvpStats.streak;
       }
+    } else if (isDraw) {
+      // 平局：不计入 win/loss，连胜中断但开新连胜不重置（保守做法：streak 保留）
+      player.pvpStats.draws = (player.pvpStats.draws || 0) + 1;
     } else {
       player.pvpStats.losses = (player.pvpStats.losses || 0) + 1;
       player.pvpStats.streak = 0;
     }
 
     const baseRewards = calcPvpRewards(player.level || 1, isWin, player.pvpStats.streak || 0);
-    player.gold = (player.gold || 0) + baseRewards.gold;
-    player.exp = (player.exp || 0) + baseRewards.exp;
-
-    let coinsEarned = 0;
-    if (isWin) {
-      const streakBonus = Math.min(player.pvpStats.streak || 0, 5);
-      coinsEarned = 10 + (player.level || 1) + streakBonus * 5;
-      player[PVP_CURRENCY_KEY] = (player[PVP_CURRENCY_KEY] || 0) + coinsEarned;
+    // 平局也派少量奖励（比输多一点，比赢少一点），鼓励玩家不摆烂
+    let gold, exp, coinsEarned;
+    if (isDraw) {
+      gold = Math.max(8, Math.floor((player.level || 1) * 2));
+      exp = 5 + Math.floor((player.level || 1) * 1);
+      coinsEarned = 4;
     } else {
-      coinsEarned = 2;
-      player[PVP_CURRENCY_KEY] = (player[PVP_CURRENCY_KEY] || 0) + coinsEarned;
+      gold = baseRewards.gold;
+      exp = baseRewards.exp;
+      coinsEarned = isWin
+        ? 10 + (player.level || 1) + Math.min(player.pvpStats.streak || 0, 5) * 5
+        : 2;
     }
+    player.gold = (player.gold || 0) + gold;
+    player.exp = (player.exp || 0) + exp;
+    player[PVP_CURRENCY_KEY] = (player[PVP_CURRENCY_KEY] || 0) + coinsEarned;
 
     const meta = store.getMeta();
     if (!Array.isArray(meta.pvpRecords)) meta.pvpRecords = [];
@@ -145,9 +157,9 @@ function registerPvpRoutes(app, store) {
       time: getNow(),
       attacker: username, defender: targetUsername,
       attackerName: player.name, defenderName: target.name || target.username,
-      result: isWin ? 'win' : 'lose',
-      ratingChange: ratingResult.change,
-      rewards: { ...baseRewards, coins: coinsEarned },
+      result: battle.result, // win / lose / draw 都如实记录
+      ratingChange,
+      rewards: { gold, exp, coins: coinsEarned },
       isBot: !!isBot,
     });
     if (meta.pvpRecords.length > 200) meta.pvpRecords = meta.pvpRecords.slice(0, 200);
@@ -158,7 +170,9 @@ function registerPvpRoutes(app, store) {
       time: getNow(),
       type: 'pvp',
       text: isWin
-        ? `竞技场胜利！击败了 ${target.name || target.username}，+${baseRewards.gold}金币 +${baseRewards.exp}经验 +${coinsEarned}竞技币`
+        ? `竞技场胜利！击败了 ${target.name || target.username}，+${gold}金币 +${exp}经验 +${coinsEarned}竞技币`
+        : isDraw
+        ? `竞技场平局，与 ${target.name || target.username} 战至力竭，+${gold}金币 +${exp}经验 +${coinsEarned}竞技币`
         : `竞技场失败...被 ${target.name || target.username} 击败，+${coinsEarned}竞技币`,
     });
 
@@ -167,9 +181,9 @@ function registerPvpRoutes(app, store) {
     res.json({
       success: true,
       data: {
-        battle, isWin,
-        rewards: { ...baseRewards, coins: coinsEarned },
-        ratingChange: ratingResult.change,
+        battle, isWin, isDraw,
+        rewards: { gold, exp, coins: coinsEarned },
+        ratingChange,
         newRating: player.pvpStats.rating,
         arenaCoins: player[PVP_CURRENCY_KEY] || 0,
         targetName: target.name || target.username,

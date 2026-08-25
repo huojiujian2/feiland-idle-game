@@ -1,5 +1,6 @@
 // ====== 路由统一挂载 ======
 const { registerAuthRoutes } = require('./auth');
+const { registerAccountExistsRoute } = require('./account-exists');
 const { registerPlayerRoutes } = require('./player');
 const { registerCombatRoutes } = require('./combat');
 const { registerProgressionRoutes } = require('./progression');
@@ -13,6 +14,7 @@ const { registerGenesisRoutes } = require('./genesis');
 
 function registerRoutes(app, store) {
   registerAuthRoutes(app, store);
+  registerAccountExistsRoute(app, store); // 必须在 /api 通配 404 之前注册
   registerPlayerRoutes(app, store);
   registerCombatRoutes(app, store);
   registerProgressionRoutes(app, store);

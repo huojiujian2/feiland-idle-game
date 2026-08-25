@@ -2,7 +2,7 @@
 
 # ⚡ 费兰德世界
 
-### 挂机文字成长游戏 · v0.7
+### 挂机文字成长游戏 · v0.8
 
 <img src="https://img.shields.io/badge/Vue-3.4-42b883?logo=vuedotjs&logoColor=white" alt="Vue 3.4">
 <img src="https://img.shields.io/badge/Vite-5.2-646cff?logo=vite&logoColor=white" alt="Vite 5.2">
@@ -27,7 +27,7 @@
 | 3 | [docs/README/03-areas-and-equipment.md](docs/README/03-areas-and-equipment.md) | 11 区域 + 35+ 装备 + 24 怪物技能 |
 | 4 | [docs/README/04-quickstart.md](docs/README/04-quickstart.md) | 启动与部署（4 种方式 + Docker） |
 | 5 | [docs/README/05-architecture.md](docs/README/05-architecture.md) | 项目结构 + 技术栈 + UI/UX 规范 |
-| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v0.7） |
+| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v0.8） |
 
 ---
 
@@ -65,6 +65,9 @@
 | 💥 伤害飘字 | 暴击放大+抖动 |
 | ⚔️ 战斗策略 | 6 种策略模式 |
 | 📜 **创世之书** | 二转解锁，自定义怪物与装备，实时投放到全服挂机世界（v0.7） |
+| 🏛️ **羊皮卷轴 UI** | 登录/注册/创世之书统一卷轴视觉 + 沉浸背景层（v0.8） |
+| 🗺️ **地图两段式** | 区域选择 + 战斗日志分页，已选区域后直接进战斗页（v0.8） |
+| ⚖️ **平局支持** | 挂机战斗 + 竞技场引入平局分支 + 30% 经验补偿（v0.8） |
 | 🎨 **AI 生图** | 28 个暗黑 RPG 图标 + 3 张主背景图（v0.5） |
 | 🍞 **全局 UI 桥接** | 自定义 Toast / Modal，替代浏览器原生 alert/confirm（v0.5） |
 | 🖼️ **沉浸式背景** | 紫夜城堡主背景 + 魔法卷轴 Header + 雕花 TabBar（v0.5） |

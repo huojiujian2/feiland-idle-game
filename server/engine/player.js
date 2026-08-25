@@ -142,6 +142,8 @@ function migratePlayer(player) {
   if (!Number.isFinite(player.tutorialStep)) player.tutorialStep = 0;
   player.tutorialStep = normalizeTutorialStep(player.tutorialStep);
   if (!Array.isArray(player.attrPresets)) player.attrPresets = [];
+  // 过滤掉 null 项（旧版本可能 push null 占位，避免下面逻辑踩到）
+  player.attrPresets = player.attrPresets.filter(Boolean);
   if (!player.pvpStats || typeof player.pvpStats !== 'object') player.pvpStats = {};
   if (!Number.isFinite(player.pvpStats.wins)) player.pvpStats.wins = 0;
   if (!Number.isFinite(player.pvpStats.losses)) player.pvpStats.losses = 0;
@@ -265,11 +267,47 @@ function autoAllocateAttributes(player) {
 }
 
 // 属性预设
-const MAX_ATTR_PRESETS = 5;
-function saveAttrPreset(player, name) {
+const MAX_ATTR_PRESETS = 3;
+function saveAttrPreset(player, name, slot = null, attributes = null, delta = null) {
   player = migratePlayer(player);
   if (!name || !name.trim()) return { success: false, message: '请输入预设名称' };
-  name = name.trim().slice(0, 12);
+  name = name.trim().slice(0, 24);
+  // 三种使用方式：
+  // 1. 老 API：saveAttrPreset(player, name) — push 到末尾
+  // 2. 新 API：saveAttrPreset(player, name, slot, attributes, delta) — 精确写入 slot 槽位
+  //    attributes 必填（用于"保存加点"时直接快照当前 attributes）
+  //    delta 可选（同时把 delta 加到 player.attributes 上，等于立刻加点）
+  if (slot !== null && slot !== undefined) {
+    if (typeof slot !== 'number' || slot < 0 || slot >= MAX_ATTR_PRESETS) {
+      return { success: false, message: '方案槽位无效' };
+    }
+    // 立刻把 delta 加到 player.attributes 上（如果有）
+    if (delta && typeof delta === 'object') {
+      player.attributes.atk = Math.max(0, (player.attributes.atk || 0) + (Number(delta.atk) || 0));
+      player.attributes.def = Math.max(0, (player.attributes.def || 0) + (Number(delta.def) || 0));
+      player.attributes.hp = Math.max(0, (player.attributes.hp || 0) + (Number(delta.hp) || 0));
+      player.attributes.agi = Math.max(0, (player.attributes.agi || 0) + (Number(delta.agi) || 0));
+      // 减掉对应的 attrPoints
+      const used = (Number(delta.atk) || 0) + (Number(delta.def) || 0) + (Number(delta.hp) || 0) + (Number(delta.agi) || 0);
+      if (player.attrPoints && player.attrPoints > 0) {
+        player.attrPoints = Math.max(0, player.attrPoints - used);
+      }
+    }
+    const attrs = attributes || { ...player.attributes };
+    const preset = {
+      id: 'preset_' + getNow() + '_' + Math.random().toString(36).substr(2, 6),
+      name,
+      attributes: { ...attrs },
+      level: player.level,
+      slot, // 记录槽位（可读性，前端主要用 index，但后端审计有用）
+      createdAt: getNow()
+    };
+    // 精确写入 slot 槽位（如果数组不够长，先补 null）
+    while (player.attrPresets.length <= slot) player.attrPresets.push(null);
+    player.attrPresets[slot] = preset;
+    return { success: true, preset };
+  }
+  // 老路径：push
   if (player.attrPresets.length >= MAX_ATTR_PRESETS) {
     return { success: false, message: `最多保存 ${MAX_ATTR_PRESETS} 个预设` };
   }
@@ -313,10 +351,54 @@ function applyAttrPreset(player, presetId) {
   checkAchievements(player);
   return { success: true, allocated: { atk, def, hp, agi } };
 }
+// v0.8+：按 4 维数字比例直接加点（4 个固定模板：全力/铁壁/血牛/风影）
+// 数字越大分越多；总和不需要 100，但内部按比例换算；归一化允许 0
+function applyAttrPresetByRatio(player, ratio) {
+  player = migratePlayer(player);
+  if (!player.attrPoints || player.attrPoints <= 0) {
+    return { success: false, message: '没有可分配的属性点' };
+  }
+  const a = Math.max(0, Number(ratio.atk) || 0);
+  const d = Math.max(0, Number(ratio.def) || 0);
+  const h = Math.max(0, Number(ratio.hp) || 0);
+  const g = Math.max(0, Number(ratio.agi) || 0);
+  const total = a + d + h + g;
+  if (total <= 0) return { success: false, message: '比例数值无效' };
+  const points = player.attrPoints;
+  let atk = Math.floor(points * (a / total));
+  let def = Math.floor(points * (d / total));
+  let hp = Math.floor(points * (h / total));
+  let agi = points - atk - def - hp;
+  player.attributes.atk += atk;
+  player.attributes.def += def;
+  player.attributes.hp += hp;
+  player.attributes.agi += agi;
+  player.attrPoints = 0;
+  recalcMaxStats(player);
+  updateDailyProgressSafe(player, 'alloc1', 1);
+  checkAchievements(player);
+  return { success: true, allocated: { atk, def, hp, agi } };
+}
 function deleteAttrPreset(player, presetId) {
   player = migratePlayer(player);
   const idx = player.attrPresets.findIndex(p => p.id === presetId);
   if (idx < 0) return { success: false, message: '预设不存在' };
+  player.attrPresets.splice(idx, 1);
+  return { success: true };
+}
+// v0.8+：按 slot 索引删除（前端 3 槽位方案明确用 0/1/2，不用拿 id）
+function deleteAttrPresetBySlot(player, slot) {
+  player = migratePlayer(player);
+  if (typeof slot !== 'number' || slot < 0 || slot >= MAX_ATTR_PRESETS) {
+    return { success: false, message: '方案槽位无效' };
+  }
+  // 先清掉数组里可能出现的 null 占位（迁移时过滤）
+  const cleanList = (player.attrPresets || []).filter(Boolean);
+  // 找到"按 slot 索引"对应的真实位置（null 被过滤了，要按顺序映射）
+  const target = cleanList[slot];
+  if (!target) return { success: false, message: '方案槽位为空' };
+  const idx = player.attrPresets.findIndex(p => p && p.id === target.id);
+  if (idx < 0) return { success: false, message: '方案不存在' };
   player.attrPresets.splice(idx, 1);
   return { success: true };
 }
@@ -347,7 +429,9 @@ module.exports = {
   autoAllocateAttributes,
   saveAttrPreset,
   applyAttrPreset,
+  applyAttrPresetByRatio,
   deleteAttrPreset,
+  deleteAttrPresetBySlot,
   getReadonlyPlayer,
   setRecalcMaxStatsHandler,
   setUpdateDailyProgress,
