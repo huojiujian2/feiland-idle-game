@@ -24,6 +24,7 @@
   --q-fine: #5eda7a;
   --q-epic: #9d8cf0;
   --q-legend: #d4af5e;
+  --q-mythic: #ff6738;  /* v0.8+ 神话（橙红火焰感） */
 
   /* 布局 */
   --radius: 10px;
@@ -199,7 +200,7 @@ select option {
   padding: 6px;
 }
 
-/* ====== 品质边框系统（传说/史诗/稀有/普通） ====== */
+/* ====== 品质边框系统（传说/史诗/稀有/普通）—— v0.8+ 新增神话 ====== */
 .q-normal {
   border-color: var(--q-normal);
   color: var(--q-normal);
@@ -218,6 +219,12 @@ select option {
   border-color: var(--q-legend);
   color: var(--q-legend);
   box-shadow: 0 0 10px rgba(212,175,94,0.4);
+}
+.q-mythic {
+  border-color: var(--q-mythic);
+  color: var(--q-mythic);
+  box-shadow: 0 0 14px rgba(255,103,56,0.55), 0 0 28px rgba(255,103,56,0.25);
+  text-shadow: 0 0 8px rgba(255,103,56,0.5);
 }
 /* 品质徽章 */
 .q-badge {

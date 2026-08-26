@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <!-- 属性面板（恢复 v0.7 老逻辑：pending +/- + attrPoints + 确认分配） -->
+    <!-- 属性面板（v0.7 老逻辑 + v0.8 大尺寸 +/- + 长按三段式） -->
     <div class="attrs-section card" data-tutorial="alloc-wrap">
       <div class="section-header">
         <span>属性</span>
@@ -59,9 +59,18 @@
           <span class="attr-val">{{ player.attributes[attr.key] || 0 }}</span>
           <span v-if="player.totalStats && player.totalStats[attr.totalKey]" class="attr-total">→ {{ player.totalStats[attr.totalKey] }}</span>
           <div class="attr-controls" v-if="player.attrPoints > 0">
-            <button class="adj-btn minus" v-if="pending[attr.key]" @click="adjust(attr.key, -1)">−</button>
+            <button
+              class="adj-btn minus"
+              v-bind="lpMinus[attr.key]"
+              @click="adjust(attr.key, -1)"
+            >−</button>
             <span v-if="pending[attr.key]" class="pending-val">+{{ pending[attr.key] }}</span>
-            <button class="adj-btn plus" data-alloc-available @click="adjust(attr.key, 1)">+</button>
+            <button
+              class="adj-btn plus"
+              v-bind="lpPlus[attr.key]"
+              data-alloc-available
+              @click="adjust(attr.key, 1)"
+            >+</button>
           </div>
         </div>
       </div>
@@ -105,7 +114,10 @@
           </div>
         </div>
       </div>
-      <button v-if="hasPending" class="btn btn-primary confirm-btn" data-alloc-available @click="confirmAllocate">确认分配</button>
+      <div v-if="hasPending" class="confirm-row">
+        <button class="btn btn-primary confirm-btn" data-alloc-available @click="confirmAllocate">保存分配（提交给角色）</button>
+        <button class="btn btn-sm reset-btn" data-alloc-available @click="resetPending">重置（撤销本次 +/-）</button>
+      </div>
     </div>
 
     <!-- 属性预设（v0.8+ 独立卡片：9 点自由 +/-,3 个方案槽位,独立于上方主属性加点） -->
@@ -335,9 +347,73 @@ import { ref, computed, reactive } from 'vue'
 import IconBase from './icons/IconBase.vue'
 import EquipDetailModal from './EquipDetailModal.vue'
 import { modalConfirm } from '../ui-bridge.js'
+import { useLongPress } from '../composables/useLongPress.js'
 
 const props = defineProps(['player', 'jobTree'])
 const emit = defineEmits(['allocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest', 'goGenesis', 'refresh', 'savePreset', 'applyPresetRatio', 'deletePreset'])
+
+// v0.8+：主"属性"卡片的 +/- 长按三段式加速
+//   长按 + ~0.35s 才触发 → 慢速（120ms / +1）→ 1.5s 后冲刺（45ms / +1）
+//   长按 − 同样节奏（方向相反），让"加过头"能马上拉开
+const longPress4Attr = useLongPress((direction) => {
+  // 长按方向切换到一个统一的目标（用 pending 标识即可，因为点击 +/1 -1 同一路径）
+  sweepAdjust(direction)
+})
+// 为 4 个属性各生成一对 (+ / −) 长按事件绑定
+const lpPlus = reactive({})
+const lpMinus = reactive({})
+;(function bind4Attrs() {
+  const keys = ['atk', 'def', 'hp', 'agi']
+  for (const k of keys) {
+    const hPlus = longPress4Attr.bindHandlers('+')
+    const hMinus = longPress4Attr.bindHandlers('-')
+    // 给长按 + 一套：press 时设"当前焦点维度"= k，每次 tick 都会 sweepAdjust(direction=1)
+    // 长按 − 同理
+    lpPlus[k] = {
+      onPointerdown: (e) => { if (e.cancelable) e.preventDefault?.(); lpAttrFocus.value = k; hPlus.onPointerdown(e) },
+      onPointerup: hPlus.onPointerup,
+      onPointerleave: hPlus.onPointerup,
+      onPointercancel: hPlus.onPointerup,
+    }
+    lpMinus[k] = {
+      onPointerdown: (e) => { if (e.cancelable) e.preventDefault?.(); lpAttrFocus.value = k; hMinus.onPointerdown(e) },
+      onPointerup: hMinus.onPointerup,
+      onPointerleave: hMinus.onPointerup,
+      onPointercancel: hMinus.onPointerup,
+    }
+  }
+})()
+const lpAttrFocus = ref('atk')
+// 长按"扫尾"算法：把每次 tick 的 +1 / −1 累加到"当前焦点维度"（lpAttrFocus）上
+//   焦点维度 = 长按哪个 +/- 按钮对应的那一维
+//   如果焦点维度已分配到 attrPoints 上限，try 下一个空的（防止长按出界）
+function sweepAdjust(direction) {
+  const keys = ['atk', 'def', 'hp', 'agi']
+  const focus = lpAttrFocus.value || 'atk'
+  const total = props.player.attrPoints || 0
+  const used = Object.values(pending.value).reduce((a, b) => a + b, 0)
+  const remaining = total - used
+
+  if (direction === 1) {
+    // +1 加给焦点维度
+    if (used >= total) return // 自由点全部用完
+    pending.value[focus] = (pending.value[focus] || 0) + 1
+  } else {
+    // −1 从焦点维度退回
+    if (focus && (pending.value[focus] || 0) > 0) {
+      pending.value[focus] -= 1
+      return
+    }
+    // 焦点为空，找其他有 pending 退
+    for (const k of keys) {
+      if ((pending.value[k] || 0) > 0) {
+        pending.value[k] -= 1
+        return
+      }
+    }
+    // 没 pending 可退
+  }
+}
 
 const pending = ref({})
 const detailItem = ref(null)
@@ -396,8 +472,8 @@ const winRateText = computed(() => {
   return Math.round((wins / total) * 100)
 })
 
-const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e' }
-const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说' }
+const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e', mythic: '#ff6738' }
+const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说', mythic: '神话' }
 const slotLabels = { weapon: '武器', armor: '护甲', accessory: '饰品' }
 const statLabels = { atk: '攻击', def: '防御', hp: 'HP', mp: 'MP', str: '力量', con: '体质', spi: '精神', agi: '敏捷', cha: '魅力', exp: '经验', gold: '金币' }
 const jobIcons = { thunder: '⚡', light: '✨', wind: '🌪', knight: '🛡', alchemy: '⚗' }
@@ -447,6 +523,10 @@ function adjust(key, amount) {
 
 function confirmAllocate() {
   emit('allocate', { ...pending.value })
+  pending.value = {}
+}
+function resetPending() {
+  // 只清本次 +/-（保留 player.attributes 不变）
   pending.value = {}
 }
 
@@ -579,26 +659,36 @@ function handleUnequip() {
 .attr-bonus--neg { color: var(--danger); }
 .attr-total { font-size: 0.72rem; color: var(--accent2); font-family: monospace; }
 .attr-controls { margin-left: auto; display: flex; align-items: center; gap: 0.3rem; }
+/* v0.8+：+/- 加大到 36x36 方便点击，长按更稳 */
 .adj-btn {
-  width: 28px; height: 28px;
-  border-radius: 5px;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
   border: 1px solid;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.25rem;
   line-height: 1;
   font-family: inherit;
   font-weight: 700;
   transition: all 0.15s;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; /* 阻止双击放大 */
+}
+.adj-btn:active:not(:disabled) {
+  transform: scale(0.92);
+  box-shadow: 0 0 14px rgba(212,175,94,0.5);
 }
 .adj-btn.plus {
   border-color: var(--accent2);
-  background: rgba(157,140,240,0.12);
+  background: rgba(157,140,240,0.16);
   color: var(--accent2);
 }
 .adj-btn.plus:hover:not(:disabled) { background: var(--accent2); color: #0e0f1c; }
 .adj-btn.minus {
   border-color: var(--danger);
-  background: rgba(224,88,88,0.12);
+  background: rgba(224,88,88,0.16);
   color: var(--danger);
 }
 .adj-btn.minus:hover:not(:disabled) { background: var(--danger); color: #fff; }
@@ -614,7 +704,19 @@ function handleUnequip() {
   border-radius: 4px;
   text-align: center;
 }
+/* v0.8+：分配确认行（保存 + 重置并排） */
+.confirm-row { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+.confirm-row .confirm-btn { flex: 2; }
+.confirm-row .reset-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--muted);
+}
+.confirm-row .reset-btn:hover { border-color: var(--danger); color: var(--danger); background: rgba(224,88,88,0.06); }
+
 .confirm-btn { width: 100%; margin-top: 0.5rem; padding: 0.5rem; }
+.reset-btn { padding: 0.5rem; font-size: 0.82rem; }
 .auto-btn { width: 100%; padding: 0.5rem; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0e0f1c; font-weight: 700; border: none; }
 .auto-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(212,175,94,0.4); }
 

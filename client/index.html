@@ -2,11 +2,24 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- v0.8+：禁浏览器自动缩放（连续点 +/- 时不要触发 pinch zoom） -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="format-detection" content="telephone=no">
+  <!-- 兜底：禁用 iOS 上 pinch 缩放起点 -->
+  <style>html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%;}</style>
   <title>费兰德世界 - 挂机文字成长</title>
 </head>
 <body>
   <div id="app"></div>
   <script type="module" src="/src/main.js"></script>
+  <!-- 兜底：拦截多指 gesturestart（Safari 缩放） -->
+  <script>
+    document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+    document.addEventListener('dblclick', e => {
+      // 拦截移动端双击放大
+      if (e.target.closest && !e.target.closest('input, textarea')) e.preventDefault();
+    }, { passive: false });
+  </script>
 </body>
 </html>

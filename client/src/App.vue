@@ -124,7 +124,7 @@ const areas = ref([]);
 const jobTree = ref({});
 const shopItems = ref([]);
 const materialPrices = ref({});
-const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e' };
+const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e', mythic: '#ff6738' };
 
 const levelUpNotice = ref(null);
 const loginScreenRef = ref(null); // 登录界面引用：登录后无角色时切换到创建角色步骤

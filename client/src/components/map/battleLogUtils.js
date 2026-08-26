@@ -152,6 +152,7 @@ function pct(cur, max) { return Math.max(0, Math.min(100, Math.round(cur / Math.
 
 function dropQuality(name) {
   if (!name) return 'normal';
+  if (name.includes('神话')) return 'mythic';
   if (name.includes('传说')) return 'legend';
   if (name.includes('史诗')) return 'epic';
   if (name.includes('精良')) return 'fine';

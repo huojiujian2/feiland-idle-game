@@ -2,7 +2,7 @@
 
 # ⚡ 费兰德世界
 
-### 挂机文字成长游戏 · v0.8
+### 挂机文字成长游戏 · v0.9
 
 <img src="https://img.shields.io/badge/Vue-3.4-42b883?logo=vuedotjs&logoColor=white" alt="Vue 3.4">
 <img src="https://img.shields.io/badge/Vite-5.2-646cff?logo=vite&logoColor=white" alt="Vite 5.2">
@@ -23,11 +23,11 @@
 | 0 | [本文件（主入口）](#) | 简介 + 目录 + 特性速览 |
 | 0a | [docs/README/00-code-style.md](docs/README/00-code-style.md) | 📐 **代码模块化规范**（行数规则 / 文件清单 / 拆分原则） |
 | 1 | [docs/README/01-gameplay.md](docs/README/01-gameplay.md) | 游戏玩法（职业 / 词条 / 新手指南） |
-| 2 | [docs/README/02-systems.md](docs/README/02-systems.md) | 系统详解（转生 / 锻造 / 世界BOSS / PVP / 数据规模） |
-| 3 | [docs/README/03-areas-and-equipment.md](docs/README/03-areas-and-equipment.md) | 11 区域 + 35+ 装备 + 24 怪物技能 |
+| 2 | [docs/README/02-systems.md](docs/README/02-systems.md) | 系统详解（转生 / 锻造 / 创世之书 / 世界BOSS / PVP / 数据规模） |
+| 3 | [docs/README/03-areas-and-equipment.md](docs/README/03-areas-and-equipment.md) | 11 区域 + 50+ 装备 + 5 品质阶 + 24 怪物技能 |
 | 4 | [docs/README/04-quickstart.md](docs/README/04-quickstart.md) | 启动与部署（4 种方式 + Docker） |
 | 5 | [docs/README/05-architecture.md](docs/README/05-architecture.md) | 项目结构 + 技术栈 + UI/UX 规范 |
-| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v0.8） |
+| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v0.9） |
 
 ---
 
@@ -39,7 +39,8 @@
 - **战斗深度**：6 种策略模式、主动词条 CD 释放、连击风暴
 - **装备成长**：锻造升级（+1~+10）、3 合 1 合成、词条重铸
 - **PVP & 全服**：ELO 竞技场、世界 BOSS（共享血量 + 伤害排名 + 最后一击奖励）
-- **内容纵深**：11 个挂机区域（Lv.1 ~ Lv.250）、35+ 件装备、20+ 种怪物技能、终极 BOSS「万界之眼」
+- **内容纵深**：11 个挂机区域（Lv.1 ~ Lv.250）、50+ 件装备（含神话品质）、20+ 种怪物技能、终极 BOSS「万界之眼」
+- **创世之书（v0.9 二转解锁）**：捏造生灵、铸造神器，5 品质阶 + 递增累积机制（每次 ×1.1 封顶 10×）
 
 **5 分钟快速上手**：[快速开始 →](docs/README/04-quickstart.md)
 

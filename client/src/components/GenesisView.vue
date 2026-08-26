@@ -182,8 +182,17 @@
               </label>
               <div class="drop-list">
                 <div v-for="(d, idx) in mDraft.drops" :key="idx" class="drop-row">
+                  <select v-model="d.kind" class="parchment-select drop-kind">
+                    <option value="material">材料</option>
+                    <option value="equip" :disabled="availableDropsForArea.equips.length === 0">
+                      自创装备（{{ availableDropsForArea.equips.length }}）
+                    </option>
+                  </select>
                   <select v-model="d.name" class="parchment-select drop-select">
-                    <option v-for="mat in materialNames" :key="mat" :value="mat">{{ mat }}</option>
+                    <option v-if="d.kind === 'material'" v-for="mat in materialNames" :key="mat" :value="mat">{{ mat }}</option>
+                    <option v-else v-for="eq in availableDropsForArea.equips" :key="eq.id" :value="eq.id">
+                      {{ eq.name }}（[{{ qualityName(eq.quality) }}] · {{ slotName(eq.slot) }}）
+                    </option>
                   </select>
                   <input
                     v-model.number="d.rate"
@@ -274,6 +283,28 @@
             </div>
 
             <div class="field">
+              <label class="field-label">✦ 品质</label>
+              <div class="slot-row slot-row--quality">
+                <button
+                  v-for="q in (data.equipQualityChoices || ['epic'])"
+                  :key="q"
+                  type="button"
+                  class="race-mini quality-mini"
+                  :class="{ 'is-active': eDraft.quality === q, 'is-locked': qualityLocked(q, eDraft.areaId) }"
+                  :style="{ '--qc': qualityColor(q) }"
+                  @click="if (!qualityLocked(q, eDraft.areaId)) eDraft.quality = q;"
+                >
+                  <span class="race-mini-name" :style="eDraft.quality === q ? { color: qualityColor(q) } : null">
+                    {{ qualityName(q) }}
+                    <template v-if="qualityMinLv(q) > 1">· Lv{{ qualityMinLv(q) }}图</template>
+                  </span>
+                  <span v-if="qualityLocked(q, eDraft.areaId)" class="quality-lock">🔒</span>
+                </button>
+              </div>
+              <p class="field-hint">品质越高属性预算越充足（传说 1.4× · 神话 2×），但需要投放到更高等级的地图。</p>
+            </div>
+
+            <div class="field">
               <label class="field-label">✦ 投放地图</label>
               <select v-model="eDraft.areaId" class="parchment-select">
                 <option v-for="a in areas" :key="a.id" :value="a.id">
@@ -285,6 +316,17 @@
             <div class="field">
               <label class="field-label">
                 ✦ 属性 · 预算 {{ eBudget.totalBudget }}（参照：{{ eBudget.refName }}）
+                <span v-if="eBudget.growthFrom" class="budget-growth-tag" :class="'growth-' + eBudget.growthFrom">
+                  {{ eBudget.growthFrom === 'system' ? '系统基础 ×1.1' :
+                     eBudget.growthFrom === 'previous' ? '上次最强 ×1.1' :
+                     '已达 10× 上限' }}
+                </span>
+                <span v-if="eBudget.previousMax" class="budget-prev-tag">
+                  世界最强：{{ eBudget.previousMax }} → 本次：{{ eBudget.totalBudget }}
+                </span>
+                <span v-else-if="eBudget.systemMax" class="budget-prev-tag">
+                  系统最强：{{ eBudget.systemMax }} → 本次：{{ eBudget.totalBudget }}
+                </span>
               </label>
               <div class="stat-grid stat-grid--wide">
                 <div v-for="(s, key) in data.equipStatKeys" :key="key" class="stat-cell">
@@ -360,11 +402,16 @@
               </div>
               <div class="lib-info">
                 <div class="lib-name lib-name--epic">
-                  「 {{ e.name }} 」 [史诗]
+                  「 {{ e.name }} 」 <span :style="{ color: qualityColor(e.quality) }">[{{ qualityName(e.quality) }}]</span>
                   <span class="lib-tag">类型 · {{ slotName(e.slot) }}</span>
                 </div>
                 <div class="lib-desc">{{ e.desc || '（未写神谕）' }}</div>
                 <div class="lib-meta">投放于 <strong>{{ areaName(e.areaId) }}</strong> · 需要 <strong>Lv.{{ e.reqLevel }}</strong></div>
+                <div class="lib-worldstate">
+                  <span :class="['ws-tag', e.worldState === 'committed' ? 'ws-committed' : 'ws-pending']">
+                    {{ e.worldState === 'committed' ? '✦ 已投入世界（作为怪物掉落）' : '◇ 待投入（需被怪物挂为掉落）' }}
+                  </span>
+                </div>
                 <div class="lib-stats">
                   <span v-for="(v, k) in e.stats" :key="k">{{ statName(k) }} +{{ v }}</span>
                 </div>
@@ -452,10 +499,10 @@ const tabs = computed(() => [
 const mDraft = reactive({
   name: '', desc: '', areaId: 'gaomanshan', race: 'dragon', skills: [],
   hp: 10, atk: 3, def: 1, agi: 3,
-  drops: [{ name: '草药', rate: 0.1 }],
+  drops: [{ kind: 'material', name: '草药', rate: 0.1 }],
 });
 const eDraft = reactive({
-  name: '', desc: '', areaId: 'gaomanshan', slot: 'weapon',
+  name: '', desc: '', areaId: 'gaomanshan', slot: 'weapon', quality: 'epic',
   stats: { atk: 0, def: 0, hp: 0, mp: 0, str: 0, spi: 0, agi: 0, con: 0 },
 });
 
@@ -468,7 +515,14 @@ const mBudget = computed(() => {
 });
 const eBudget = computed(() => {
   const areaBudgets = data.value.equipBudgets[eDraft.areaId] || {};
-  return areaBudgets[eDraft.slot] || { totalBudget: 0, refName: '无参照' };
+  const slotBudgets = areaBudgets[eDraft.slot] || {};
+  return slotBudgets[eDraft.quality] || { totalBudget: 0, refName: '无参照' };
+});
+
+// v2.1：当前怪物页签选中的地图里，所有可作为掉落的自创装备
+const availableDropsForArea = computed(() => {
+  const equips = (data.value.equipsByArea && data.value.equipsByArea[mDraft.areaId]) || [];
+  return { equips };
 });
 
 const availableSkills = computed(() => {
@@ -488,15 +542,33 @@ const canSubmitEquip = computed(() => {
   if (!eDraft.name) return false;
   if (eTotal.value <= 0) return false;
   if (eStatCount.value > data.value.equipStatsMax) return false;
+  if (eBudget.value.totalBudget > 0 && eTotal.value > eBudget.value.totalBudget) return false;
+  // 高端品质要求目标图等级达标（legend ≥90 / mythic ≥180）
+  const area = areasMap[eDraft.areaId];
+  if (area && (data.value.equipQualityMinLevel || {})[eDraft.quality]) {
+    if ((area.minLevel || 0) < data.value.equipQualityMinLevel[eDraft.quality]) return false;
+  }
   return true;
 });
+
+// 自创装备品质（史诗/传说/神话）
+const QUALITY_LABELS = { epic: '史诗', legend: '传说', mythic: '神话' };
+const QUALITY_COLORS = { epic: '#9d8cf0', legend: '#d4af5e', mythic: '#ff6738' };
+function qualityName(q) { return QUALITY_LABELS[q] || q; }
+function qualityColor(q) { return QUALITY_COLORS[q] || '#9d8cf0'; }
+function qualityMinLv(q) { return (data.value.equipQualityMinLevel || {})[q] || 1; }
+function qualityLocked(q, areaId) {
+  const area = areasMap[areaId];
+  if (!area) return false;
+  return (area.minLevel || 0) < qualityMinLv(q);
+}
 
 function toggleSkill(id) {
   const idx = mDraft.skills.indexOf(id);
   if (idx >= 0) mDraft.skills.splice(idx, 1);
   else if (mDraft.skills.length < data.value.monsterSkillsMax) mDraft.skills.push(id);
 }
-function addDrop() { mDraft.drops.push({ name: materialNames[0], rate: 0.1 }); }
+function addDrop() { mDraft.drops.push({ kind: 'material', name: materialNames[0], rate: 0.1 }); }
 function selectRace(key) {
   mDraft.race = key;
   mDraft.skills = [];
@@ -533,6 +605,15 @@ async function submitMonster() {
     showOracle(r.data.oracle);
     myMonsters.value.push(r.data.monster);
     props.player.gold = r.data.player.gold;
+    // v2.1：怪物降生后若有装备掉落被挂上 → 装备 commit 到世界
+    // 重新拉取数据以更新 equipsMax / equipBudgets / equipsByArea
+    const ref = await api.getGenesis(props.player.username);
+    if (ref && ref.success) {
+      data.value = { ...data.value, ...ref.data };
+      myMonsters.value = ref.data.monsters || [];
+      myEquips.value = ref.data.equips || [];
+    }
+    mode.value = 'library';   // 切到"我的造物"看到新怪物 + 装备状态
     toast.success('它已降生。');
   } else {
     toast.error(r?.message || '降生失败');
@@ -548,6 +629,14 @@ async function submitEquip() {
     showOracle(r.data.oracle);
     myEquips.value.push(r.data.equip);
     props.player.gold = r.data.player.gold;
+    // 重新拉一次完整 list（确保 equipsByArea / eBudget 等含最新世界状态）
+    const ref = await api.getGenesis(props.player.username);
+    if (ref && ref.success) {
+      data.value = { ...data.value, ...ref.data };
+      myMonsters.value = ref.data.monsters || [];
+      myEquips.value = ref.data.equips || [];
+    }
+    mode.value = 'library';   // 自动切到"我的造物"页签让玩家看到新装备
     toast.success('锻造完成。');
   } else {
     toast.error(r?.message || '锻造失败');
@@ -1068,6 +1157,27 @@ function showOracle(text) {
   letter-spacing: 0.04em;
 }
 
+/* ============ 自创装备品质选择（史诗/传说/神话） ============ */
+.slot-row--quality { grid-template-columns: repeat(3, 1fr); }
+.quality-mini { position: relative; }
+.quality-mini.is-active {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--qc, #9d8cf0) 22%, transparent) 0%, rgba(8,8,14,0.85) 100%);
+  border-color: var(--qc, #9d8cf0);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--qc, #9d8cf0) 35%, transparent), inset 0 1px 0 rgba(255,235,180,0.2);
+}
+.quality-mini.is-locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+.quality-lock {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.25rem;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
 /* ============ 技能/掉落芯片 ============ */
 .skill-pool {
   display: flex;
@@ -1364,6 +1474,57 @@ function showOracle(text) {
   border: 1px solid rgba(212,175,94,0.15);
   padding: 0.1rem 0.5rem;
   border-radius: 3px;
+}
+.budget-growth-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+.budget-growth-tag.growth-system {
+  color: #9d8cf0;
+  background: rgba(157,140,240,0.15);
+  border: 1px solid rgba(157,140,240,0.3);
+}
+.budget-growth-tag.growth-previous {
+  color: #d4af5e;
+  background: rgba(212,175,94,0.15);
+  border: 1px solid rgba(212,175,94,0.35);
+}
+.budget-growth-tag.growth-cap {
+  color: #ff6738;
+  background: rgba(255,103,56,0.15);
+  border: 1px solid rgba(255,103,56,0.4);
+}
+.budget-prev-tag {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.7rem;
+  color: var(--dim, #888);
+  font-weight: normal;
+}
+.lib-worldstate { margin-top: 0.3rem; }
+.ws-tag {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+.ws-tag.ws-pending {
+  color: #c9bcf8;
+  background: rgba(157,140,240,0.12);
+  border: 1px solid rgba(157,140,240,0.3);
+}
+.ws-tag.ws-committed {
+  color: #d4af5e;
+  background: rgba(212,175,94,0.15);
+  border: 1px solid rgba(212,175,94,0.4);
+  text-shadow: 0 0 4px rgba(212,175,94,0.3);
+}
+.lib-stats span {
   font-family: monospace;
 }
 .lib-del {

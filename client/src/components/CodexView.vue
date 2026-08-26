@@ -207,8 +207,8 @@ const pagedItems = computed(() => currentList.value.slice((page.value - 1) * pag
 watch(activeCat, () => { page.value = 1; searchQuery.value = '' })
 watch(searchQuery, () => { page.value = 1 })
 
-const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e' }
-const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说' }
+const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e', mythic: '#ff6738' }
+const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说', mythic: '神话' }
 const slotLabels = { weapon: '武器', armor: '护甲', accessory: '饰品' }
 const statLabels = { atk: '攻击', def: '防御', hp: 'HP', mp: 'MP', str: '力量', con: '体质', spi: '精神', agi: '敏捷', cha: '魅力', exp: '经验', gold: '金币' }
 const equipIcons = { weapon: 'sword', armor: 'shield', accessory: 'gem' }

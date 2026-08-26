@@ -221,9 +221,9 @@ const bulkSellMaxLevel = ref(30)
 // 锻造相关（与后端常量保持一致）
 const UPGRADE_LEVEL_MAX = 10
 const UPGRADE_BASE_GOLD = 200
-const QUALITY_GOLD_MULT = { normal: 1, fine: 1.5, epic: 2.5, legend: 4 }
+const QUALITY_GOLD_MULT = { normal: 1, fine: 1.5, epic: 2.5, legend: 4, mythic: 7 }
 const UPGRADE_MATERIAL_BY_QUALITY = {
-  normal: '青铜矿', fine: '铁矿', epic: '飞龙鳞片', legend: '龙鳞'
+  normal: '青铜矿', fine: '铁矿', epic: '飞龙鳞片', legend: '龙鳞', mythic: '深渊之石'
 }
 
 function getUpgradeCost() {
@@ -300,7 +300,7 @@ const equipPage = ref(1)
 const matPage = ref(1)
 const pageSize = 12
 
-const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说' }
+const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说', mythic: '神话' }
 const slotLabels = { weapon: '武器', armor: '护甲', accessory: '饰品' }
 const statLabels = { atk: '攻击', def: '防御', hp: 'HP', mp: 'MP', str: '力量', con: '体质', spi: '精神', agi: '敏捷', cha: '魅力', exp: '经验', gold: '金币' }
 const equipSlotIcons = { weapon: 'sword', armor: 'shield', accessory: 'gem' }
@@ -373,7 +373,7 @@ function showEquipDetail(item) { detailItem.value = item }
 function showItemDetail(item) { itemDetail.value = item }
 
 // 装备品质售价（与后端 EQUIP_SELL_PRICES 保持一致）
-const EQUIP_SELL_PRICES_LOCAL = { normal: 20, fine: 80, epic: 300, legend: 1500 }
+const EQUIP_SELL_PRICES_LOCAL = { normal: 20, fine: 80, epic: 300, legend: 1500, mythic: 5000 }
 
 function openBulkSell() { bulkSellVisible.value = true }
 
@@ -386,7 +386,7 @@ const bulkSellPreview = computed(() => {
     gold += EQUIP_SELL_PRICES_LOCAL[it.quality] || 20
     byQualityMap[it.quality] = (byQualityMap[it.quality] || 0) + 1
   }
-  const order = ['legend', 'epic', 'fine', 'normal']
+  const order = ['mythic', 'legend', 'epic', 'fine', 'normal']
   const byQuality = order
     .filter(q => byQualityMap[q])
     .map(q => ({ name: q, count: byQualityMap[q] }))

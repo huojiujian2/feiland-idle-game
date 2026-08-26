@@ -29,17 +29,17 @@ const EQUIP_TEMPLATES = {
   crystal_ring:    { name: '水晶戒指',   slot: 'accessory', quality: 'fine',   reqLevel: 15, stats: { mp: 30, spi: 3 } },
   sea_amulet:     { name: '海灵护符',   slot: 'accessory', quality: 'epic',   reqLevel: 30, stats: { mp: 80, spi: 8, exp: 0.1 } },
   angel_feather:  { name: '天使之羽',   slot: 'accessory', quality: 'epic',   reqLevel: 50, stats: { hp: 200, mp: 100, exp: 0.15 } },
-  dragon_eye:     { name: '龙之眼',     slot: 'accessory', quality: 'legend', reqLevel: 90, stats: { atk: 50, def: 50, exp: 0.25 } },
-  // Lv.130+ 高阶装备
-  starforged_blade: { name: '星辰锻造之刃', slot: 'weapon', quality: 'legend', reqLevel: 130, stats: { atk: 500, str: 60, spi: 40, agi: 25 } },
-  element_crown:    { name: '元素王冠',     slot: 'armor',  quality: 'legend', reqLevel: 130, stats: { def: 380, hp: 3500, con: 50, spi: 30 } },
-  godheart_orb:     { name: '神心宝珠',     slot: 'accessory', quality: 'legend', reqLevel: 130, stats: { atk: 200, def: 200, critDmg: 0.30, allAttr: 0.05 } },
-  realm_breaker:    { name: '界域破碎者',   slot: 'weapon', quality: 'legend', reqLevel: 150, stats: { atk: 800, str: 100, spi: 80, agi: 50 } },
-  void_dragonscale: { name: '虚空龙鳞甲',   slot: 'armor',  quality: 'legend', reqLevel: 150, stats: { def: 600, hp: 6000, con: 80, agi: 30 } },
-  eternity_band:    { name: '永恒之环',     slot: 'accessory', quality: 'legend', reqLevel: 150, stats: { atk: 350, def: 350, critDmg: 0.40, ignoreDef: 0.20 } },
-  creators_blade:   { name: '造物主之剑',   slot: 'weapon', quality: 'legend', reqLevel: 180, stats: { atk: 1500, str: 200, spi: 150, agi: 80 } },
-  god_plate:        { name: '神祇战甲',     slot: 'armor',  quality: 'legend', reqLevel: 180, stats: { def: 1000, hp: 12000, con: 150, spi: 100 } },
-  origin_eye:       { name: '原初之眼',     slot: 'accessory', quality: 'legend', reqLevel: 180, stats: { atk: 600, def: 600, critDmg: 0.60, allAttr: 0.15, dmgTaken: -0.20 } },
+  dragon_eye:     { name: '龙之眼',     slot: 'accessory', quality: 'legend', reqLevel: 90, stats: { atk: 80, def: 80, exp: 0.30, critDmg: 0.15 } },
+  // Lv.130+ 高阶装备 — v0.8+：细分到神话品质（橙红火焰感）
+  starforged_blade: { name: '星辰锻造之刃', slot: 'weapon', quality: 'mythic', reqLevel: 130, stats: { atk: 500, str: 60, spi: 40, agi: 25 } },
+  element_crown:    { name: '元素王冠',     slot: 'armor',  quality: 'mythic', reqLevel: 130, stats: { def: 380, hp: 3500, con: 50, spi: 30 } },
+  godheart_orb:     { name: '神心宝珠',     slot: 'accessory', quality: 'mythic', reqLevel: 130, stats: { atk: 200, def: 200, critDmg: 0.30, allAttr: 0.05 } },
+  realm_breaker:    { name: '界域破碎者',   slot: 'weapon', quality: 'mythic', reqLevel: 150, stats: { atk: 800, str: 100, spi: 80, agi: 50 } },
+  void_dragonscale: { name: '虚空龙鳞甲',   slot: 'armor',  quality: 'mythic', reqLevel: 150, stats: { def: 600, hp: 6000, con: 80, agi: 30 } },
+  eternity_band:    { name: '永恒之环',     slot: 'accessory', quality: 'mythic', reqLevel: 150, stats: { atk: 350, def: 350, critDmg: 0.40, ignoreDef: 0.20 } },
+  creators_blade:   { name: '造物主之剑',   slot: 'weapon', quality: 'mythic', reqLevel: 180, stats: { atk: 1500, str: 200, spi: 150, agi: 80 } },
+  god_plate:        { name: '神祇战甲',     slot: 'armor',  quality: 'mythic', reqLevel: 180, stats: { def: 1000, hp: 12000, con: 150, spi: 100 } },
+  origin_eye:       { name: '原初之眼',     slot: 'accessory', quality: 'mythic', reqLevel: 180, stats: { atk: 600, def: 600, critDmg: 0.60, allAttr: 0.15, dmgTaken: -0.20 } },
   // ====== 中段过渡装备（Lv.50-90）======
   ranger_bow:        { name: '游侠长弓',     slot: 'weapon', quality: 'fine',   reqLevel: 50,  stats: { atk: 60, agi: 15 } },
   paladin_shield:    { name: '圣骑士盾',     slot: 'armor',  quality: 'fine',   reqLevel: 60,  stats: { def: 50, hp: 300, con: 10 } },
@@ -51,38 +51,40 @@ const EQUIP_TEMPLATES = {
   dragon_lord_plate: { name: '龙王战甲',     slot: 'armor',  quality: 'legend', reqLevel: 110, stats: { def: 320, hp: 2800, con: 45, spi: 25 } },
   phoenix_feather:   { name: '凤凰之羽',     slot: 'accessory', quality: 'legend', reqLevel: 120, stats: { atk: 120, def: 120, lifesteal: 0.10, critDmg: 0.20 } },
   realm_walker_boots:{ name: '界域行者之靴', slot: 'armor', quality: 'legend', reqLevel: 140, stats: { def: 250, hp: 1500, agi: 40, dodge: 0.10 } },
-  // ====== 终极装备（Lv.200-250）======
-  infinity_edge:     { name: '无尽之刃',     slot: 'weapon', quality: 'legend', reqLevel: 200, stats: { atk: 2500, str: 300, spi: 200, agi: 120, crit: 0.10 } },
-  chrono_armor:      { name: '时之甲',       slot: 'armor',  quality: 'legend', reqLevel: 220, stats: { def: 1800, hp: 25000, con: 200, agi: 60, dmgTaken: -0.25 } },
-  omni_eye:          { name: '全知之眼',     slot: 'accessory', quality: 'legend', reqLevel: 250, stats: { atk: 1000, def: 1000, critDmg: 1.00, allAttr: 0.20, dmgTaken: -0.30, lifesteal: 0.15 } },
+  // ====== 终极装备（Lv.200-250）— v0.8+：神话品质终极版 ======
+  infinity_edge:     { name: '无尽之刃',     slot: 'weapon', quality: 'mythic', reqLevel: 200, stats: { atk: 2500, str: 300, spi: 200, agi: 120, crit: 0.10 } },
+  chrono_armor:      { name: '时之甲',       slot: 'armor',  quality: 'mythic', reqLevel: 220, stats: { def: 1800, hp: 25000, con: 200, agi: 60, dmgTaken: -0.25 } },
+  omni_eye:          { name: '全知之眼',     slot: 'accessory', quality: 'mythic', reqLevel: 250, stats: { atk: 1000, def: 1000, critDmg: 1.00, allAttr: 0.20, dmgTaken: -0.30, lifesteal: 0.15 } },
 };
 
-// 品质颜色
+// 品质颜色（v0.8+：新增 mythic 橙红火焰色）
 const QUALITY_COLORS = {
-  normal: '#9d9bb8',
-  fine: '#5eda7a',
-  epic: '#9d8cf0',
-  legend: '#d4af5e'
+  normal: '#9d9bb8',     // 普通（紫灰）
+  fine:   '#5eda7a',     // 精良（绿）
+  epic:   '#9d8cf0',     // 史诗（紫）
+  legend: '#d4af5e',     // 传说（金）
+  mythic: '#ff6738',     // 神话（橙红/火焰感）— 终极品质
 };
 
 // 品质顺序（升级/合成基础）
-const QUALITY_ORDER = ['normal', 'fine', 'epic', 'legend'];
+const QUALITY_ORDER = ['normal', 'fine', 'epic', 'legend', 'mythic'];
 
 // 装备锻造配置
 const UPGRADE_LEVEL_MAX = 10;
 const UPGRADE_BASE_GOLD = 200;  // 基础金币（每级再乘品质系数）
-const QUALITY_GOLD_MULT = { normal: 1, fine: 1.5, epic: 2.5, legend: 4 };
-const QUALITY_STAT_MULT = { normal: 1, fine: 1, epic: 1, legend: 1 }; // 保留
+const QUALITY_GOLD_MULT = { normal: 1, fine: 1.5, epic: 2.5, legend: 4, mythic: 7 };
+const QUALITY_STAT_MULT = { normal: 1, fine: 1, epic: 1, legend: 1, mythic: 1 }; // 保留
 // 升级所需材料（按品质）
 const UPGRADE_MATERIAL_BY_QUALITY = {
   normal: { name: '青铜矿', perLevel: 1 },
   fine:   { name: '铁矿', perLevel: 1 },
   epic:   { name: '飞龙鳞片', perLevel: 1 },
   legend: { name: '龙鳞', perLevel: 1 },
+  mythic: { name: '深渊之石', perLevel: 2 }, // 神话升级消耗更多
 };
 
 // 合成：3 件同品质 → 1 件高一阶品质
-const QUALITY_NEXT = { normal: 'fine', fine: 'epic', epic: 'legend', legend: null };
+const QUALITY_NEXT = { normal: 'fine', fine: 'epic', epic: 'legend', legend: 'mythic', mythic: null };
 
 // 商店物品（可用金币购买）
 // 设计约定：只卖普通/优良品质装备 + 经验卷轴；血蓝药剂已删除（每场战斗后自动满血满蓝）
@@ -160,8 +162,8 @@ const SHOP_MATERIALS = [
   { id: 'mat_dragon_blood',  name: '龙血',       price: 2000, requiredLevel: 90, sourceMap: '龙岛' },
 ];
 
-// 装备出售价格（按品质）
-const EQUIP_SELL_PRICES = { normal: 20, fine: 80, epic: 300, legend: 1500 };
+// 装备出售价格（按品质）—— v0.8+ 新增神话价
+const EQUIP_SELL_PRICES = { normal: 20, fine: 80, epic: 300, legend: 1500, mythic: 5000 };
 
 // 初始材料池（任务奖励随机抽）
 const INITIAL_MATERIAL_POOL = ['草药', '兽皮', '兽骨', '青铜矿'];
