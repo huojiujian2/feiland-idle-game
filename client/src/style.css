@@ -30,6 +30,9 @@
   --radius: 10px;
   --radius-sm: 6px;
   --tabbar-h: 64px;
+  /* iOS 底部安全区（Safari 小条/Home Indicator）；不支持的浏览器自动 0 */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
   --header-h: 50px;
 
   /* 字体 */
@@ -59,7 +62,7 @@
   --tutorial-overlay-bg: rgba(0,0,0,0.6);
   --tutorial-blur: blur(2px);
   --tutorial-outline: 2px solid var(--accent);
-  --tutorial-z: 400;
+  --tutorial-z: 1200;  /* v0.9：教程引导要高于 fixed tabbar (1000) 和 modal (1100) */
   --tutorial-hole-radius: 8px;
   --tutorial-card-radius: 10px;
   --tutorial-card-bg: var(--bg2);
@@ -146,7 +149,8 @@ html, body {
   letter-spacing: 0.01em;
 }
 
-#app { height: 100vh; display: flex; flex-direction: column; }
+/* #app：dvh 优先（动态视口，浏览器工具栏收起时自动适配），vh 兜底（老浏览器） */
+#app { height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ====== 表单控件统一 ====== */
 input[type="text"],
@@ -456,23 +460,32 @@ select option {
   inset: 0;
   overflow-y: auto;
   padding: 0.75rem;
+  /* v0.9：底部 fixed tabbar 留出空间（含 iOS 安全区） */
+  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 0.75rem);
   animation: fadeInUp var(--duration-slow) var(--ease-out);
 }
 
-/* ====== 底部 TabBar ====== */
+/* ====== 底部 TabBar（v0.9 固定层级 + 自适应浏览器底栏）===== */
 .tabbar {
-  height: var(--tabbar-h);
-  flex-shrink: 0;
+  /* 固定贴底，不被浏览器工具栏或内容滚动遮挡 */
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  /* 高度含 iOS 底部安全区（Home Indicator 小条） */
+  min-height: var(--tabbar-h);
+  padding-bottom: var(--safe-bottom);
   display: flex;
   /* 雕花底座纹理（横向平铺）+ 深色兜底 */
   background:
-    url('/img/tabbar-bg.png') repeat-x center / auto 100%,
-    linear-gradient(0deg, rgba(10,11,20,0.85), rgba(20,22,42,0.7));
-  backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(157,140,240,0.25);
-  z-index: 100;
-  position: relative;
+    url('/img/tabbar-bg.png') repeat-x center / auto calc(100% - var(--safe-bottom)),
+    linear-gradient(0deg, rgba(10,11,20,0.92), rgba(20,22,42,0.78));
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  border-top: 1px solid rgba(157,140,240,0.3);
+  box-shadow: 0 -6px 18px rgba(0,0,0,0.45);
+  /* z-index 提升，确保不被任何 modal/弹窗压住 */
+  z-index: 1000;
   overflow: visible;
+  contain: layout paint;
 }
 .tabbar-item {
   flex: 1;
@@ -595,7 +608,8 @@ select option {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  /* v0.9：弹窗需高于 fixed tabbar (z-index 1000) */
+  z-index: 1100;
   padding: 1rem;
   animation: fadeIn var(--duration-fast) var(--ease-out);
 }
@@ -614,16 +628,18 @@ select option {
   font-weight: 700;
   font-family: var(--font-display);
   box-shadow: 0 0 50px rgba(212,175,94,0.5);
-  z-index: 100;
+  /* v0.9：升级提示需高于 fixed tabbar (z-index 1000) */
+  z-index: 1100;
   pointer-events: none;
   letter-spacing: 0.05em;
 }
 .levelup-enter-active, .levelup-leave-active { transition: all var(--duration-slow) var(--ease-spring); }
 .levelup-enter-from, .levelup-leave-to { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
 
-/* 登录页 */
+/* 登录页（v0.9 dvh 优先，浏览器底栏适配） */
 .login-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;

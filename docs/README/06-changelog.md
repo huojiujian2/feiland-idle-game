@@ -2,6 +2,85 @@
 
 > 📖 主入口：[../README.md](../README.md)
 
+## v1.0 · 2026-08-27
+
+### 🆕 新增功能
+
+#### 创世造物主显示升级
+- 自创怪物/装备写入时新增 `creatorUsername` 字段（账号维度冗余），与原有 `creator`（真名维度）并行
+- 后端 `listByPlayer / countOf / deleteCustom / rehydrateFromMeta` 全部改为 `Set<username, name>` 双值匹配
+- 启动期 `rehydrateFromMeta` 自动给缺失 `creatorUsername` 的旧造物补字段（已对玩家"活久见 / 123"账号的 3 条历史造物完成回填）
+- 新接口 `GET /api/players/names` → `{ username: { username, name } }` 全服玩家名册
+- 前端 `App.vue` 登录后自动拉取并通过 `provide/inject` 注入给子组件
+- `GenesisView / CodexView` 改造"造物主"标签：自己造的显示 `player.name`，别人造的查名册显示真名（账号 → 真名）
+
+#### 装备一键合成（替代逐件选 3 件）
+- **新入口**：背包 → 装备区右上角金色"✨ 一键合成"按钮（与"批量出售"并列），按钮上带可合成组数徽章
+- **自动分桶**：按 `quality × slot` 分组，每桶满 3 件 → 1 次合成；自动跳过已穿戴/有附魔/已最高品质的装备
+- **弹窗预览**：列出每个可合成组（普通→精良、精良→史诗…），玩家可单独勾选/全选，确认后并发请求
+- **后端规则重写**（`server/engine/items.js` `mergeEquipment`）：
+  - 3 件必须**同品质 + 同槽位**（旧版"3 把武器 → 任意槽位装备"的随机 targetSlot 改为锁死）
+  - 拒绝已穿戴/有附魔的素材合成（避免误操作浪费）
+  - 跨品质合成时 `upgradeLevel` 重置为 0（旧强化倍数叠加新模板基础属性会过强）
+  - 错误文案修正："传说级" → "神话级"
+
+#### 重置附魔（替代"重铸词条"）
+- **语义变更**：原 `reforgeEquipment` 是清空 enchants+affixes 再随机塞 1 个被动词条 → 现在改成**只清空附魔**，玩家再用附魔列表一个个补回去（与"强化按 +1 累加"对齐）
+- UI 改名："重铸词条" → **"重置附魔"**（描述："消耗 1000 金币，重新附魔"）
+- 确认弹窗 + Toast 全部更新成新语义
+
+#### 附魔描述展开隐藏系数
+- 11 个 `ENCHANT_RECIPES.desc` 全部从"装备 X+Y"改成"实际加到战斗属性的效果"：
+  - 力量附魔："装备力量+3" → **"攻击+6"**（str ×2 展开）
+  - 精神附魔："装备精神+3" → **"MP+9"**（spi ×3 展开）
+  - 传说·破灭："攻击+20 力量+10" → **"攻击+40"**（20 + 10×2 = 40）
+  - 传说·不朽："防御+20 体质+10 HP+200" → **"防御+35 HP+250"**（20+10×1.5 / 200+10×5）
+  - 神话·灵蕴："精神+15 MP+200 攻击+10" → **"攻击+10 MP+245"**（200+15×3）
+- 玩家现在一眼能看穿附魔的真实收益，不再被"装备力量+3"误导
+
+#### 角色三件套视觉优化
+- **右上角改为强化等级徽标**：`+1` ~ `+15` 等宽字体显示（金色描边深底白字，等级 0 不显示）
+- **边框按附魔数量染色**：
+  - 0 附魔：默认紫色（不变）
+  - 1 附魔：史诗紫 `#9d8cf0` + 6px 紫色光晕
+  - 2 附魔：传说金 `#d4af5e` + 6px 金色光晕
+  - 3 附魔：神话橙 `#ff6738` + 8px 橙色强光晕
+
+#### 浏览器记忆"铭记此身"实装
+- `feiland_remember_v1` localStorage key 保存 `{ username, password, savedAt }`
+- 组件挂载时自动调用 `loadRemembered()`，有保存则**自动填充**账号密码 + 自动勾上"铭记此身"
+- 点击登录按钮时：勾选 → `saveRemembered(...)`；取消勾选 → `clearRemembered()`（玩家可主动"忘记"）
+- 端口约定统一：前端固定 3000（Vite `strictPort: true`），后端 API 固定 3001
+
+#### 满百级转生提醒
+- 第一次到 Lv.100 弹出金色神谕模态框（一次性 `reincarnHintShown` 标记，跨会话只弹一次）
+
+### 🐛 Bug 修复
+
+- **登录/注册缺错误提示**：`handleLogin / handleRegister` 改为 async + 返回 res，失败时格式化后端消息（"账号不存在"→"此真名未曾被星图记录" 等卷轴味文案），输入框下方显示 inline 错误，输入即清
+- **金币商店购买超购买力**：`maxBuyQty(item) = floor(playerGold / price)` 作为数量上限，`+1 / -1 / +10 / +max` 全部走上限保护；`+10 / +max` 在已满时禁用
+- **金币商店 +/- 单击不触发**：`useLongPress` 350ms 防误触窗口内点一下松开无反应 → 在 `stop()` 里检测"阶段 2 还没触发过"就补打一发 `onTick(dir, 1)`，单击立刻生效
+- **长按方向识别**：增加 `dirOf(key)` 支持 `'+10' / '-10' / '+max'` 等多种 key，自动判断方向
+- **属性预设分配不正确**：原版简单按比例 `floor(points * r[i] / rsum)`，剩余点全给最后一项 → 改为"先补齐比例缺口，再按比例分配"两步法 + 余数补给比例最大的维度（5:1:1:1 + 80点 + cur 40:5:10:8 → 92:17:17:17）
+- **属性预设分配产生小数**：旧算法的 `gap = k * r - cur` 浮点污染 `cur`，后续累加小数 → 补齐阶段 `Math.round()` + 出口处 `alloc = Math.round(alloc)` 兜底（已修复玩家"活久见"账号 `def/hp/agi = 727.6` 的旧数据）
+- **自创装备掉落后变成乱码道具**：`idle.js` 的 `dropList.push(...)` 没区分 material 和 equip，统一 push 了 `templateId`（如 `custom_xxx`）到材料堆 → 改为按 `drop.kind` 分流：equip 走 `template: d.name`，material 走 `name: d.name`
+- **图鉴只显示自己造的造物**：旧 codex 路由只把当前登录用户造的注入 → 改为读 `meta.genesis` 全服共享，所有玩家都能在自己图鉴里看到别人造的内容
+- **PvP 排行榜对手列表走错图鉴路径**：复用 `getCodex` 时少了对 `equips.equipped` 的合并 → 改用 `codexByUsername` helper
+
+### 🎨 UI 改进
+
+- **金币商店 Action Sheet 修复被 TabBar 遮挡**：`.shop-overlay` z-index 400 → **1200**；`.shop-detail-overlay` 410 → **1210**；新增 `padding-bottom: var(--safe-bottom)` 适配 iOS 底部安全区
+- **TabBar 图标去边框放大**：移除 `.tabbar-icon-wrap` 的圆形描边 / 渐变背景 / box-shadow；图标尺寸放大到 28；hover/active 态只保留"图标上浮 2px"动效 + 文字变金色
+- **金币商店数量控件**：`-10 / -1 / N / +1 / +10 / max` 6 键排列，长按三段式加速（350ms 防误触 → 120ms 慢速 → 45ms 冲刺）
+- **底部 TabBar 适配浏览器**：fixed 定位 + `padding-bottom: env(safe-area-inset-bottom)` + `100dvh`，iOS Safari 小条不再遮挡
+- **属性预设按钮**：`+10` 同样支持长按三段式
+
+### 🔧 基础设施
+
+- 新建全服玩家名册接口（`/api/players/names`）+ 前端 provide/inject 注入机制
+
+---
+
 ## v0.9 · 2026-08-26
 
 ### ✨ 创世之书系统大改（v2.0 + v2.1）

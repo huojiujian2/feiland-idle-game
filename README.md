@@ -2,7 +2,7 @@
 
 # ⚡ 费兰德世界
 
-### 挂机文字成长游戏 · v0.9
+### 挂机文字成长游戏 · v1.0
 
 <img src="https://img.shields.io/badge/Vue-3.4-42b883?logo=vuedotjs&logoColor=white" alt="Vue 3.4">
 <img src="https://img.shields.io/badge/Vite-5.2-646cff?logo=vite&logoColor=white" alt="Vite 5.2">
@@ -27,7 +27,7 @@
 | 3 | [docs/README/03-areas-and-equipment.md](docs/README/03-areas-and-equipment.md) | 11 区域 + 50+ 装备 + 5 品质阶 + 24 怪物技能 |
 | 4 | [docs/README/04-quickstart.md](docs/README/04-quickstart.md) | 启动与部署（4 种方式 + Docker） |
 | 5 | [docs/README/05-architecture.md](docs/README/05-architecture.md) | 项目结构 + 技术栈 + UI/UX 规范 |
-| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v0.9） |
+| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v1.0） |
 
 ---
 

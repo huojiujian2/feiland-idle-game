@@ -99,10 +99,18 @@ function calculateIdle(player) {
     if (player.godhood) player.faith += Math.floor(monster.exp * 0.1);
 
     // 地图基础掉落 + 该自创怪自身的掉落（如有）
+    // v0.9：怪物的 drops 项支持 kind 区分（material/equip），自创装备作为掉落时按装备处理
     const dropList = [...area.drops];
     if (Array.isArray(monster.drops) && monster.drops.length > 0) {
+      const customEquips = _getMeta().genesis?.equips || [];
       for (const d of monster.drops) {
-        dropList.push({ type: 'material', name: d.name, rate: d.rate });
+        const kind = d.kind || 'material';  // 兼容旧数据（无 kind 视为 material）
+        if (kind === 'equip') {
+          // 自创装备掉落：转成 equip 类型入背包（d.name 是装备 templateId）
+          dropList.push({ type: 'equip', template: d.name, rate: d.rate });
+        } else {
+          dropList.push({ type: 'material', name: d.name, rate: d.rate });
+        }
       }
     }
     for (const drop of dropList) {
@@ -113,6 +121,7 @@ function calculateIdle(player) {
           if (existing) existing.count++;
           else player.inventory.push({ name: drop.name, count: 1, type: 'material' });
         } else if (drop.type === 'equip') {
+          // v0.9：传入的可能是自创装备 templateId（custom_xxx），createEquipItem 走模板表查找
           const item = createEquipItem(drop.template, genUid());
           if (item) {
             player.equips.push(item);

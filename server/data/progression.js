@@ -29,28 +29,30 @@ const RACE_EVOLUTION = {
 };
 
 // 附魔配方表
+// v2.5：desc 改成"实际加到战斗属性的效果"——隐藏系数（str ×2 / con def×1.5+hp×5 / spi ×3）展开成直观的"攻击+X / 防御+Y / HP+Z / MP+W"
+//   百分比字段（exp/gold）保留"经验+10% / 金币+15%"格式
 const ENCHANT_RECIPES = [
-  { id: 'atk_enchant', name: '攻击附魔', desc: '装备攻击+5', slot: 'weapon',
+  { id: 'atk_enchant', name: '攻击附魔', desc: '攻击+5', slot: 'weapon',
     cost: 200, materials: [{ name: '青铜矿', count: 3 }], bonus: { atk: 5 } },
-  { id: 'def_enchant', name: '防御附魔', desc: '装备防御+5', slot: 'armor',
+  { id: 'def_enchant', name: '防御附魔', desc: '防御+5', slot: 'armor',
     cost: 200, materials: [{ name: '铁矿', count: 3 }], bonus: { def: 5 } },
-  { id: 'hp_enchant', name: '生命附魔', desc: '装备HP+50', slot: 'armor',
+  { id: 'hp_enchant', name: '生命附魔', desc: 'HP+50', slot: 'armor',
     cost: 300, materials: [{ name: '草药', count: 5 }], bonus: { hp: 50 } },
-  { id: 'str_enchant', name: '力量附魔', desc: '装备力量+3', slot: 'weapon',
+  { id: 'str_enchant', name: '力量附魔', desc: '攻击+6', slot: 'weapon',
     cost: 500, materials: [{ name: '飞龙鳞片', count: 2 }], bonus: { str: 3 } },
-  { id: 'spi_enchant', name: '精神附魔', desc: '装备精神+3', slot: 'accessory',
+  { id: 'spi_enchant', name: '精神附魔', desc: 'MP+9', slot: 'accessory',
     cost: 500, materials: [{ name: '海灵石', count: 2 }], bonus: { spi: 3 } },
-  { id: 'agi_enchant', name: '敏捷附魔', desc: '装备敏捷+3', slot: 'accessory',
+  { id: 'agi_enchant', name: '敏捷附魔', desc: '敏捷+3', slot: 'accessory',
     cost: 500, materials: [{ name: '风羽玉露', count: 2 }], bonus: { agi: 3 } },
   { id: 'exp_enchant', name: '经验附魔', desc: '经验获取+10%', slot: 'accessory',
     cost: 1000, materials: [{ name: '附魔卷轴', count: 1 }], bonus: { exp: 0.10 } },
   { id: 'gold_enchant', name: '贪婪附魔', desc: '金币获取+15%', slot: 'weapon',
     cost: 1000, materials: [{ name: '炼金材料', count: 3 }], bonus: { gold: 0.15 } },
-  { id: 'legend_atk', name: '传说·破灭', desc: '攻击+20 力量+10', slot: 'weapon',
+  { id: 'legend_atk', name: '传说·破灭', desc: '攻击+40', slot: 'weapon',
     cost: 5000, materials: [{ name: '龙血', count: 1 }, { name: '附魔卷轴', count: 3 }], bonus: { atk: 20, str: 10 } },
-  { id: 'legend_def', name: '传说·不朽', desc: '防御+20 体质+10 HP+200', slot: 'armor',
+  { id: 'legend_def', name: '传说·不朽', desc: '防御+35 HP+250', slot: 'armor',
     cost: 5000, materials: [{ name: '龙鳞', count: 2 }, { name: '附魔卷轴', count: 3 }], bonus: { def: 20, con: 10, hp: 200 } },
-  { id: 'myth_spi', name: '神话·灵蕴', desc: '精神+15 MP+200 攻击+10', slot: 'accessory',
+  { id: 'myth_spi', name: '神话·灵蕴', desc: '攻击+10 MP+245', slot: 'accessory',
     cost: 8000, materials: [{ name: '深渊之石', count: 1 }, { name: '光明晶', count: 3 }, { name: '附魔卷轴', count: 5 }], bonus: { spi: 15, mp: 200, atk: 10 } }
 ];
 const MAX_ENCHANT_SLOTS = 3;

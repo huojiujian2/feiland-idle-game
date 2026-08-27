@@ -99,6 +99,8 @@ function migratePlayer(player) {
   }
   if (player.reincarnation === undefined) player.reincarnation = 0;
   if (player.bossKills === undefined) player.bossKills = 0;
+  // v0.9：满百级转生一次性提醒的标记
+  if (player.reincarnHintShown === undefined) player.reincarnHintShown = false;
   if (!player.stats || typeof player.stats !== 'object') player.stats = {};
   if (!player.stats.maxClearedArea) player.stats.maxClearedArea = 'gaomanshan';
   if (!Number.isFinite(player.lastActiveAt)) player.lastActiveAt = player.lastTick || getNow();
@@ -351,33 +353,135 @@ function applyAttrPreset(player, presetId) {
   checkAchievements(player);
   return { success: true, allocated: { atk, def, hp, agi } };
 }
-// v0.8+：按 4 维数字比例直接加点（4 个固定模板：全力/铁壁/血牛/风影）
-// 数字越大分越多；总和不需要 100，但内部按比例换算；归一化允许 0
+// v0.9：按比例加点（"先补齐再分配"算法）
+// 需求：5:1:1:1 + 当前属性 40:5:10:8 + 80 点
+//   → 先按比例补齐到 50:10:10:10（用 17 点），剩 63
+//   → 再按比例分配 42:7:7:7
+//   → 最终 92:17:17:17
+//
+// 实现：迭代两阶段直到 attrPoints 耗尽
+//   阶段 A（补齐）：找"按比例最落后的维度"，把该维度补到"其他维度的比例对齐值"，
+//                  预算不足时只补能补的部分（按比例切分剩余）。
+//   阶段 B（分配）：剩余点全部按比例分配。
 function applyAttrPresetByRatio(player, ratio) {
   player = migratePlayer(player);
   if (!player.attrPoints || player.attrPoints <= 0) {
     return { success: false, message: '没有可分配的属性点' };
   }
-  const a = Math.max(0, Number(ratio.atk) || 0);
-  const d = Math.max(0, Number(ratio.def) || 0);
-  const h = Math.max(0, Number(ratio.hp) || 0);
-  const g = Math.max(0, Number(ratio.agi) || 0);
-  const total = a + d + h + g;
-  if (total <= 0) return { success: false, message: '比例数值无效' };
-  const points = player.attrPoints;
-  let atk = Math.floor(points * (a / total));
-  let def = Math.floor(points * (d / total));
-  let hp = Math.floor(points * (h / total));
-  let agi = points - atk - def - hp;
-  player.attributes.atk += atk;
-  player.attributes.def += def;
-  player.attributes.hp += hp;
-  player.attributes.agi += agi;
+  const ra = Math.max(0, Number(ratio.atk) || 0);
+  const rd = Math.max(0, Number(ratio.def) || 0);
+  const rh = Math.max(0, Number(ratio.hp) || 0);
+  const rg = Math.max(0, Number(ratio.agi) || 0);
+  const rsum = ra + rd + rh + rg;
+  if (rsum <= 0) return { success: false, message: '比例数值无效' };
+
+  const cur = {
+    atk: player.attributes.atk || 0,
+    def: player.attributes.def || 0,
+    hp:  player.attributes.hp  || 0,
+    agi: player.attributes.agi || 0,
+  };
+  const r = { atk: ra, def: rd, hp: rh, agi: rg };
+
+  let points = player.attrPoints;
+  const alloc = { atk: 0, def: 0, hp: 0, agi: 0 };
+
+  // 主循环：交替"补齐"和"分配"，直到 points 耗尽或两阶段都加不动
+  let safety = 0;
+  while (points > 0 && safety < 10) {
+    safety++;
+
+    // 阶段 A：补齐
+    // 找"按比例对齐后还差多少"最少的维度，作为基准缩放系数
+    // k = max(cur[i] / r[i])，对所有 r[i] > 0 的维度
+    let k = 0;
+    for (const key of ['atk', 'def', 'hp', 'agi']) {
+      if (r[key] > 0) {
+        const curRatio = cur[key] / r[key];
+        if (curRatio > k) k = curRatio;
+      }
+    }
+    // 目标值 = k * r[i]；缺口 = 目标值 - cur[i]
+    // v2.4：k 是浮点数（cur/r），乘 r 再减 cur 仍可能带小数（如 r=0 维度被其它维度推高 k）
+    //   用 Math.round 兜底，保证 gap 是整数
+    const gap = {
+      atk: r.atk > 0 ? Math.max(0, Math.round(k * r.atk - cur.atk)) : 0,
+      def: r.def > 0 ? Math.max(0, Math.round(k * r.def - cur.def)) : 0,
+      hp:  r.hp  > 0 ? Math.max(0, Math.round(k * r.hp  - cur.hp))  : 0,
+      agi: r.agi > 0 ? Math.max(0, Math.round(k * r.agi - cur.agi)) : 0,
+    };
+    const gapTotal = gap.atk + gap.def + gap.hp + gap.agi;
+
+    if (gapTotal > 0 && gapTotal <= points) {
+      // 一次补齐：所有维度缺口加起来 ≤ 剩余点数 → 全部补完
+      for (const key of ['atk', 'def', 'hp', 'agi']) {
+        cur[key] += gap[key];
+        alloc[key] += gap[key];
+      }
+      points -= gapTotal;
+      continue;  // 重新进入循环，继续补下一档（你的例子用 17 点补到 50:10:10:10）
+    }
+
+    // 补不齐（如测试 4：atk 缺口 90 但只有 10 点）
+    //   优先把点数全给最落后的维度（让"补齐缺口"尽量接近一步到位）
+    if (points > 0 && gapTotal > points) {
+      // 找缺口最大的维度
+      let maxGapKey = null;
+      let maxGap = 0;
+      for (const key of ['atk', 'def', 'hp', 'agi']) {
+        if (gap[key] > maxGap) { maxGap = gap[key]; maxGapKey = key; }
+      }
+      if (maxGapKey && gap[maxGapKey] > 0) {
+        // 全部补给最落后的维度
+        const give = Math.min(gap[maxGapKey], points);
+        cur[maxGapKey] += give;
+        alloc[maxGapKey] += give;
+        points -= give;
+        continue;
+      }
+    }
+
+    // 真正的"按比例分配"阶段（你的 70→63 阶段）
+    //   v0.9.1：余数优先补给"比例最大的维度"（基数最大的优先拿余数）
+    if (points > 0) {
+      const m = { atk: 0, def: 0, hp: 0, agi: 0 };
+      const keys = ['atk', 'def', 'hp', 'agi'];
+      // 按比例向下取整分配
+      for (const key of keys) m[key] = Math.floor(points * (r[key] / rsum));
+      // 余数 = 总数 - 已分配
+      let rem = points - m.atk - m.def - m.hp - m.agi;
+      // 余数全给"比例最大"的维度（按比例数从大到小排序，依次拿余数）
+      // 这样余数会按"权重"集中在比例最大的维度上
+      const order = [...keys].sort((a, b) => r[b] - r[a] || keys.indexOf(a) - keys.indexOf(b));
+      let i = 0;
+      while (rem > 0) {
+        m[order[i % order.length]] += 1;
+        rem -= 1;
+        i += 1;
+      }
+      for (const key of keys) {
+        cur[key] += m[key];
+        alloc[key] += m[key];
+      }
+      points = 0;
+      break;
+    }
+  }
+
+  // v2.4 兜底：保证 alloc 全部是整数（防御极端浮点残留）
+  for (const key of ['atk', 'def', 'hp', 'agi']) {
+    alloc[key] = Math.round(alloc[key]);
+  }
+
+  player.attributes.atk += alloc.atk;
+  player.attributes.def += alloc.def;
+  player.attributes.hp  += alloc.hp;
+  player.attributes.agi += alloc.agi;
   player.attrPoints = 0;
   recalcMaxStats(player);
   updateDailyProgressSafe(player, 'alloc1', 1);
   checkAchievements(player);
-  return { success: true, allocated: { atk, def, hp, agi } };
+  return { success: true, allocated: alloc };
 }
 function deleteAttrPreset(player, presetId) {
   player = migratePlayer(player);

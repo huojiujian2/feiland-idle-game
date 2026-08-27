@@ -58,11 +58,12 @@ function isUnlocked(player) {
   return (player?.reincarnation || 0) >= 2;
 }
 
-// 工具：给玩家所属自创项计数
+// 工具：给玩家所属自创项计数（兼容 creator 可能存的是 username 或 name）
 function countOf(player, kind) {
   const w = getWorld(_getMeta());
   const aliases = new Set([player.username, player.name].filter(Boolean));
-  return w[kind].filter(x => aliases.has(x.creator)).length;
+  const isMine = (x) => aliases.has(x.creator) || aliases.has(x.creatorUsername);
+  return w[kind].filter(isMine).length;
 }
 
 // meta 注入（由 engine.setStore 装配）
@@ -152,7 +153,11 @@ function birthMonster(player, draft, meta) {
   // 8. 落库
   const monster = {
     id: 'm_' + genUid(),
-    name, desc, creator: player.name || player.username, areaId: area.id,
+    name, desc,
+    creator: player.username,    // v2.2 修复：显示用户名（不是账户名称）
+    creatorUsername: player.username,
+    creatorName: player.name || player.username,   // 冗余：账户显示名
+    areaId: area.id,
     race: draft.race, raceName: race.name,
     skills: [...skills],
     hp, atk, def, agi,
@@ -258,7 +263,9 @@ function forgeEquip(player, draft, meta) {
   // 6. 落库
   const tplId = 'custom_' + genUid();
   const equip = {
-    id: tplId, name, desc, creator: player.name || player.username,
+    id: tplId, name, desc,
+    creator: player.name || player.username,
+    creatorUsername: player.username,    // v2.2 冗余
     areaId: area.id,     // v2.1：记录装备投放地图，怪物创建时校验归属
     slot, quality: QUALITY, reqLevel: budget.refReqLevel || budget.reqLevel,
     stats: cleanStats, affix,
@@ -289,7 +296,9 @@ function deleteCustom(player, kind, id, meta) {
   const item = list[idx];
   // 兼容：creator 可能是 player.name 或 player.username
   const aliases = new Set([player.username, player.name].filter(Boolean));
-  if (!aliases.has(item.creator)) return { success: false, message: '只有造物主可以抹去其名' };
+  if (!(aliases.has(item.creator) || aliases.has(item.creatorUsername))) {
+    return { success: false, message: '只有造物主可以抹去其名' };
+  }
   // v2.1：装备若被某怪物挂载（作为掉落），必须先从该怪物的 drops 中移除
   if (kind === 'equips') {
     const lockedBy = w.monsters.find(m => (m.drops || []).some(x => x.kind === 'equip' && x.name === id));
@@ -327,7 +336,7 @@ function listByPlayer(player, meta) {
   // 兼容：creator 字段在创建时存的是 player.name || player.username
   // 过滤时同时匹配两种可能，避免玩家设了真名后"我的造物"看不到自己造的东西
   const aliases = new Set([player.username, player.name].filter(Boolean));
-  const isMine = (x) => aliases.has(x.creator);
+  const isMine = (x) => aliases.has(x.creator) || aliases.has(x.creatorUsername);
   return {
     monsters: w.monsters.filter(isMine),
     equips:   w.equips.filter(isMine),
@@ -363,12 +372,19 @@ function listByPlayer(player, meta) {
 // ============================================================
 function rehydrateFromMeta(meta) {
   const w = getWorld(meta);
+  // v2.2 兼容：旧 monster / equip 可能缺 creatorUsername，
+  //   启动时按"creator 看起来像 username 还是 name"做最小回填
+  //   这里只是补字段，逻辑严格按别名（username / name 都行）
   for (const e of w.equips) {
+    if (e.creator && !e.creatorUsername) e.creatorUsername = e.creator;
     if (!EQUIP_TEMPLATES[e.id]) {
       registerCustomEquip({ id: e.id, name: e.name, slot: e.slot, quality: e.quality, reqLevel: e.reqLevel, stats: e.stats, creator: e.creator, desc: e.desc });
     }
     // v2.1：旧数据兼容——无 worldState 字段视为 pending
     if (!e.worldState) e.worldState = 'pending';
+  }
+  for (const m of w.monsters) {
+    if (m.creator && !m.creatorUsername) m.creatorUsername = m.creator;
   }
   // 重新计算"已投入世界"的装备状态（基于怪物 drops 推导）
   for (const m of w.monsters) {

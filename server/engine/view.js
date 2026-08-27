@@ -106,6 +106,7 @@ function getPlayerView(player) {
     stage, attributes: player.attributes, attrPoints: player.attrPoints, skillPoints: player.skillPoints,
     hp: player.hp, maxHp: player.maxHp, mp: player.mp, maxMp: player.maxMp,
     gold: player.gold, killCount: player.killCount || 0, reincarnation: player.reincarnation || 0, bossKills: player.bossKills || 0, powerScore: getPowerScore(player), currentArea: player.currentArea, areaName: area ? area.name : '未知',
+    reincarnHintShown: !!player.reincarnHintShown,   // v0.9：满百级一次性提醒是否已弹出
     stats: player.stats,
     inventory: player.inventory, equips: player.equips, equipped: player.equipped,
     affixes: player.affixes, equippedAffixes, affixData, passiveSlots,

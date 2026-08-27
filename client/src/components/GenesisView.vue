@@ -55,6 +55,7 @@
             <span class="parch-tab-text">{{ t.label }}</span>
             <span class="parch-tab-count" v-if="t.count !== null">{{ t.count }}/60</span>
           </button>
+          <button class="parch-tab-refresh" type="button" @click="init" title="刷新造物列表">⟳</button>
         </div>
 
         <!-- 降生之页 -->
@@ -381,6 +382,7 @@
                 <div class="lib-name">
                   「 {{ m.name }} 」
                   <span class="lib-tag">种族 · {{ raceName(m.race) }}</span>
+                  <span v-if="m.creator || m.creatorUsername" class="lib-creator-tag" :title="`造物主：${displayCreator(m)}`">{{ displayCreator(m) }}造</span>
                 </div>
                 <div class="lib-desc">{{ m.desc || '（未写神谕）' }}</div>
                 <div class="lib-meta">
@@ -404,6 +406,7 @@
                 <div class="lib-name lib-name--epic">
                   「 {{ e.name }} 」 <span :style="{ color: qualityColor(e.quality) }">[{{ qualityName(e.quality) }}]</span>
                   <span class="lib-tag">类型 · {{ slotName(e.slot) }}</span>
+                  <span v-if="e.creator || e.creatorUsername" class="lib-creator-tag" :title="`造物主：${displayCreator(e)}`">{{ displayCreator(e) }}造</span>
                 </div>
                 <div class="lib-desc">{{ e.desc || '（未写神谕）' }}</div>
                 <div class="lib-meta">投放于 <strong>{{ areaName(e.areaId) }}</strong> · 需要 <strong>Lv.{{ e.reqLevel }}</strong></div>
@@ -445,9 +448,13 @@
 // @module genesis-view
 // @description 沿用登录页 v0.8 羊皮卷轴风格：暗金 + Cinzel 字体 + 符文环 + 烛光
 //              + 沉浸表单（卷轴底边金线，无边框） + 三 Tab 卷轴切换
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch, inject } from 'vue';
 import api from '../api.js';
 import { toast } from '../ui-bridge.js';
+
+// v2.2：从 App 注入全服玩家名册 { username -> name }，用于把"造物主"解析成真名
+const playerNameMap = inject('playerNameMap', ref({}));
+const refreshPlayerNameMap = inject('refreshPlayerNameMap', () => {});
 
 const SKILL_NAME = {
   fire_breath: '龙息', tail_sweep: '尾扫', roar: '咆哮',
@@ -581,14 +588,38 @@ function statName(key) { return (data.value.equipStatKeys[key] || {}).name || ke
 function statNameZh(key) { return STAT_NAME_ZH[key] || key; }
 function equipGlyph(slot) { return EQUIP_GLYPH[slot] || '✦'; }
 
-async function init() {
+// v2.2 显示用：把 creatorUsername（账号）解析成"游戏内的真名"展示
+//   规则：账号 === 当前玩家.username → 用 player.name；其它账号 → 用全服名册 playerNameMap 反查
+function displayCreator(item) {
+  const owner = item?.creatorUsername || item?.creator;
+  if (!owner) return '';
+  // 自己的：直接用 props.player.name（避免名册延迟导致显示回账号）
+  if (owner === props.player?.username) {
+    return props.player?.name || owner;
+  }
+  // 别人的：从全服名册反查（注入自 App.vue）
+  const fromMap = playerNameMap.value && playerNameMap.value[owner];
+  return (fromMap && fromMap.name) || owner;
+}
+
+// v2.2 兼容：creator 可能存的是 player.name 也可能是 player.username（旧数据）
+// 同时也兼容未来 creatorUsername 字段（万一以后改名）
+function isMineCreator(item) {
+  const aliases = new Set([props.player?.username, props.player?.name].filter(Boolean));
+  if (aliases.has(item.creator)) return true;
+  if (!item.creator && item.creatorUsername && aliases.has(item.creatorUsername)) return true;
+  return false;
+}
+async function refreshFromServer() {
   const username = props.player?.username;
   if (!username) return;
   const r = await api.getGenesis(username);
   if (r && r.success) {
     data.value = { ...data.value, ...r.data };
-    myMonsters.value = r.data.monsters || [];
-    myEquips.value = r.data.equips || [];
+    myMonsters.value = (r.data.monsters || []).filter(isMineCreator);
+    myEquips.value   = (r.data.equips   || []).filter(isMineCreator);
+    console.log('[Genesis] myMonsters=', myMonsters.value.length, 'myEquips=', myEquips.value.length,
+      'username=', username, 'name=', props.player?.name);
   }
   const aRes = await api.getAreas();
   if (aRes && aRes.success) {
@@ -597,7 +628,10 @@ async function init() {
     areas.value = [...list].sort((a, b) => a.minLevel - b.minLevel);
   }
 }
-onMounted(init);
+async function init() { return refreshFromServer(); }
+onMounted(refreshFromServer);
+// 切换账号 / props.player 重新指向新对象时，重新拉数据
+watch(() => props.player?.username, (u) => { if (u) init(); });
 
 async function submitMonster() {
   const r = await api.birthMonster(props.player.username, { ...mDraft });
@@ -607,12 +641,8 @@ async function submitMonster() {
     props.player.gold = r.data.player.gold;
     // v2.1：怪物降生后若有装备掉落被挂上 → 装备 commit 到世界
     // 重新拉取数据以更新 equipsMax / equipBudgets / equipsByArea
-    const ref = await api.getGenesis(props.player.username);
-    if (ref && ref.success) {
-      data.value = { ...data.value, ...ref.data };
-      myMonsters.value = ref.data.monsters || [];
-      myEquips.value = ref.data.equips || [];
-    }
+    await refreshFromServer();
+    refreshPlayerNameMap();   // v2.2：刷新名册
     mode.value = 'library';   // 切到"我的造物"看到新怪物 + 装备状态
     toast.success('它已降生。');
   } else {
@@ -629,13 +659,8 @@ async function submitEquip() {
     showOracle(r.data.oracle);
     myEquips.value.push(r.data.equip);
     props.player.gold = r.data.player.gold;
-    // 重新拉一次完整 list（确保 equipsByArea / eBudget 等含最新世界状态）
-    const ref = await api.getGenesis(props.player.username);
-    if (ref && ref.success) {
-      data.value = { ...data.value, ...ref.data };
-      myMonsters.value = ref.data.monsters || [];
-      myEquips.value = ref.data.equips || [];
-    }
+    await refreshFromServer();
+    refreshPlayerNameMap();   // v2.2：刷新名册
     mode.value = 'library';   // 自动切到"我的造物"页签让玩家看到新装备
     toast.success('锻造完成。');
   } else {
@@ -928,6 +953,20 @@ function showOracle(text) {
   letter-spacing: 0.04em;
   font-family: monospace;
 }
+.parch-tab-refresh {
+  width: 38px;
+  height: 38px;
+  align-self: center;
+  margin-left: 0.4rem;
+  background: rgba(28,30,54,0.6);
+  border: 1px solid rgba(212,175,94,0.25);
+  border-radius: 50%;
+  color: var(--accent);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.parch-tab-refresh:hover { background: rgba(212,175,94,0.15); transform: rotate(90deg); }
 
 /* ============ 卷轴卡片 ============ */
 .parchment {
@@ -1448,6 +1487,19 @@ function showOracle(text) {
   letter-spacing: 0.04em;
   margin-left: 0.4rem;
 }
+.lib-creator-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 1px 6px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #5e3a7a, #2c1a3e);
+  border: 1px solid rgba(212,175,94,0.4);
+  border-radius: 4px;
+  color: #d4af5e;
+  vertical-align: middle;
+  letter-spacing: 0.02em;
+}
 .lib-desc {
   font-size: 0.78rem;
   color: rgba(243,232,196,0.7);
@@ -1548,10 +1600,12 @@ function showOracle(text) {
 .oracle-toast {
   position: fixed;
   left: 50%;
-  bottom: 80px;
+  /* 抬到 tabbar 上方 + iOS 安全区 */
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 16px);
   transform: translateX(-50%);
   max-width: 360px;
-  z-index: 200;
+  /* v0.9：高于 fixed tabbar (1000) */
+  z-index: 1100;
   cursor: pointer;
 }
 .oracle-toast-frame {

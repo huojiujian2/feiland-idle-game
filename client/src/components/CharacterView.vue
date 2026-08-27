@@ -12,7 +12,12 @@
       </div>
       <div class="equip-grid">
         <div v-for="slot in slots" :key="slot.key" class="equip-slot"
-          :class="{ filled: player.equipped[slot.key] }"
+          :class="{
+            filled: player.equipped[slot.key],
+            'enchant-1': player.equipped[slot.key] && (player.equipped[slot.key].enchants || []).length === 1,
+            'enchant-2': player.equipped[slot.key] && (player.equipped[slot.key].enchants || []).length === 2,
+            'enchant-3': player.equipped[slot.key] && (player.equipped[slot.key].enchants || []).length === 3
+          }"
           @click="player.equipped[slot.key] ? showEquipDetail(slot.key) : null">
           <div class="slot-icon"><IconBase :name="slot.iconName" :size="22" /></div>
           <div class="slot-label">{{ slot.label }}</div>
@@ -21,8 +26,9 @@
             {{ player.equipped[slot.key].name }}
           </div>
           <div v-else class="slot-empty">空</div>
-          <div v-if="player.equipped[slot.key] && player.equipped[slot.key].enchants && player.equipped[slot.key].enchants.length > 0" class="slot-enchants">
-            ✦{{ player.equipped[slot.key].enchants.length }}
+          <!-- v2.5：右上角改为强化等级角标（如 +1 ~ +15），0 不显示 -->
+          <div v-if="player.equipped[slot.key] && (player.equipped[slot.key].upgradeLevel || 0) > 0" class="slot-upgrade">
+            +{{ player.equipped[slot.key].upgradeLevel }}
           </div>
         </div>
       </div>
@@ -616,11 +622,30 @@ function handleUnequip() {
 .equip-slot { width: 64px; padding: 0.4rem; border: 1px solid rgba(157,140,240,0.1); border-radius: 8px; text-align: center; cursor: pointer; background: rgba(20,22,42,0.5); transition: all var(--duration-normal) var(--ease-out); position: relative; }
 .equip-slot:hover { border-color: var(--accent2); transform: translateY(-2px); }
 .equip-slot.filled { border-color: rgba(157,140,240,0.25); }
+/* v2.5：根据附魔数量染色边框（0=默认紫，1=史诗紫，2=传说金，3=神话橙） */
+.equip-slot.filled.enchant-1 { border-color: #9d8cf0; box-shadow: 0 0 6px rgba(157,140,240,0.35); }
+.equip-slot.filled.enchant-2 { border-color: #d4af5e; box-shadow: 0 0 6px rgba(212,175,94,0.4); }
+.equip-slot.filled.enchant-3 { border-color: #ff6738; box-shadow: 0 0 8px rgba(255,103,56,0.55); }
 .slot-icon { font-size: 1rem; }
 .slot-label { font-size: 0.65rem; color: var(--muted); margin: 0.1rem 0; }
 .slot-item { font-size: 0.68rem; font-weight: 600; word-break: break-all; line-height: 1.2; }
 .slot-empty { font-size: 0.68rem; color: var(--dim); }
-.slot-enchants { position: absolute; top: 2px; right: 2px; font-size: 0.6rem; color: var(--accent); }
+/* v2.5：强化等级角标（右上角） */
+.slot-upgrade {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-family: monospace;
+  color: #fff;
+  background: rgba(20,22,42,0.7);
+  border: 1px solid rgba(212,175,94,0.4);
+  border-radius: 6px;
+  padding: 0 4px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
 
 /* 进度条 */
 .bars-section { display: flex; flex-direction: column; gap: 0.35rem; }

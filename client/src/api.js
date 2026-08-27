@@ -112,6 +112,7 @@ export default {
   },
   reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) },
   getReincarnationInfo(username) { return request(`/player/${username}/reincarnation`) },
+  markReincarnHintShown(username) { return request(`/player/${username}/reincarn-hint-shown`, { method: 'POST' }) },
   upgradeEquipment(username, itemUid) {
     return request(`/player/${username}/equipment/upgrade`, {
       method: 'POST',
@@ -141,6 +142,8 @@ export default {
   birthMonster(username, draft) { return request(`/player/${username}/genesis/monster`, { method: 'POST', body: JSON.stringify(draft) }) },
   forgeEquip(username, draft) { return request(`/player/${username}/genesis/equip`, { method: 'POST', body: JSON.stringify(draft) }) },
   deleteGenesis(username, kind, id) { return request(`/player/${username}/genesis/delete`, { method: 'POST', body: JSON.stringify({ kind, id }) }) },
+  // 全服玩家名册（username → name 映射，用于显示"X造"）
+  getPlayerNames() { return request('/players/names') },
 
   // 战斗策略
   setStrategy(username, strategy) { return request(`/player/${username}/strategy`, { method: 'POST', body: JSON.stringify({ strategy }) }) },

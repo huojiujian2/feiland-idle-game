@@ -4,7 +4,13 @@
       <div class="card section">
         <div class="section-header">
           <span><IconBase name="sword" :size="14" class="section-icon" />装备 ({{ filteredEquips.length }})</span>
-          <button class="btn btn-sm bulk-sell-btn" @click="openBulkSell">批量出售</button>
+          <div class="section-actions">
+            <button class="btn btn-sm bulk-merge-btn" :disabled="mergeableGroups.length === 0" @click="openBulkMerge">
+              <IconBase name="sparkle" :size="12" /> 一键合成
+              <span v-if="mergeableGroups.length > 0" class="bulk-merge-badge">{{ mergeableGroups.length }}</span>
+            </button>
+            <button class="btn btn-sm bulk-sell-btn" @click="openBulkSell">批量出售</button>
+          </div>
         </div>
         <div class="search-bar">
           <IconBase name="scroll" :size="12" class="search-icon" />
@@ -91,25 +97,13 @@
             :class="{ 'btn-disabled': !canUpgrade() }"
             @click="handleUpgrade">强化 +{{ (detailItem.upgradeLevel || 0) + 1 }}</button>
         </div>
-        <!-- 合成：加入合成槽 -->
+        <!-- v2.4 移出"加入合成槽"按钮——合成入口已搬到顶部"批量出售"旁边的"一键合成" -->
+        <!-- 重置附魔（v2.4：改名 + 改后端语义，原"重铸词条"改成"清空 enchants 再随机洗一组"） -->
         <div class="forge-section">
-          <div class="forge-header">合成（3 件同品质 → 1 件更高品质）</div>
-          <button class="btn btn-sm"
-            :class="{ 'btn-primary': !inMergeSlots(detailItem.uid), 'btn-disabled': inMergeSlots(detailItem.uid) || (detailItem.upgradeLevel || 0) > 0 }"
-            @click="toggleMergeSlot(detailItem.uid)">
-            {{ inMergeSlots(detailItem.uid) ? '已加入合成槽' : '加入合成槽' }}
-          </button>
-          <button class="btn btn-sm btn-primary" style="margin-left: 0.3rem;"
-            :class="{ 'btn-disabled': mergeSlots.length !== 3 }"
-            @click="handleMerge">立即合成（已选 {{ mergeSlots.length }}/3）</button>
-          <div v-if="(detailItem.upgradeLevel || 0) > 0" class="forge-tip">⚠ 已强化装备合成后强化等级会丢失</div>
-        </div>
-        <!-- 重铸 -->
-        <div class="forge-section">
-          <div class="forge-header">重铸词条</div>
-          <div class="forge-cost">消耗 1000 金币，随机生成新的被动词条</div>
+          <div class="forge-header">重置附魔</div>
+          <div class="forge-cost">消耗 1000 金币，重新附魔</div>
           <button class="btn btn-sm" :class="{ 'btn-disabled': player.gold < 1000 }"
-            @click="handleReforge">消耗1000金 重铸</button>
+            @click="handleReforge">消耗1000金 重置附魔</button>
         </div>
         <div v-if="availableEnchants.length > 0 && (!detailItem.enchants || detailItem.enchants.length < 3)" class="enchant-section">
           <div class="enchant-header">可用附魔</div>
@@ -194,6 +188,38 @@
         </div>
       </div>
     </div>
+
+    <!-- v2.4 一键合成弹窗：列出所有可合成组，让玩家确认 -->
+    <div v-if="bulkMergeVisible" class="modal-overlay" @click.self="bulkMergeVisible = false">
+      <div class="modal-box">
+        <div class="modal-title">
+          <IconBase name="sparkle" :size="16" class="btn-icon icon-accent2" />一键合成
+        </div>
+        <div class="bulk-hint">
+          按 <strong>同品质 + 同槽位</strong> 自动分组，每 3 件可合 1 件更高品质。<br>
+          <span style="color:#d4af5e;">⚠</span> 已穿戴 / 有附魔 的装备会被跳过；强化等级不保留。
+        </div>
+        <div v-if="mergeableGroups.length === 0" class="empty-hint">暂无可合成的组合（背包中没有同品质×3 的未装备无附魔装备）</div>
+        <div v-else class="bulk-merge-list">
+          <div v-for="(g, i) in mergeableGroups" :key="i" class="bulk-merge-row" :class="{ active: bulkMergeSelected.has(i) }" @click="toggleBulkMergeRow(i)">
+            <span class="bulk-merge-check">{{ bulkMergeSelected.has(i) ? '✓' : '☐' }}</span>
+            <span class="bulk-merge-quality" :style="{ color: qualityColors[g.quality] }">{{ qualityLabels[g.quality] }}</span>
+            <span class="bulk-merge-slot">{{ slotLabels[g.slot] }}</span>
+            <span class="bulk-merge-arrow">→</span>
+            <span class="bulk-merge-next" :style="{ color: qualityColors[g.nextQuality] }">{{ qualityLabels[g.nextQuality] }}</span>
+            <span class="bulk-merge-count">×{{ g.items.length }} 件</span>
+          </div>
+        </div>
+        <div class="modal-row"><span class="ml">将合成</span><span class="mv">{{ bulkMergeSelectedCount }} 次</span></div>
+        <div class="modal-row"><span class="ml">消耗装备</span><span class="mv">{{ bulkMergeSelectedCount * 3 }} 件</span></div>
+        <div class="modal-actions">
+          <button class="btn btn-primary btn-sm"
+            :class="{ 'btn-disabled': bulkMergeSelectedCount === 0 }"
+            @click="confirmBulkMerge">确认合成 {{ bulkMergeSelectedCount }} 次</button>
+          <button class="btn btn-sm" @click="bulkMergeVisible = false">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -212,8 +238,6 @@ const useQty = ref({})
 // 搜索关键词
 const equipSearch = ref('')
 const matSearch = ref('')
-// 合成槽（最多 3 件同品质装备）
-const mergeSlots = ref([])
 // 按等级批量出售弹窗
 const bulkSellVisible = ref(false)
 const bulkSellMaxLevel = ref(30)
@@ -259,31 +283,12 @@ async function handleUpgrade() {
     } else toast.error(res.message || '强化失败')
   } catch (e) { toast.error('强化失败：' + e.message) }
 }
-function inMergeSlots(uid) { return mergeSlots.value.includes(uid) }
-function toggleMergeSlot(uid) {
-  if (mergeSlots.value.includes(uid)) {
-    mergeSlots.value = mergeSlots.value.filter(x => x !== uid)
-  } else {
-    if (mergeSlots.value.length >= 3) return
-    mergeSlots.value = [...mergeSlots.value, uid]
-  }
-}
-async function handleMerge() {
-  if (mergeSlots.value.length !== 3) return toast.warn('需选择 3 件装备')
-  if (!await modalConfirm('3 件装备将消失，合成 1 件更高品质装备（强化等级会丢失）。继续？')) return
-  try {
-    const res = await api.mergeEquipment(props.player.username, mergeSlots.value)
-    if (res.success) {
-      emit('refresh', res.data)
-      toast.success(`合成成功！获得「${res.newItem.name}」`)
-      mergeSlots.value = []
-      detailItem.value = null
-    } else toast.error(res.message || '合成失败')
-  } catch (e) { toast.error('合成失败：' + e.message) }
-}
+function inMergeSlots(uid) { return false /* v2.4：合成 UI 已迁移到顶部"一键合成"弹窗 */ }
+// v2.4：旧的"逐件选 + 立即合成"流程已废弃，全部走"一键合成"弹窗
+//   保留 inMergeSlots 是为了兼容可能引用它的模板（如未来回滚），返回 false 表示无可用合成槽
 async function handleReforge() {
   if (!detailItem.value) return
-  if (!await modalConfirm('消耗 1000 金币重洗这件装备的词条。继续？')) return
+  if (!await modalConfirm('消耗 1000 金币清空这件装备的所有附魔（清空后需自己重新附魔，最多 3 槽）。继续？')) return
   try {
     const res = await api.reforgeEquipment(props.player.username, detailItem.value.uid)
     if (res.success) {
@@ -291,9 +296,103 @@ async function handleReforge() {
       detailItem.value = res.data.equips.find(e => e.uid === detailItem.value.uid)
         || Object.values(res.data.equipped || {}).find(e => e && e.uid === detailItem.value.uid)
         || detailItem.value
-      toast.success('重铸完成！')
-    } else toast.error(res.message || '重铸失败')
-  } catch (e) { toast.error('重铸失败：' + e.message) }
+      toast.success('附魔已清空，请重新附魔')
+    } else toast.error(res.message || '重置失败')
+  } catch (e) { toast.error('重置失败：' + e.message) }
+}
+
+// ========== v2.4 一键合成 ==========
+// 品质 → 下一阶品质（与后端 QUALITY_NEXT 对齐）
+const QUALITY_NEXT_FRONT = { normal: 'fine', fine: 'epic', epic: 'legend', legend: 'mythic', mythic: null };
+// 已被穿戴的 uid 集合（用于过滤）
+const equippedUidSet = computed(() => {
+  const s = new Set();
+  for (const slot of ['weapon', 'armor', 'accessory']) {
+    const e = props.player?.equipped?.[slot];
+    if (e && e.uid) s.add(e.uid);
+  }
+  return s;
+});
+// 把背包装备按 [quality, slot] 分桶，每桶满 3 个就能合成 1 次
+const mergeableGroups = computed(() => {
+  const buckets = new Map(); // key: `${quality}|${slot}` -> [item1, item2, ...]
+  for (const item of (props.player?.equips || [])) {
+    if (!item || !item.quality || !item.slot) continue;
+    if (equippedUidSet.value.has(item.uid)) continue;          // 已穿戴跳过
+    if (item.enchants && item.enchants.length > 0) continue;    // 有附魔跳过
+    if (!QUALITY_NEXT_FRONT[item.quality]) continue;            // 已最高品质跳过
+    const key = `${item.quality}|${item.slot}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(item);
+  }
+  const out = [];
+  for (const [key, items] of buckets) {
+    if (items.length < 3) continue;
+    const [quality, slot] = key.split('|');
+    const nextQuality = QUALITY_NEXT_FRONT[quality];
+    // 3 件一组：每 3 件 1 次合成，剩余 < 3 件的忽略
+    const groups = Math.floor(items.length / 3);
+    // 取前面 groups*3 件作为本次合成目标（按背包顺序）
+    const useItems = items.slice(0, groups * 3);
+    out.push({ quality, slot, nextQuality, items: useItems, count: groups });
+  }
+  // 按"下一阶品质从低到高"排序，优先展示低阶（让玩家先看到"普通→精良"再"精良→史诗"）
+  out.sort((a, b) => {
+    const order = ['fine', 'epic', 'legend', 'mythic'];
+    return order.indexOf(a.nextQuality) - order.indexOf(b.nextQuality);
+  });
+  return out;
+});
+const bulkMergeVisible = ref(false);
+const bulkMergeSelected = ref(new Set());
+const bulkMergeSelectedCount = computed(() => {
+  let sum = 0;
+  for (const idx of bulkMergeSelected.value) {
+    sum += mergeableGroups.value[idx]?.count || 0;
+  }
+  return sum;
+});
+function openBulkMerge() {
+  bulkMergeSelected.value = new Set(mergeableGroups.value.map((_, i) => i)); // 默认全选
+  bulkMergeVisible.value = true;
+}
+function toggleBulkMergeRow(i) {
+  const s = new Set(bulkMergeSelected.value);
+  if (s.has(i)) s.delete(i); else s.add(i);
+  bulkMergeSelected.value = s;
+}
+async function confirmBulkMerge() {
+  if (bulkMergeSelectedCount.value === 0) return;
+  const groups = [...bulkMergeSelected.value].map(i => mergeableGroups.value[i]);
+  const totalMerges = bulkMergeSelectedCount.value;
+  if (!await modalConfirm(`确认执行 ${totalMerges} 次合成？共消耗 ${totalMerges * 3} 件装备，得到 ${totalMerges} 件更高品质装备。\n（强化等级不保留，已穿戴/有附魔的装备已自动跳过）`)) return;
+  let lastPlayer = null;
+  let successCount = 0;
+  let failCount = 0;
+  const failed = [];
+  for (const g of groups) {
+    for (let k = 0; k < g.count; k++) {
+      const slice = g.items.slice(k * 3, k * 3 + 3);
+      if (slice.length < 3) break;
+      try {
+        const res = await api.mergeEquipment(props.player.username, slice.map(i => i.uid));
+        if (res.success) {
+          successCount++;
+          lastPlayer = res.data;
+        } else {
+          failCount++;
+          failed.push(res.message || '合成失败');
+        }
+      } catch (e) {
+        failCount++;
+        failed.push(e.message || '网络错误');
+      }
+    }
+  }
+  if (lastPlayer) emit('refresh', lastPlayer);
+  if (successCount > 0) toast.success(`合成完成：${successCount} 次成功${failCount > 0 ? `，${failCount} 次失败` : ''}`);
+  else toast.error(failed[0] || '合成失败');
+  bulkMergeVisible.value = false;
 }
 
 const equipPage = ref(1)
@@ -504,7 +603,7 @@ function handleEnchant(recipeId) {
 .pager-info { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
 
 /* 通用弹窗 */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 1rem; }
 .modal-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.2rem; max-width: 320px; width: 100%; max-height: 85vh; overflow-y: auto; }
 .modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
 .modal-row { display: flex; justify-content: space-between; align-items: center; padding: 0.2rem 0; font-size: 0.82rem; }
@@ -534,7 +633,7 @@ function handleEnchant(recipeId) {
 .quick-btn { font-size: 0.62rem !important; padding: 0.1rem 0.35rem !important; color: var(--accent2) !important; border-color: rgba(157,140,240,0.2) !important; }
 
 /* 装备详情弹窗 */
-.equip-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
+.equip-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 1rem; }
 .equip-detail-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.2rem; max-width: 340px; width: 100%; max-height: 85vh; overflow-y: auto; }
 .detail-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.2rem; }
 .detail-quality { font-size: 0.75rem; margin-bottom: 0.6rem; color: var(--muted); }
@@ -559,6 +658,32 @@ function handleEnchant(recipeId) {
 
 /* 批量出售 */
 .bulk-sell-btn { padding: 0.2rem 0.6rem; font-size: 0.7rem; color: var(--accent2); border-color: rgba(157,140,240,0.2); }
+.section-actions { display: flex; gap: 0.3rem; align-items: center; }
+.bulk-merge-btn { padding: 0.2rem 0.55rem; font-size: 0.7rem; color: #d4af5e; border-color: rgba(212,175,94,0.3); display: inline-flex; align-items: center; gap: 0.25rem; }
+.bulk-merge-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.bulk-merge-badge { background: rgba(212,175,94,0.25); color: #d4af5e; padding: 0 5px; border-radius: 8px; font-size: 0.62rem; font-weight: 700; }
+.bulk-merge-list { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.4rem 0; max-height: 50vh; overflow-y: auto; }
+.bulk-merge-row {
+  display: grid;
+  grid-template-columns: 1.2rem auto 1fr auto 1fr auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  background: rgba(20,22,42,0.55);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.bulk-merge-row:hover { border-color: rgba(212,175,94,0.4); }
+.bulk-merge-row.active { background: rgba(212,175,94,0.12); border-color: var(--accent); }
+.bulk-merge-check { font-size: 0.95rem; color: var(--accent); text-align: center; }
+.bulk-merge-quality { font-weight: 700; font-size: 0.85rem; }
+.bulk-merge-slot { color: var(--muted); font-size: 0.75rem; }
+.bulk-merge-arrow { color: var(--muted); }
+.bulk-merge-next { font-weight: 700; font-size: 0.85rem; }
+.bulk-merge-count { color: var(--accent2); font-size: 0.75rem; font-family: monospace; }
 .bulk-hint { font-size: 0.72rem; color: var(--muted); margin: 0.4rem 0; line-height: 1.5; }
 .bulk-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; margin: 0.4rem 0; }
 .bulk-opt { padding: 0.45rem 0.3rem; font-size: 0.78rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-family: inherit; transition: all 0.15s; }

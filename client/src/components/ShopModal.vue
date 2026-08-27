@@ -37,16 +37,19 @@
       <div class="sd-desc">{{ detail.desc }}</div>
       <div v-if="detail.locked" class="sd-locked-tip">🔒 需要 Lv.{{ detail.requiredLevel }} 解锁【{{ detail.sourceMap }}】后购买</div>
       <div v-else-if="detail.type === 'consumable' || detail.type === 'material'" class="sd-section">
-        <div class="sd-section-title">购买数量</div>
+        <div class="sd-section-title">购买数量 <span class="qty-cap-hint">（最多 {{ maxBuyQty(detail) }} 件）</span></div>
         <div class="qty-controls">
-          <button class="qty-btn" @click="changeBuyQty(detail.id, -1)">−</button>
+          <button class="btn btn-sm quick-btn quick-btn--big" :disabled="!canSub10(detail)" v-bind="longPressSub10">-10</button>
+          <button class="qty-btn qty-btn--big" v-bind="longPressMinus">−</button>
           <span class="qty-val">{{ buyQty[detail.id] || 1 }}</span>
-          <button class="qty-btn" @click="changeBuyQty(detail.id, 1)">+</button>
-          <button class="btn btn-sm quick-btn" @click="setBuyQty(detail.id, 10)">+10</button>
+          <button class="qty-btn qty-btn--big" v-bind="longPressPlus">+</button>
+          <button class="btn btn-sm quick-btn quick-btn--big" :disabled="!canAdd10(detail)" v-bind="longPressAdd10">+10</button>
+          <button class="btn btn-sm quick-btn quick-btn--big" :disabled="!canAddMax(detail)" @click="addMax(detail)">max</button>
         </div>
         <div class="sd-total">合计: 💰{{ detail.price * (buyQty[detail.id] || 1) }}</div>
         <button class="btn btn-primary btn-sm sd-buy-btn"
           :class="{ 'btn-disabled': playerGold < detail.price * (buyQty[detail.id] || 1) }"
+          :disabled="playerGold < detail.price * (buyQty[detail.id] || 1)"
           @click="$emit('buy', detail.id, buyQty[detail.id] || 1); detail = null">购买</button>
       </div>
       <div v-else class="sd-actions">
@@ -63,8 +66,9 @@
 // @file components/ShopModal
 // @module shop-modal
 // @description 主界面商店（底部弹出 Action Sheet + 商品详情嵌套弹窗）
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import IconBase from './icons/IconBase.vue';
+import { useLongPress } from '../composables/useLongPress.js';
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -80,6 +84,85 @@ const page = ref(1);
 
 const totalPages = computed(() => Math.max(1, Math.ceil((props.items?.length || 0) / props.pageSize)));
 const pagedItems = computed(() => (props.items || []).slice((page.value - 1) * props.pageSize, page.value * props.pageSize));
+
+// v0.9：根据当前金币和单价，计算当前商品最大可买数量（地板为 1）
+function maxBuyQty(item) {
+  if (!item || !item.price || item.price <= 0) return 1;
+  return Math.max(1, Math.floor(props.playerGold / item.price));
+}
+
+// v0.9：+/- 上限保护 — 单次 delta 也不能超出 [1, maxBuyQty] 区间
+function changeBuyQty(id, delta) {
+  const item = props.items.find(it => it.id === id);
+  if (!item) return;
+  const cap = maxBuyQty(item);
+  const cur = buyQty.value[id] || 1;
+  const next = Math.max(1, Math.min(cap, cur + delta));
+  buyQty.value = { ...buyQty.value, [id]: next };
+}
+
+// v0.9：+10 也走金币上限保护
+function setBuyQty(id, n) {
+  const item = props.items.find(it => it.id === id);
+  if (!item) return;
+  const cap = maxBuyQty(item);
+  const cur = buyQty.value[id] || 1;
+  const next = Math.max(1, Math.min(cap, cur + n));
+  buyQty.value = { ...buyQty.value, [id]: next };
+}
+
+// v0.9：+10 按钮在已满时禁用
+function canAdd10(item) {
+  const cap = maxBuyQty(item);
+  const cur = buyQty.value[item.id] || 1;
+  return cur < cap;
+}
+
+// v2.3：-10 按钮在不够减时禁用（cur 至少要 > 1 才允许减 10）
+function canSub10(item) {
+  const cur = buyQty.value[item.id] || 1;
+  return cur > 1;
+}
+
+// v2.3：+max 按钮在已满时禁用
+function canAddMax(item) {
+  const cap = maxBuyQty(item);
+  const cur = buyQty.value[item.id] || 1;
+  return cur < cap;
+}
+
+// v2.3：+max 直接拉满到金币上限
+function addMax(item) {
+  const cap = maxBuyQty(item);
+  buyQty.value = { ...buyQty.value, [item.id]: Math.max(1, cap) };
+}
+
+// v0.9：长按 +/- 三段式加速（与属性点同款体验）
+// 注意：每次 detail 变化时重新创建 hook 实例（旧的会被 onBeforeUnmount 清理）
+const EMPTY_HANDLERS = { onPointerdown: () => {}, onPointerup: () => {}, onPointerleave: () => {}, onPointercancel: () => {}, onKeydown: () => {}, onKeyup: () => {}, onBlur: () => {}, onTouchstart: () => {}, onTouchend: () => {}, onTouchcancel: () => {} };
+const longPressPlus = computed(() => {
+  if (!detail.value) return EMPTY_HANDLERS;
+  return useLongPress((dir) => changeBuyQty(detail.value.id, dir)).bindHandlers('+');
+});
+const longPressMinus = computed(() => {
+  if (!detail.value) return EMPTY_HANDLERS;
+  return useLongPress((dir) => changeBuyQty(detail.value.id, dir)).bindHandlers('−');
+});
+// v0.9.1：+10 按钮也支持长按——每 tick 累加 10（被 maxBuyQty 自动截断）
+const longPressAdd10 = computed(() => {
+  if (!detail.value) return EMPTY_HANDLERS;
+  return useLongPress(() => setBuyQty(detail.value.id, 10)).bindHandlers('+10');
+});
+// v2.3：-10 按钮长按——每 tick 减 10（下限 1）
+const longPressSub10 = computed(() => {
+  if (!detail.value) return EMPTY_HANDLERS;
+  return useLongPress(() => setBuyQty(detail.value.id, -10)).bindHandlers('-10');
+});
+
+// v0.9：打开新商品详情时，重置数量为 1（避免上次遗留的数量造成困惑）
+watch(() => detail.value?.id, (newId) => {
+  if (newId) buyQty.value = { ...buyQty.value, [newId]: 1 };
+});
 
 function getShopIcon(item) {
   if (item.type === 'consumable') {
@@ -106,15 +189,10 @@ function getTypeName(item) {
   if (item.type === 'material') return '材料';
   return '装备';
 }
-function changeBuyQty(id, delta) {
-  const cur = buyQty.value[id] || 1;
-  buyQty.value = { ...buyQty.value, [id]: Math.max(1, cur + delta) };
-}
-function setBuyQty(id, n) { const cur = buyQty.value[id] || 1; buyQty.value = { ...buyQty.value, [id]: cur + n }; }
 </script>
 
 <style scoped>
-.shop-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 400; display: flex; align-items: flex-end; justify-content: center; }
+.shop-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1200; display: flex; align-items: flex-end; justify-content: center; padding-bottom: var(--safe-bottom, 0px); }
 .shop-sheet { width: 100%; max-width: 560px; max-height: 70vh; background: var(--bg2); border-top: 1px solid var(--rule); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; padding-bottom: 1rem; }
 .sheet-header { display: flex; align-items: center; padding: 0.8rem 1rem; border-bottom: 1px solid var(--rule); gap: 0.5rem; }
 .sheet-title { flex: 1; display: flex; align-items: center; gap: 0.4rem; font-weight: 700; font-size: 1rem; color: var(--text); }
@@ -138,7 +216,7 @@ function setBuyQty(id, n) { const cur = buyQty.value[id] || 1; buyQty.value = { 
 .sheet-enter-active, .sheet-leave-active { transition: all 0.3s ease; }
 .sheet-enter-from, .sheet-leave-to { transform: translateY(100%); }
 
-.shop-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 410; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.shop-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1210; display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .shop-detail-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.2rem; max-width: 360px; width: 100%; }
 .sd-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.6rem; }
 .sd-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.82rem; }
@@ -148,10 +226,33 @@ function setBuyQty(id, n) { const cur = buyQty.value[id] || 1; buyQty.value = { 
 .sd-locked-tip { padding: 0.5rem; margin-top: 0.3rem; background: rgba(212,175,94,0.08); border: 1px dashed var(--rule); border-radius: 6px; color: var(--muted); font-size: 0.78rem; text-align: center; }
 .sd-section { padding-top: 0.5rem; }
 .sd-section-title { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; }
-.qty-controls { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.4rem; }
-.qty-btn { width: 28px; height: 28px; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 4px; color: var(--text); cursor: pointer; font-family: inherit; }
-.qty-val { min-width: 2rem; text-align: center; font-family: monospace; font-weight: 700; }
-.quick-btn { padding: 0.2rem 0.5rem; font-size: 0.7rem; }
+.qty-controls { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.5rem; flex-wrap: nowrap; }
+.qty-controls .quick-btn { flex: 1 1 0; min-width: 0; padding: 0.3rem 0.35rem; }
+.qty-controls .qty-val { flex: 0 0 auto; min-width: 2.4rem; order: 0; }
+.qty-controls .qty-btn { order: 0; }
+.qty-btn {
+  width: 32px; height: 32px;
+  background: rgba(20,22,42,0.6);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;          /* v0.9：防止长按触发浏览器菜单/缩放 */
+  transition: background 0.12s, transform 0.1s;
+}
+.qty-btn:active { background: rgba(157,140,240,0.25); transform: scale(0.94); }
+.qty-btn.qty-btn--big { width: 34px; height: 34px; font-size: 1.2rem; font-weight: 700; flex: 0 0 auto; }
+.qty-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.qty-val { min-width: 2.4rem; text-align: center; font-family: monospace; font-weight: 700; font-size: 1rem; }
+.quick-btn { padding: 0.3rem 0.6rem; font-size: 0.72rem; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
+.quick-btn--big { padding: 0.45rem 0.7rem; font-size: 0.85rem; font-weight: 600; min-height: 38px; }
+.quick-btn:active:not(:disabled) { background: rgba(157,140,240,0.25); transform: scale(0.96); }
+.quick-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.qty-cap-hint { color: var(--muted, #888); font-size: 0.7rem; font-weight: normal; margin-left: 0.3rem; }
 .sd-total { font-size: 0.85rem; color: var(--accent); font-weight: 700; font-family: monospace; margin: 0.3rem 0; }
 .sd-buy-btn, .sd-actions .btn { width: 100%; padding: 0.5rem; margin-top: 0.3rem; }
 .sd-close-btn { width: 100%; padding: 0.4rem; margin-top: 0.4rem; }

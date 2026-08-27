@@ -74,7 +74,7 @@ onMounted(() => nextTick(scrollRoundsToBottom));
 </script>
 
 <style scoped>
-.battle-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.battle-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1100; display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .battle-modal { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; max-width: 460px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; }
 .battle-result-banner { padding: 0.8rem; text-align: center; font-size: 1.4rem; font-weight: 800; border-radius: 12px 12px 0 0; }
 .battle-result-banner.win { background: linear-gradient(135deg, var(--success), #3d8c4d); color: white; }

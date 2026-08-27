@@ -84,6 +84,7 @@ function buildCodexData(store) {
           sources: [{ area: e.areaId, areaName: AREAS[e.areaId]?.name || e.areaId, rate: 0 }],
           shopPrice: null,
           creator: e.creator,
+          creatorUsername: e.creatorUsername,   // v2.2：方便前端解析真名
           customDesc: e.desc,
         });
       }
@@ -104,6 +105,7 @@ function buildCodexData(store) {
         }).filter(Boolean),
         isBoss: false,
         creator: m.creator,
+        creatorUsername: m.creatorUsername,    // v2.2：方便前端解析真名
         customDesc: m.desc,
       });
     }

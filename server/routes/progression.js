@@ -70,6 +70,15 @@ function registerProgressionRoutes(app, store) {
     savePlayer(store, r.player);
     res.json({ success: true, data: getPlayerView(r.player), earnedPoints: result.earnedPoints, reincarnation: result.reincarnation });
   });
+
+  // v0.9：标记"满百级转生提醒"已弹出（避免每次启动都弹）
+  app.post('/api/player/:username/reincarn-hint-shown', (req, res) => {
+    const r = loadPlayer(store, req.params.username);
+    if (r.error) return fail(res, r.error);
+    r.player.reincarnHintShown = true;
+    savePlayer(store, r.player);
+    ok(res, getPlayerView(r.player));
+  });
   app.get('/api/player/:username/reincarnation', (req, res) => {
     const r = loadPlayer(store, req.params.username);
     if (r.error) return fail(res, r.error);

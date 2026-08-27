@@ -33,7 +33,7 @@
         <div class="item-icon" :class="eq.quality">
           <IconBase :name="equipIcons[eq.slot]" :size="28" />
         </div>
-        <div class="item-name" :style="{ color: qualityColors[eq.quality] }">{{ eq.name }}<span v-if="eq.creator" class="creator-tag" :title="`造物主：${eq.creator}`">自造</span></div>
+        <div class="item-name" :style="{ color: qualityColors[eq.quality] }">{{ eq.name }}<span v-if="eq.creator || eq.creatorUsername" class="creator-tag" :title="`造物主：${displayCreator(eq)}`">{{ displayCreator(eq) }}造</span></div>
         <div class="item-quality" :style="{ color: qualityColors[eq.quality] }">{{ qualityLabels[eq.quality] }}</div>
       </div>
     </div>
@@ -55,7 +55,7 @@
       <div v-for="mo in pagedItems" :key="mo.name + mo.area + (mo.creator || '')" class="codex-item"
         @click="selectItem(mo)">
         <div class="item-icon mon-icon"><IconBase name="skull" :size="28" /></div>
-        <div class="item-name">{{ mo.name }}<span v-if="mo.creator" class="creator-tag" :title="`造物主：${mo.creator}`">自造</span></div>
+        <div class="item-name">{{ mo.name }}<span v-if="mo.creator || mo.creatorUsername" class="creator-tag" :title="`造物主：${displayCreator(mo)}`">{{ displayCreator(mo) }}造</span></div>
         <div class="item-area">{{ mo.areaName }}</div>
       </div>
     </div>
@@ -91,7 +91,7 @@
 
         <!-- 装备详情 -->
         <template v-if="activeCat === 'equip'">
-          <div class="detail-title" :style="{ color: qualityColors[selected.quality] }">{{ equipIcons[selected.slot] }} {{ selected.name }}<span v-if="selected.creator" class="creator-tag" :title="`造物主：${selected.creator}`">自造</span></div>
+          <div class="detail-title" :style="{ color: qualityColors[selected.quality] }">{{ equipIcons[selected.slot] }} {{ selected.name }}<span v-if="selected.creator || selected.creatorUsername" class="creator-tag" :title="`造物主：${displayCreator(selected)}`">{{ displayCreator(selected) }}造</span></div>
           <div class="detail-row" v-if="selected.customDesc"><span class="dl">神谕</span><span class="dv">{{ selected.customDesc }}</span></div>
           <div class="detail-row"><span class="dl">品质</span><span class="dv" :style="{ color: qualityColors[selected.quality] }">{{ qualityLabels[selected.quality] }}</span></div>
           <div class="detail-row"><span class="dl">类型</span><span class="dv">{{ slotLabels[selected.slot] }}</span></div>
@@ -125,7 +125,7 @@
 
         <!-- 怪物详情 -->
         <template v-if="activeCat === 'monster'">
-          <div class="detail-title">👹 {{ selected.name }}<span v-if="selected.creator" class="creator-tag" :title="`造物主：${selected.creator}`">自造</span></div>
+          <div class="detail-title">👹 {{ selected.name }}<span v-if="selected.creator || selected.creatorUsername" class="creator-tag" :title="`造物主：${displayCreator(selected)}`">{{ displayCreator(selected) }}造</span></div>
           <div class="detail-row" v-if="selected.customDesc"><span class="dl">神谕</span><span class="dv">{{ selected.customDesc }}</span></div>
           <div class="detail-row"><span class="dl">出没地点</span><span class="dv">{{ selected.areaName }} (Lv.{{ selected.areaLevel }}+)</span></div>
           <div class="detail-section-title">属性</div>
@@ -154,9 +154,26 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, inject } from 'vue'
 import IconBase from './icons/IconBase.vue'
 import api from '../api.js'
+
+const props = defineProps({ player: Object })
+
+// v2.2：从 App 注入全服玩家名册
+const playerNameMap = inject('playerNameMap', ref({}))
+const refreshPlayerNameMap = inject('refreshPlayerNameMap', () => {})
+
+// v2.2：把账号解析成"游戏内的真名"展示（自己造的优先显示真名；别人的查全服名册）
+function displayCreator(item) {
+  const owner = item?.creatorUsername || item?.creator
+  if (!owner) return ''
+  if (owner === props.player?.username) {
+    return props.player?.name || owner
+  }
+  const fromMap = playerNameMap.value && playerNameMap.value[owner]
+  return (fromMap && fromMap.name) || owner
+}
 
 const activeCat = ref('material')
 const selected = ref(null)
@@ -242,6 +259,8 @@ onMounted(async () => {
   if (res.success) {
     codexData.value = res.data
   }
+  // v2.2：保险起见，进入图鉴页时也拉一次名册（如果用户先开图鉴后登录）
+  if (Object.keys(playerNameMap.value || {}).length === 0) refreshPlayerNameMap()
 })
 </script>
 
@@ -304,7 +323,7 @@ onMounted(async () => {
 .item-area { font-size: 0.6rem; color: var(--dim); }
 
 /* 详情弹窗 */
-.detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
+.detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 1rem; }
 .detail-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.2rem; max-width: 340px; width: 100%; max-height: 85vh; overflow-y: auto; }
 .detail-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
 .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 0.2rem 0; font-size: 0.82rem; }

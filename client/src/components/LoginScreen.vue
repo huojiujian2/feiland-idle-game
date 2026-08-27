@@ -86,6 +86,13 @@
                 <span class="remember-text">铭记此身</span>
               </label>
 
+              <!-- v0.9：登录失败 inline 错误提示（点击右侧 × 可清掉） -->
+              <p v-if="loginError" class="login-error-msg" role="alert">
+                <span class="login-error-icon">⚠</span>
+                <span class="login-error-text">{{ loginError }}</span>
+                <button type="button" class="login-error-close" @click="loginError = ''" aria-label="关闭错误">×</button>
+              </p>
+
               <div class="parchment-actions">
                 <button class="btn-rune btn-rune--primary" @click="handleLogin">
                   <span class="btn-rune-flame"></span>
@@ -235,6 +242,13 @@
                   <span class="btn-rune-text">↩ 返回归途</span>
                 </button>
               </div>
+
+              <!-- v0.9：注册失败 inline 错误（与登录共用 .login-error-msg 样式） -->
+              <p v-if="registerError" class="login-error-msg" role="alert">
+                <span class="login-error-icon">⚠</span>
+                <span class="login-error-text">{{ registerError }}</span>
+                <button type="button" class="login-error-close" @click="registerError = ''" aria-label="关闭错误">×</button>
+              </p>
             </div>
           </div>
 
@@ -403,8 +417,43 @@ const loginStep = ref('login'); // 'login' | 'register' | 'create' | 'created'
 const usernameInput = ref('');
 const passwordInput = ref('');
 const passwordConfirm = ref('');
+
+// v2.5：浏览器记忆——localStorage 持久化账号/密码，"铭记此身"勾选即生效
+//   仅用于自动填充，不做任何加密（前端明文存储是已知的妥协，需要时再升级到 sessionStorage 或加盐 hash）
+const REMEMBER_KEY = 'feiland_remember_v1';
+function loadRemembered() {
+  try {
+    const raw = localStorage.getItem(REMEMBER_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data && typeof data.username === 'string' && typeof data.password === 'string') {
+      return data;
+    }
+  } catch (_) { /* 忽略解析失败 */ }
+  return null;
+}
+function saveRemembered(username, password) {
+  try {
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username, password, savedAt: Date.now() }));
+  } catch (_) { /* 隐私模式 / 配额满时静默 */ }
+}
+function clearRemembered() {
+  try { localStorage.removeItem(REMEMBER_KEY); } catch (_) {}
+}
+// 组件挂载时：自动填上次"铭记此身"保存的账号密码，勾选框自动勾上
+const _remembered = loadRemembered();
+if (_remembered) {
+  usernameInput.value = _remembered.username;
+  passwordInput.value = _remembered.password;
+}
+// v0.9：登录失败的 inline 错误提示（卷轴味文案）
+const loginError = ref('');
+const registerError = ref('');
+// 用户开始重新输入时自动清掉错误（避免一直挂在那）
+watch([usernameInput, passwordInput], () => { if (loginError.value) loginError.value = ''; });
+watch([usernameInput, passwordInput, passwordConfirm], () => { if (registerError.value) registerError.value = ''; });
 const charNameInput = ref('');
-const rememberMe = ref(true);
+const rememberMe = ref(!!_remembered);
 const agreedToLaws = ref(false);
 const showPwd = ref(false);
 const focusField = ref('');
@@ -533,9 +582,15 @@ function handleLogin() {
   if (!usernameInput.value || !passwordInput.value) {
     return toast.warn('请输入真名与秘钥');
   }
+  // v2.5：按"铭记此身"勾选决定是否持久化
+  if (rememberMe.value) {
+    saveRemembered(usernameInput.value, passwordInput.value);
+  } else {
+    clearRemembered();
+  }
   emit('login', { username: usernameInput.value, password: passwordInput.value });
 }
-function handleRegister() {
+async function handleRegister() {
   if (!usernameInput.value || !passwordInput.value) {
     return toast.warn('请填写真名与秘钥');
   }
@@ -552,7 +607,18 @@ function handleRegister() {
     return toast.warn('此真名已被另一个灵魂烙印');
   }
   registeredName.value = usernameInput.value;
-  emit('register', { username: usernameInput.value, password: passwordInput.value });
+  // 关键修复：等 App.vue 完成注册（含 toast 提示），再决定是否翻到神谕面板
+  // App.vue 现在会返回 res（成功/失败）
+  const res = await emit('register', { username: usernameInput.value, password: passwordInput.value });
+  if (!res || res.success === false) {
+    // 注册失败：不翻页，留在注册页（toast 已显示，inline 也显示）
+    const raw = (res && res.message) || '契约未成';
+    registerError.value = raw.includes('已存在')
+      ? '此真名已被另一个灵魂烙印，请换一个'
+      : raw;
+    return;
+  }
+  registerError.value = '';
   // 翻到神谕过渡面板
   switchTo('created');
   // 2.4s 后回到登录页（契约成立后等待服务器建账号态）
@@ -567,7 +633,12 @@ function handleCreateChar() {
 }
 
 // 供父组件（App.vue）切换步骤：例如登录成功但账号还没有角色时，跳到创建角色
-defineExpose({ setStep: (s) => { loginStep.value = s; } });
+defineExpose({
+  setStep: (s) => { loginStep.value = s; },
+  // v0.9：让 App.vue 设置/清空 inline 错误
+  setLoginError: (msg) => { loginError.value = msg || ''; },
+  setRegisterError: (msg) => { registerError.value = msg || ''; },
+});
 
 onMounted(() => {
   // 微微错峰入场（视觉节拍）
@@ -954,6 +1025,44 @@ onMounted(() => {
 }
 .field-hint.is-valid { color: rgba(94,218,122,0.85); }
 .field-hint.is-invalid { color: rgba(224,88,88,0.85); }
+
+/* v0.9：登录/注册错误提示（卷轴上的红印） */
+.login-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0;
+  padding: 0.55rem 0.7rem;
+  background: rgba(224,88,88,0.10);
+  border: 1px solid rgba(224,88,88,0.35);
+  border-radius: 6px;
+  color: rgba(255,180,180,0.95);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  animation: errorShake 0.36s ease;
+}
+.login-error-icon { font-size: 0.95rem; flex-shrink: 0; }
+.login-error-text { flex: 1; }
+.login-error-close {
+  background: transparent;
+  border: none;
+  color: rgba(255,180,180,0.6);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  border-radius: 3px;
+  font-family: inherit;
+  transition: color 0.15s, background 0.15s;
+}
+.login-error-close:hover { color: rgba(255,180,180,1); background: rgba(224,88,88,0.15); }
+@keyframes errorShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
 
 /* 灵魂强度等级色 */
 .soul-thin { color: #b8a87c; }

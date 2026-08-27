@@ -41,7 +41,7 @@
 // 1. Tab 切换 + 状态管理
 // 2. 转生数据加载与购买
 // 3. 4 个 Tab 子组件：RaceTab / LawTab / AscendTab / ReincTab
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import IconBase from './icons/IconBase.vue';
 import api from '../api.js';
 import { toast, modalConfirm } from '../ui-bridge.js';
@@ -50,10 +50,18 @@ import LawTab from './evolution/LawTab.vue';
 import AscendTab from './evolution/AscendTab.vue';
 import ReincTab from './evolution/ReincTab.vue';
 
-const props = defineProps(['player']);
+const props = defineProps(['player', 'initialSubTab']);
 const emit = defineEmits(['evolve', 'learnLaw', 'ascend', 'reincarnated']);
 
-const subTab = ref('race');
+const subTab = ref(props.initialSubTab || 'race');
+
+// v0.9：从 App 切到 evo 时如果带 initialSubTab=reinc，自动切到转生子 tab
+watch(() => props.initialSubTab, (val) => {
+  if (val === 'reinc') {
+    subTab.value = 'reinc';
+    switchReincTab();
+  }
+});
 
 // 派生数据
 const raceInfo = computed(() => props.player.raceInfo || { current: null, next: null });

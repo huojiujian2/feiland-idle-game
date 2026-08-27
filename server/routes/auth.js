@@ -50,6 +50,19 @@ function registerAuthRoutes(app, store) {
     console.log(`新角色创建: ${charName} (${username})`);
     ok(res, getPlayerView(player));
   });
+
+  // v2.2：全服玩家名册（用来解析别人造的造物 → 真名）
+  //   支持 ?usernames=123,1234 增量查询；不传参则返回全部
+  //   返回 { [username]: { username, name } }
+  app.get('/api/players/names', (req, res) => {
+    const all = store.getAllPlayers();
+    const list = all
+      .filter(p => p && p.username)   // 兜底：跳过异常数据
+      .map(p => ({ username: p.username, name: p.name || p.username }));
+    const out = {};
+    for (const r of list) out[r.username] = r;
+    ok(res, out);
+  });
 }
 
 module.exports = { registerAuthRoutes };

@@ -102,7 +102,7 @@ function isEnchantDisabled(recipe) {
 </script>
 
 <style scoped>
-.equip-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
+.equip-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 1rem; }
 .equip-detail-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1rem 1.2rem; max-width: 360px; width: 100%; max-height: 80vh; overflow-y: auto; }
 .detail-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.2rem; }
 .detail-quality { font-size: 0.78rem; margin-bottom: 0.6rem; }

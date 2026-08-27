@@ -36,8 +36,9 @@
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
             @select="handleAreaChange" @strategy-change="handleStrategyChange"
             @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" @goBoss="activeTab = 'boss'" />
-          <CodexView v-else-if="activeTab === 'codex'" />
+          <CodexView v-else-if="activeTab === 'codex'" :player="player" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
+            :initialSubTab="reincarnHint ? 'reinc' : undefined"
             @evolve="handleEvolve" @learnLaw="handleLearnLaw" @ascend="handleAscend"
             @reincarnated="player = $event"
             @goGenesis="activeTab = 'genesis'" />
@@ -57,6 +58,14 @@
 
     <!-- 升级提示 -->
     <LevelUpNotice :level="levelUpNotice" />
+
+    <!-- v0.9：满百级转生提醒弹窗 -->
+    <ReincarnHintModal
+      v-if="reincarnHint"
+      :level="reincarnHint.level"
+      @close="closeReincarnHint"
+      @goReincarn="goReincarnFromHint"
+    />
 
     <!-- 离线收益弹窗 -->
     <OfflineRewardModal
@@ -95,7 +104,7 @@
 // 4. 教程引导：T-050 步骤更新
 // 5. 业务事件：加点、装备、商店、登神、转生、竞技场等
 // 6. 组合 10+ 子组件：LoginScreen / TopBar / TabBar / 9 个业务页 / 3 个弹窗
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted, provide } from 'vue';
 import api from './api.js';
 import { toast, modalAlert, modalConfirm } from './ui-bridge.js';
 import UIBridge from './components/UIBridge.vue';
@@ -103,6 +112,7 @@ import LoginScreen from './components/LoginScreen.vue';
 import TopBar from './components/TopBar.vue';
 import TabBar from './components/TabBar.vue';
 import LevelUpNotice from './components/LevelUpNotice.vue';
+import ReincarnHintModal from './components/ReincarnHintModal.vue';
 import OfflineRewardModal from './components/OfflineRewardModal.vue';
 import ShopModal from './components/ShopModal.vue';
 import CharacterView from './components/CharacterView.vue';
@@ -126,7 +136,18 @@ const shopItems = ref([]);
 const materialPrices = ref({});
 const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e', mythic: '#ff6738' };
 
+// v2.2：全服玩家名册 { username: name } —— 用于把"造物主标签"里的账号解析成真名
+const playerNameMap = ref({});
+async function refreshPlayerNameMap() {
+  const r = await api.getPlayerNames();
+  if (r && r.success && r.data) playerNameMap.value = r.data;
+}
+provide('playerNameMap', playerNameMap);
+provide('refreshPlayerNameMap', refreshPlayerNameMap);
+
 const levelUpNotice = ref(null);
+// v0.9：满百级转生一次性提醒（弹窗）
+const reincarnHint = ref(null);  // { level }  | null = 不弹
 const loginScreenRef = ref(null); // 登录界面引用：登录后无角色时切换到创建角色步骤
 const offlineSummary = ref({ visible: false, data: null });
 const activeTab = ref('char');
@@ -158,7 +179,20 @@ watch(activeTab, (newTab, oldTab) => {
 // ====== 登录/注册/创建角色 ======
 async function handleLogin({ username, password }) {
   const res = await api.login(username, password);
-  if (!res.success) { toast.error(res.message); return; }
+  if (!res.success) {
+    // v0.9：把后端消息格式化得更有"卷轴味"
+    const raw = res.message || '';
+    let msg = raw;
+    if (raw.includes('账号不存在')) msg = '此真名未曾被星图记录';
+    else if (raw.includes('密码错误')) msg = '秘钥不契合，请再默念你的誓约';
+    else if (raw.includes('请输入')) msg = '请输入真名与秘钥';
+    toast.error(msg);
+    // 把失败结果传给 LoginScreen，让它在输入框下显示 inline 错误
+    loginScreenRef.value?.setLoginError?.(msg);
+    return res;
+  }
+  // 成功：清掉之前的 inline 错误
+  loginScreenRef.value?.setLoginError?.(null);
   currentUser = username;
   currentUserRef.value = username;
   if (res.hasCharacter) {
@@ -169,16 +203,29 @@ async function handleLogin({ username, password }) {
     }
     loadStaticData();
     startPolling();
+    // v0.9：登录后立即检测（不等轮询）— 已 Lv.100 老玩家上线就弹
+    maybeShowReincarnHint(res.data);
+    // v2.2：登录后拉取全服名册，方便图鉴/造物库显示别人造物的真名
+    refreshPlayerNameMap();
   } else {
     // 账号还没有角色：切换登录界面到"创建角色"步骤
     loginScreenRef.value?.setStep('create');
   }
+  return res;
 }
 
 async function handleRegister({ username, password }) {
   const res = await api.register(username, password);
-  if (!res.success) { toast.error(res.message); return; }
-  toast.success('注册成功！请登录');
+  if (!res.success) {
+    // v0.9：把后端消息格式化得更有"卷轴味"，并保留原始 message 方便排查
+    const msg = (res.message || '').includes('已存在')
+      ? '此真名已被另一个灵魂烙印'
+      : (res.message || '契约未成，星空未接受');
+    toast.error(msg);
+    return res;   // 返回给 LoginScreen 决定是否翻页
+  }
+  toast.success('契约成立！请登录');
+  return res;
 }
 
 async function handleCreateChar({ charName }) {
@@ -229,8 +276,47 @@ async function startPolling() {
         refreshShop(); // 升级可能解锁新的商店材料
       }
       player.value = res.data;
+      // v0.9：首次达到 Lv.100 且未转生 → 弹转生提醒弹窗（一次性）
+      maybeShowReincarnHint(res.data);
     }
   }, 5000);
+}
+
+// v0.9：检测是否需要弹出"满百级转生提醒"
+//  - level >= 100
+//  - reincarnation === 0（首次转生）
+//  - reincarnHintShown === false（之前没弹过）
+//  - reincarnHint.value === null（当前没在弹）
+function maybeShowReincarnHint(p) {
+  if (!p) return;
+  if (reincarnHint.value) return;     // 已经在弹
+  if (p.reincarnation > 0) return;   // 已经转生过
+  if (p.reincarnHintShown) return;   // 已弹过（前端标记）
+  if (p.level < 100) return;         // 没满级
+  reincarnHint.value = { level: p.level };
+}
+
+async function closeReincarnHint() {
+  if (!reincarnHint.value) return;
+  // 标记"已弹"，后端持久化（避免每次启动都弹）
+  if (player.value && !player.value.reincarnHintShown) {
+    try {
+      const r = await api.markReincarnHintShown(currentUser);
+      if (r && r.success) player.value = r.data;
+    } catch (e) { /* 静默失败 */ }
+  }
+  reincarnHint.value = null;
+}
+
+function goReincarnFromHint() {
+  // 跳到进化 Tab，再切到转生 Tab
+  activeTab.value = 'evo';
+  reincarnHint.value = null;
+  if (player.value) player.value.reincarnHintShown = true;
+  // 标记已弹（异步）
+  api.markReincarnHintShown(currentUser).then(r => {
+    if (r && r.success) player.value = r.data;
+  }).catch(() => {});
 }
 
 // ====== 引导（T-050） ======

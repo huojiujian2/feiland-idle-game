@@ -72,7 +72,7 @@ function formatNumber(n) {
 </script>
 
 <style scoped>
-.offline-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 1.5rem; animation: fadeIn 0.3s ease; }
+.offline-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 1.5rem; animation: fadeIn 0.3s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .offline-popup { background: linear-gradient(160deg, var(--bg2) 0%, #1a1c35 100%); border: 1px solid var(--accent); border-radius: 16px; padding: 1.5rem; max-width: 340px; width: 100%; text-align: center; box-shadow: 0 0 40px rgba(212,175,94,0.2); animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }

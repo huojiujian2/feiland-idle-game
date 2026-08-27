@@ -291,7 +291,7 @@ function handleUnequip() {
 .pager-info { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
 
 /* 弹窗 */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 1rem; }
 .modal-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.2rem; max-width: 340px; width: 100%; max-height: 85vh; overflow-y: auto; }
 .modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
 .modal-level-tag { font-size: 0.68rem; color: var(--accent2); background: rgba(157,140,240,0.12); padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 400; }

@@ -284,7 +284,13 @@ function upgradeEquipment(player, itemUid) {
   return { success: true, upgradeLevel: targetLv, goldCost: cost };
 }
 
-// 装备合成
+// 装备三合一合成（v2.4）
+//   规则：3 件 **同品质 + 同槽位** 的装备 → 1 件高一阶品质的同槽位装备
+//   - 3 件必须未装备且未附魔（避免误合）
+//   - 槽位锁死：3 件的 slot 必须一致（防止"3 把武器 → 武器"或"3 个混搭 → 随机"的不直观行为）
+//   - 模板随机：从当前等级允许的同品质+同槽位模板里随机
+//   - 强化等级：取最大保留（避免浪费已强化投入）
+//   - 附魔：保留 3 件中数量最多的那件附魔列表（避免完全浪费附魔投入）；若 3 件都没附魔则新装备也无附魔
 function mergeEquipment(player, itemUids) {
   player = migratePlayer(player);
   refreshDailyIfNeeded(player);
@@ -294,44 +300,54 @@ function mergeEquipment(player, itemUids) {
     const it = player.equips.find(e => e.uid === uid)
       || Object.values(player.equipped || {}).find(e => e && e.uid === uid);
     if (!it) return { success: false, message: `装备 ${uid} 不存在` };
+    // 已经被穿戴的不能直接合成
+    if (player.equipped && Object.values(player.equipped).some(e => e && e.uid === uid)) {
+      return { success: false, message: '请先卸下要合成的装备' };
+    }
+    // 有附魔的不能合成（避免误操作把附魔浪费）
+    if (it.enchants && it.enchants.length > 0) {
+      return { success: false, message: '请先剥离附魔再合成（有附魔的装备不能合成）' };
+    }
     items.push(it);
   }
+  // 三件必须同品质 + 同槽位
   const q = items[0].quality;
+  const slot = items[0].slot;
   if (!items.every(i => i.quality === q)) return { success: false, message: '3 件装备必须同一品质' };
+  if (!items.every(i => i.slot === slot)) return { success: false, message: '3 件装备必须同一部位（如 3 把武器 / 3 件胸甲）' };
+
   const next = QUALITY_NEXT[q];
-  if (!next) return { success: false, message: '已是最高品质传说级，无法合成' };
-  const pool = Object.values(EQUIP_TEMPLATES).filter(t => t.quality === next && t.reqLevel <= player.level);
-  if (pool.length === 0) return { success: false, message: `当前等级 (Lv.${player.level}) 没有可合成的高品质装备模板` };
-  const slots = items.map(i => i.slot);
-  const targetSlot = slots[Math.floor(getRand()() * slots.length)];
-  const candidates = pool.filter(t => t.slot === targetSlot);
-  if (candidates.length === 0) return { success: false, message: `当前等级没有 ${targetSlot} 类型的 ${next} 装备模板` };
-  const tpl = candidates[Math.floor(getRand()() * candidates.length)];
+  if (!next) return { success: false, message: '已是最高品质神话级，无法合成' };
+  const pool = Object.values(EQUIP_TEMPLATES).filter(t => t.quality === next && t.slot === slot && t.reqLevel <= player.level);
+  if (pool.length === 0) return { success: false, message: `当前等级 (Lv.${player.level}) 没有可合成的 ${next} ${slot} 装备模板` };
+  const tpl = pool[Math.floor(getRand()() * pool.length)];
+
+  // 移除 3 件素材（同步从 equipped 清空，理论上上面已经挡住，这里再保险一次）
   for (const it of items) {
     if (player.equipped && Object.values(player.equipped).some(e => e && e.uid === it.uid)) {
-      for (const [slot, eq] of Object.entries(player.equipped)) {
-        if (eq && eq.uid === it.uid) player.equipped[slot] = null;
+      for (const [s, eq] of Object.entries(player.equipped)) {
+        if (eq && eq.uid === it.uid) player.equipped[s] = null;
       }
     }
     player.equips = player.equips.filter(e => e.uid !== it.uid);
   }
+
   const maxUp = Math.max(...items.map(i => i.upgradeLevel || 0));
+  // v2.4 强化等级在跨品质合成时**重置为 0**
+  //   原因：跨品质后装备模板本身基础属性已经大幅提升，叠加旧强化等级的 1.05^n 倍数会过于离谱；
+  //         而且强化等级是绑在原装备 uid 上的，模板一换就没意义了
   const newItem = {
     uid: genUid(),
     templateId: tpl.id || tpl.name,
     name: tpl.name, slot: tpl.slot, quality: tpl.quality, reqLevel: tpl.reqLevel,
-    stats: { ...tpl.stats }, enchants: [], upgradeLevel: maxUp,
+    stats: { ...tpl.stats },
+    enchants: [],
+    upgradeLevel: 0,
   };
-  if (maxUp > 0) {
-    newItem.baseStats = { ...newItem.stats };
-    for (const k of Object.keys(newItem.baseStats)) {
-      newItem.stats[k] = Math.floor(newItem.baseStats[k] * Math.pow(1.05, maxUp));
-    }
-  }
   player.equips.push(newItem);
   recalc(player);
   player.logs = player.logs || [];
-  player.logs.push({ time: getNow(), type: 'merge', text: `【合成】3 件 ${q} → 1 件 ${next} 装备「${newItem.name}」（slot=${targetSlot}）` });
+  player.logs.push({ time: getNow(), type: 'merge', text: `【合成】3 件 ${q} ${slot} → 1 件 ${next} ${slot}「${newItem.name}」` });
   return { success: true, newItem };
 }
 
@@ -343,22 +359,15 @@ function reforgeEquipment(player, itemUid, cost = 1000) {
     || Object.values(player.equipped || {}).find(e => e && e.uid === itemUid);
   if (!item) return { success: false, message: '装备不存在' };
   if ((player.gold || 0) < cost) return { success: false, message: `金币不足，需要 ${cost}` };
+  // v2.4：重置附魔 = **清空当前所有附魔**，不自动填充新附魔
+  //   玩家随后自己用附魔界面（每次附魔可挑 1 个新附魔附上去，最多 3 槽）
+  //   这与"锻造 → 强化"的体验对齐：强化按 +1 累加，附魔按 1 个累加
+  const cleared = (item.enchants || []).length;
   item.enchants = [];
-  item.affixes = [];
-  const lvls = getAvailableAffixLevels(player);
-  const affixPool = [];
-  for (const lv of lvls) {
-    for (const a of (AFFIX_TREE[lv] || [])) {
-      if (a.slot === 'passive') affixPool.push({ id: a.id, level: lv });
-    }
-  }
-  if (affixPool.length > 0) {
-    const pick = affixPool[Math.floor(getRand()() * affixPool.length)];
-    item.affixes.push({ id: pick.id, level: pick.level });
-  }
+  recalc(player);
   player.gold -= cost;
   player.logs = player.logs || [];
-  player.logs.push({ time: getNow(), type: 'reforge', text: `【重铸】${item.name} 词条重置（消耗 ${cost} 金币）` });
+  player.logs.push({ time: getNow(), type: 'reforge', text: `【重置附魔】${item.name} 清空 ${cleared} 个旧附魔（消耗 ${cost} 金币）` });
   return { success: true };
 }
 

@@ -9,7 +9,7 @@
       }"
       :data-tab="tab.id" @click="$emit('tab-click', tab.id)">
       <div class="tabbar-icon-wrap">
-        <IconBase :name="tab.icon" :size="22" class="tabbar-icon" />
+        <IconBase :name="tab.icon" :size="28" class="tabbar-icon" />
       </div>
       <span class="tabbar-text">{{ tab.label }}</span>
       <span v-if="tab.badge" class="tabbar-badge">{{ tab.badge }}</span>
@@ -56,57 +56,49 @@ defineEmits(['tab-click']);
   min-width: 0;
 }
 
-/* 圆头像容器 */
+/* 图标容器：纯透明，无圆形边框 */
 .tabbar-icon-wrap {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgba(157,140,240,0.18), rgba(20,22,42,0.5));
-  border: 2px solid rgba(157,140,240,0.35);
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--duration-normal) var(--ease-spring);
+  transition: transform var(--duration-normal) var(--ease-spring);
   flex-shrink: 0;
 }
 
 .tabbar-icon {
-  font-size: 16px;
+  font-size: 22px;
   line-height: 1;
   transition: filter var(--duration-normal) var(--ease-out);
 }
 
-/* hover 态 */
+/* hover 态：图标轻微上浮（仅 transform，不再改边框/背景） */
 .tabbar-item:hover {
   color: var(--ink);
 }
 .tabbar-item:hover .tabbar-icon-wrap {
-  border-color: var(--accent2);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(157,140,240,0.25);
 }
 
-/* 激活态：仅文字金色 + 圆头像紫色描边（不要金色边框/光晕/上浮） */
+/* 激活态：仅文字金色 + 图标上浮（无边框/背景） */
 .tabbar-item.active {
   color: var(--accent);
 }
 .tabbar-item.active .tabbar-icon-wrap {
-  border-color: var(--accent2);
+  transform: translateY(-2px);
 }
 
-/* 中间地图 Tab 略大（保持底部对齐，避免溢出）*/
+/* 中间地图 Tab 图标略大 */
 .tabbar-item.tabbar-center {
   z-index: 2;
 }
 .tabbar-item.tabbar-center .tabbar-icon-wrap {
-  width: 42px;
-  height: 42px;
-  border-width: 2px;
-  background: linear-gradient(135deg, rgba(212,175,94,0.4), rgba(157,140,240,0.2));
-  box-shadow: 0 4px 14px rgba(212,175,94,0.5), 0 0 0 2px rgba(10,11,20,0.95);
+  width: 38px;
+  height: 38px;
 }
 .tabbar-item.tabbar-center .tabbar-icon {
-  font-size: 20px;
+  font-size: 26px;
 }
 
 /* 标签文字 */
