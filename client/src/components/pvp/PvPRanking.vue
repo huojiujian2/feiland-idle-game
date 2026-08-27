@@ -49,8 +49,8 @@ defineProps({
 
 .rank-list { display: flex; flex-direction: column; gap: 0.3rem; }
 .rank-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.7rem; background: var(--bg2); border: 1px solid var(--rule); border-radius: 6px; transition: background 0.15s; }
-.rank-row:hover { background: rgba(157,140,240,0.05); }
-.rank-row.self { border-color: var(--accent); background: rgba(212,175,94,0.08); }
+.rank-row:hover { background: rgba(var(--violet-rgb),0.05); }
+.rank-row.self { border-color: var(--accent); background: rgba(var(--gold-rgb),0.08); }
 .rank-num { min-width: 1.6rem; display: flex; align-items: center; justify-content: center; font-weight: 700; font-family: monospace; }
 .rank-info { flex: 1; }
 .rank-name { display: flex; align-items: center; gap: 0.3rem; font-weight: 700; font-size: 0.85rem; }

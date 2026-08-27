@@ -65,7 +65,7 @@ function getMaterialCount(name) {
 </script>
 
 <style scoped>
-.card { padding: 0.7rem 0.9rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 8px; }
+.card { padding: 0.7rem 0.9rem; background: rgba(var(--panel-rgb),0.6); border: 1px solid var(--rule); border-radius: 8px; }
 .evo-section { display: flex; flex-direction: column; gap: 0.6rem; }
 
 .law-bonus-box { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -75,7 +75,7 @@ function getMaterialCount(name) {
 .law-bonus-item { padding: 0.2rem 0.5rem; background: rgba(94,218,122,0.1); border: 1px solid rgba(94,218,122,0.3); border-radius: 4px; font-size: 0.72rem; color: var(--success); }
 
 .law-items { display: flex; flex-direction: column; gap: 0.5rem; }
-.law-item { padding: 0.6rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; }
+.law-item { padding: 0.6rem; background: rgba(var(--panel-rgb),0.5); border: 1px solid var(--rule); border-radius: 6px; }
 .law-item.learned { border-color: var(--success); background: rgba(94,218,122,0.05); }
 .law-item.locked { opacity: 0.5; }
 .law-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
@@ -86,7 +86,7 @@ function getMaterialCount(name) {
 .law-status.available { background: var(--accent); color: var(--bg); }
 .law-item-desc { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.3rem; }
 .law-item-bonus { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.3rem; }
-.law-item-bonus span { font-size: 0.7rem; padding: 0.1rem 0.3rem; background: rgba(157,140,240,0.1); border-radius: 3px; color: var(--accent2); }
+.law-item-bonus span { font-size: 0.7rem; padding: 0.1rem 0.3rem; background: rgba(var(--violet-rgb),0.1); border-radius: 3px; color: var(--accent2); }
 .law-item-cost { font-size: 0.7rem; color: var(--dim); margin-bottom: 0.4rem; }
 .law-btn { width: 100%; padding: 0.4rem; }
 </style>

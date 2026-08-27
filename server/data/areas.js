@@ -2,6 +2,9 @@
 // @file data/areas
 // @module data-areas
 // @description 所有挂机区域定义（高蛮山 → 创世核心）和区域等级顺序
+//   v2.7：全局掉率再压缩——挂机放置类游戏，等级越高装备越稀有
+//   装备掉率梯度：Lv1-30 ~1% → Lv200-250 ~0.05%（每升 1 级掉率约 ×0.85）
+//   材料掉率统一砍半
 
 const AREAS = {
   gaomanshan: {
@@ -13,8 +16,8 @@ const AREAS = {
       { name: '草原兔', exp: 5, gold: 1, hp: 15, atk: 2, def: 0, agi: 6, skills: [] }
     ],
     drops: [
-      { type: 'material', name: '兽皮', rate: 0.15 },
-      { type: 'equip', template: 'wooden_spear', rate: 0.02 }
+      { type: 'material', name: '兽皮', rate: 0.08 },
+      { type: 'equip', template: 'wooden_spear', rate: 0.01 }
     ]
   },
   miyusenlin: {
@@ -26,10 +29,10 @@ const AREAS = {
       { name: '低阶魔兽', exp: 25, gold: 6, hp: 100, atk: 8, def: 3, agi: 4, skills: ['magic_bolt'] }
     ],
     drops: [
-      { type: 'material', name: '草药', rate: 0.12 },
-      { type: 'material', name: '兽骨', rate: 0.08 },
-      { type: 'equip', template: 'bronze_sword', rate: 0.015 },
-      { type: 'equip', template: 'leather_armor', rate: 0.012 }
+      { type: 'material', name: '草药', rate: 0.06 },
+      { type: 'material', name: '兽骨', rate: 0.04 },
+      { type: 'equip', template: 'bronze_sword', rate: 0.008 },
+      { type: 'equip', template: 'leather_armor', rate: 0.006 }
     ]
   },
   hanhaisenlin: {
@@ -41,11 +44,11 @@ const AREAS = {
       { name: '巨蜥', exp: 35, gold: 8, hp: 150, atk: 15, def: 6, agi: 5, skills: ['poison','bite'] }
     ],
     drops: [
-      { type: 'material', name: '泰坦之血碎片', rate: 0.05 },
-      { type: 'material', name: '青铜矿', rate: 0.10 },
-      { type: 'material', name: '飞龙鳞片', rate: 0.03 },
-      { type: 'equip', template: 'iron_spear', rate: 0.01 },
-      { type: 'equip', template: 'iron_armor', rate: 0.008 }
+      { type: 'material', name: '泰坦之血碎片', rate: 0.025 },
+      { type: 'material', name: '青铜矿', rate: 0.05 },
+      { type: 'material', name: '飞龙鳞片', rate: 0.015 },
+      { type: 'equip', template: 'iron_spear', rate: 0.005 },
+      { type: 'equip', template: 'iron_armor', rate: 0.004 }
     ]
   },
   donghaizhibin: {
@@ -57,11 +60,11 @@ const AREAS = {
       { name: '巨型海龟', exp: 120, gold: 30, hp: 600, atk: 28, def: 20, agi: 8, skills: ['tail_sweep','roar'] }
     ],
     drops: [
-      { type: 'material', name: '海灵石', rate: 0.08 },
-      { type: 'material', name: '铁矿', rate: 0.12 },
-      { type: 'material', name: '深海水晶', rate: 0.02 },
-      { type: 'equip', template: 'thunder_lance', rate: 0.008 },
-      { type: 'equip', template: 'sea_armor', rate: 0.006 }
+      { type: 'material', name: '海灵石', rate: 0.04 },
+      { type: 'material', name: '铁矿', rate: 0.06 },
+      { type: 'material', name: '深海水晶', rate: 0.01 },
+      { type: 'equip', template: 'thunder_lance', rate: 0.004 },
+      { type: 'equip', template: 'sea_armor', rate: 0.003 }
     ]
   },
   tiantangshan: {
@@ -73,14 +76,14 @@ const AREAS = {
       { name: '堕落翼人', exp: 220, gold: 55, hp: 1200, atk: 55, def: 20, agi: 25, skills: ['wing_blade','dark_slash'] }
     ],
     drops: [
-      { type: 'material', name: '风羽玉露', rate: 0.06 },
-      { type: 'material', name: '光明晶', rate: 0.04 },
-      { type: 'material', name: '天使之羽', rate: 0.01 },
-      { type: 'equip', template: 'holy_blade', rate: 0.005 },
-      { type: 'equip', template: 'light_wings', rate: 0.003 },
-      { type: 'equip', template: 'ranger_bow', rate: 0.008 },
-      { type: 'equip', template: 'paladin_shield', rate: 0.006 },
-      { type: 'equip', template: 'timekeeper_amulet', rate: 0.004 }
+      { type: 'material', name: '风羽玉露', rate: 0.03 },
+      { type: 'material', name: '光明晶', rate: 0.02 },
+      { type: 'material', name: '天使之羽', rate: 0.005 },
+      { type: 'equip', template: 'holy_blade', rate: 0.0025 },
+      { type: 'equip', template: 'light_wings', rate: 0.0015 },
+      { type: 'equip', template: 'ranger_bow', rate: 0.004 },
+      { type: 'equip', template: 'paladin_shield', rate: 0.003 },
+      { type: 'equip', template: 'timekeeper_amulet', rate: 0.002 }
     ]
   },
   jingchengwaibi: {
@@ -92,11 +95,11 @@ const AREAS = {
       { name: '蒸汽傀儡', exp: 350, gold: 70, hp: 3000, atk: 75, def: 45, agi: 15, skills: ['steam_blast','tail_sweep'] }
     ],
     drops: [
-      { type: 'material', name: '附魔卷轴', rate: 0.06 },
-      { type: 'material', name: '炼金材料', rate: 0.10 },
-      { type: 'equip', template: 'knight_blade', rate: 0.005 },
-      { type: 'equip', template: 'golem_armor', rate: 0.004 },
-      { type: 'equip', template: 'sage_robe', rate: 0.005 }
+      { type: 'material', name: '附魔卷轴', rate: 0.03 },
+      { type: 'material', name: '炼金材料', rate: 0.05 },
+      { type: 'equip', template: 'knight_blade', rate: 0.0025 },
+      { type: 'equip', template: 'golem_armor', rate: 0.002 },
+      { type: 'equip', template: 'sage_robe', rate: 0.0025 }
     ]
   },
   longdao: {
@@ -108,11 +111,11 @@ const AREAS = {
       { name: '龙族守卫', exp: 800, gold: 180, hp: 8000, atk: 120, def: 70, agi: 30, skills: ['ice_breath','charge'] }
     ],
     drops: [
-      { type: 'material', name: '龙鳞', rate: 0.08 },
-      { type: 'material', name: '龙血', rate: 0.03 },
-      { type: 'equip', template: 'dragon_slayer', rate: 0.003 },
-      { type: 'equip', template: 'dragon_armor', rate: 0.002 },
-      { type: 'equip', template: 'warlord_blade', rate: 0.005 }
+      { type: 'material', name: '龙鳞', rate: 0.04 },
+      { type: 'material', name: '龙血', rate: 0.015 },
+      { type: 'equip', template: 'dragon_slayer', rate: 0.0015 },
+      { type: 'equip', template: 'dragon_armor', rate: 0.001 },
+      { type: 'equip', template: 'warlord_blade', rate: 0.0025 }
     ]
   },
   shenyuan: {
@@ -124,10 +127,10 @@ const AREAS = {
       { name: '虚空行者', exp: 3000, gold: 600, hp: 30000, atk: 220, def: 90, agi: 80, skills: ['void_tear','dark_slash'] }
     ],
     drops: [
-      { type: 'material', name: '法则碎片', rate: 0.05 },
-      { type: 'material', name: '深渊之石', rate: 0.08 },
-      { type: 'equip', template: 'void_blade', rate: 0.002 },
-      { type: 'equip', template: 'abyss_cloak', rate: 0.0015 }
+      { type: 'material', name: '法则碎片', rate: 0.025 },
+      { type: 'material', name: '深渊之石', rate: 0.04 },
+      { type: 'equip', template: 'void_blade', rate: 0.001 },
+      { type: 'equip', template: 'abyss_cloak', rate: 0.00075 }
     ]
   },
   // ====== 高阶区域（Lv.130+）======
@@ -142,14 +145,14 @@ const AREAS = {
       { name: '虚空元素', exp: 7500, gold: 1600, hp: 70000, atk: 450, def: 220, agi: 100, skills: ['void_nova','star_arrow'] }
     ],
     drops: [
-      { type: 'material', name: '法则碎片', rate: 0.08 },
-      { type: 'material', name: '深渊之石', rate: 0.10 },
-      { type: 'equip', template: 'starforged_blade', rate: 0.005 },
-      { type: 'equip', template: 'element_crown', rate: 0.004 },
-      { type: 'equip', template: 'godheart_orb', rate: 0.003 },
-      { type: 'equip', template: 'abyss_devourer', rate: 0.004 },
-      { type: 'equip', template: 'dragon_lord_plate', rate: 0.0035 },
-      { type: 'equip', template: 'phoenix_feather', rate: 0.003 }
+      { type: 'material', name: '法则碎片', rate: 0.04 },
+      { type: 'material', name: '深渊之石', rate: 0.05 },
+      { type: 'equip', template: 'starforged_blade', rate: 0.0025 },
+      { type: 'equip', template: 'element_crown', rate: 0.002 },
+      { type: 'equip', template: 'godheart_orb', rate: 0.0015 },
+      { type: 'equip', template: 'abyss_devourer', rate: 0.002 },
+      { type: 'equip', template: 'dragon_lord_plate', rate: 0.00175 },
+      { type: 'equip', template: 'phoenix_feather', rate: 0.0015 }
     ]
   },
   xingjiezhanchang: {
@@ -162,11 +165,11 @@ const AREAS = {
       { name: '星辰巨龙', exp: 25000, gold: 5000, hp: 250000, atk: 900, def: 450, agi: 80, skills: ['fire_breath','star_arrow','realm_rift'], isBoss: true }
     ],
     drops: [
-      { type: 'material', name: '法则碎片', rate: 0.10 },
-      { type: 'equip', template: 'realm_breaker', rate: 0.003 },
-      { type: 'equip', template: 'void_dragonscale', rate: 0.0025 },
-      { type: 'equip', template: 'eternity_band', rate: 0.002 },
-      { type: 'equip', template: 'realm_walker_boots', rate: 0.002 }
+      { type: 'material', name: '法则碎片', rate: 0.05 },
+      { type: 'equip', template: 'realm_breaker', rate: 0.0015 },
+      { type: 'equip', template: 'void_dragonscale', rate: 0.00125 },
+      { type: 'equip', template: 'eternity_band', rate: 0.001 },
+      { type: 'equip', template: 'realm_walker_boots', rate: 0.001 }
     ]
   },
   shenmodian: {
@@ -179,10 +182,10 @@ const AREAS = {
       { name: '原初之神', exp: 80000, gold: 20000, hp: 1500000, atk: 2500, def: 1200, agi: 150, skills: ['god_smash','divine_judgment','time_stop','realm_rift'], isBoss: true }
     ],
     drops: [
-      { type: 'material', name: '法则碎片', rate: 0.20 },
-      { type: 'equip', template: 'creators_blade', rate: 0.002 },
-      { type: 'equip', template: 'god_plate', rate: 0.0015 },
-      { type: 'equip', template: 'origin_eye', rate: 0.001 }
+      { type: 'material', name: '法则碎片', rate: 0.10 },
+      { type: 'equip', template: 'creators_blade', rate: 0.001 },
+      { type: 'equip', template: 'god_plate', rate: 0.00075 },
+      { type: 'equip', template: 'origin_eye', rate: 0.0005 }
     ]
   },
   // ====== 终极区域（Lv.200+）======
@@ -195,8 +198,8 @@ const AREAS = {
       { name: '虚空之主', exp: 150000, gold: 30000, hp: 3000000, atk: 3000, def: 1500, agi: 220, skills: ['god_smash','divine_judgment','realm_rift','time_stop'], isBoss: true }
     ],
     drops: [
-      { type: 'material', name: '法则碎片', rate: 0.30 },
-      { type: 'equip', template: 'infinity_edge', rate: 0.003 }
+      { type: 'material', name: '法则碎片', rate: 0.15 },
+      { type: 'equip', template: 'infinity_edge', rate: 0.0015 }
     ]
   },
   chrono_realm: {
@@ -208,8 +211,8 @@ const AREAS = {
       { name: '时之龙王', exp: 300000, gold: 60000, hp: 6000000, atk: 4500, def: 2200, agi: 250, skills: ['god_smash','realm_rift','time_stop'], isBoss: true }
     ],
     drops: [
-      { type: 'material', name: '法则碎片', rate: 0.40 },
-      { type: 'equip', template: 'chrono_armor', rate: 0.003 }
+      { type: 'material', name: '法则碎片', rate: 0.18 },
+      { type: 'equip', template: 'chrono_armor', rate: 0.0015 }
     ]
   },
   genesis_core: {
@@ -221,8 +224,8 @@ const AREAS = {
       { name: '万界之眼', exp: 800000, gold: 200000, hp: 30000000, atk: 8000, def: 4000, agi: 400, skills: ['god_smash','divine_judgment','time_stop','realm_rift'], isBoss: true }
     ],
     drops: [
-      { type: 'material', name: '法则碎片', rate: 0.50 },
-      { type: 'equip', template: 'omni_eye', rate: 0.002 }
+      { type: 'material', name: '法则碎片', rate: 0.20 },
+      { type: 'equip', template: 'omni_eye', rate: 0.001 }
     ]
   }
 };

@@ -147,7 +147,7 @@ async function onClaimAch(id){
 .quest-cell{ display:flex; flex-direction:column; gap:0.15rem; padding:0.5rem 0.35rem; border:1px solid var(--rule); border-radius:8px; background:var(--quest-card-bg); transition:all var(--duration-normal) var(--ease-out); min-height:118px; }
 .quest-cell:hover{ border-color:var(--accent2); background:var(--quest-card-hover); transform:translateY(-1px); }
 .quest-name{ font-size:0.7rem; font-weight:600; color:var(--ink); line-height:1.2; }
-.quest-title-tag{ font-size:0.58rem; color:var(--accent); background:rgba(212,175,94,0.12); padding:0.05rem 0.25rem; border-radius:3px; margin-left:0.2rem; }
+.quest-title-tag{ font-size:0.58rem; color:var(--accent); background:rgba(var(--gold-rgb),0.12); padding:0.05rem 0.25rem; border-radius:3px; margin-left:0.2rem; }
 .quest-desc{ font-size:0.62rem; color:var(--dim); line-height:1.3; min-height:1.6em; }
 .quest-bar{ height:5px; margin:0.1rem 0; background:var(--quest-progress-bg); }
 .quest-bar .bar-fill{ background:var(--quest-progress-fill); }
@@ -182,17 +182,17 @@ async function onClaimAch(id){
   align-items: center;
   gap: 0.7rem;
   padding: 0.7rem 1rem;
-  background: linear-gradient(135deg, rgba(212,175,94,0.15) 0%, rgba(28,30,54,0.85) 100%);
+  background: linear-gradient(135deg, rgba(var(--gold-rgb),0.15) 0%, rgba(var(--panel2-rgb),0.85) 100%);
   border: 1px solid var(--accent);
   border-radius: 6px;
-  box-shadow: 0 0 24px rgba(212,175,94,0.25), inset 0 1px 0 rgba(255,235,180,0.18);
+  box-shadow: 0 0 24px rgba(var(--gold-rgb),0.25), inset 0 1px 0 rgba(255,235,180,0.18);
 }
 .genesis-portal-rune {
   font-size: 1.6rem;
   font-family: var(--font-display, 'Cinzel', serif);
   color: var(--accent);
-  text-shadow: 0 0 12px rgba(212,175,94,0.7);
-  filter: drop-shadow(0 0 8px rgba(212,175,94,0.5));
+  text-shadow: 0 0 12px rgba(var(--gold-rgb),0.7);
+  filter: drop-shadow(0 0 8px rgba(var(--gold-rgb),0.5));
   flex-shrink: 0;
   animation: rune-pulse 2.4s ease-in-out infinite;
 }
@@ -203,11 +203,11 @@ async function onClaimAch(id){
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 0.08em;
-  text-shadow: 0 0 8px rgba(212,175,94,0.35);
+  text-shadow: 0 0 8px rgba(var(--gold-rgb),0.35);
 }
 .genesis-portal-desc {
   font-size: 0.72rem;
-  color: rgba(212,175,94,0.65);
+  color: rgba(var(--gold-rgb),0.65);
   letter-spacing: 0.04em;
   margin-top: 0.15rem;
   font-style: italic;
@@ -221,7 +221,7 @@ async function onClaimAch(id){
 }
 .genesis-portal:hover .genesis-portal-arrow { opacity: 1; transform: translateX(3px); }
 @keyframes rune-pulse {
-  0%, 100% { text-shadow: 0 0 12px rgba(212,175,94,0.7); transform: scale(1); }
-  50% { text-shadow: 0 0 22px rgba(212,175,94,1); transform: scale(1.08); }
+  0%, 100% { text-shadow: 0 0 12px rgba(var(--gold-rgb),0.7); transform: scale(1); }
+  50% { text-shadow: 0 0 22px rgba(var(--gold-rgb),1); transform: scale(1.08); }
 }
 </style>

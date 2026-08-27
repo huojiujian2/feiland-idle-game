@@ -80,7 +80,7 @@ onMounted(() => nextTick(scrollRoundsToBottom));
 .battle-result-banner.win { background: linear-gradient(135deg, var(--success), #3d8c4d); color: white; }
 .battle-result-banner.lose { background: linear-gradient(135deg, var(--danger), #8c3d3d); color: white; }
 
-.battle-info { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0.5rem; padding: 0.6rem 0.8rem; background: rgba(20,22,42,0.5); }
+.battle-info { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0.5rem; padding: 0.6rem 0.8rem; background: rgba(var(--panel-rgb),0.5); }
 .battle-side { text-align: center; }
 .bs-name { font-weight: 700; font-size: 0.85rem; }
 .bs-hp { font-family: monospace; font-size: 0.75rem; color: var(--accent); margin: 0.15rem 0; }
@@ -88,7 +88,7 @@ onMounted(() => nextTick(scrollRoundsToBottom));
 .battle-vs { font-size: 1.1rem; font-weight: 800; color: var(--accent2); }
 
 .battle-rounds { flex: 1; overflow-y: auto; padding: 0.5rem 0.8rem; min-height: 200px; max-height: 40vh; }
-.round-block { margin-bottom: 0.5rem; padding: 0.4rem; background: rgba(20,22,42,0.4); border-radius: 4px; }
+.round-block { margin-bottom: 0.5rem; padding: 0.4rem; background: rgba(var(--panel-rgb),0.4); border-radius: 4px; }
 .round-header { font-size: 0.72rem; font-weight: 700; color: var(--accent2); margin-bottom: 0.2rem; }
 .action-row { display: flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0; font-size: 0.7rem; flex-wrap: wrap; }
 .action-actor { color: var(--muted); font-size: 0.65rem; min-width: 4rem; }
@@ -102,7 +102,7 @@ onMounted(() => nextTick(scrollRoundsToBottom));
 .action-row.B { border-left: 2px solid var(--accent2); padding-left: 0.3rem; }
 
 .battle-rewards { display: flex; gap: 0.4rem; padding: 0.5rem 0.8rem; border-top: 1px solid var(--rule); flex-wrap: wrap; justify-content: center; }
-.reward-item { font-size: 0.78rem; padding: 0.2rem 0.5rem; background: rgba(157,140,240,0.1); border-radius: 4px; font-family: monospace; }
+.reward-item { font-size: 0.78rem; padding: 0.2rem 0.5rem; background: rgba(var(--violet-rgb),0.1); border-radius: 4px; font-family: monospace; }
 .reward-item.up { color: var(--success); }
 .reward-item.down { color: var(--danger); }
 

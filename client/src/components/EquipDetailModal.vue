@@ -106,15 +106,15 @@ function isEnchantDisabled(recipe) {
 .equip-detail-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1rem 1.2rem; max-width: 360px; width: 100%; max-height: 80vh; overflow-y: auto; }
 .detail-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.2rem; }
 .detail-quality { font-size: 0.78rem; margin-bottom: 0.6rem; }
-.detail-stats { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.4rem; background: rgba(20,22,42,0.6); border-radius: 6px; margin-bottom: 0.6rem; }
+.detail-stats { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.4rem; background: rgba(var(--panel-rgb),0.6); border-radius: 6px; margin-bottom: 0.6rem; }
 .detail-stat { font-size: 0.78rem; color: var(--accent2); }
-.enchanted-list, .enchant-section { padding: 0.4rem; background: rgba(20,22,42,0.5); border-radius: 6px; margin-bottom: 0.5rem; }
+.enchanted-list, .enchant-section { padding: 0.4rem; background: rgba(var(--panel-rgb),0.5); border-radius: 6px; margin-bottom: 0.5rem; }
 .enchant-header { font-size: 0.78rem; font-weight: 700; color: var(--accent); margin-bottom: 0.3rem; }
 .enchant-item { padding: 0.3rem 0; font-size: 0.75rem; border-bottom: 1px solid var(--rule); }
 .enchant-item:last-child { border-bottom: none; }
 .enchant-name { font-weight: 600; color: var(--text); margin-right: 0.4rem; }
 .enchant-desc { color: var(--muted); font-size: 0.7rem; }
-.enchant-recipe { padding: 0.4rem; background: rgba(157,140,240,0.06); border-radius: 6px; margin-bottom: 0.3rem; }
+.enchant-recipe { padding: 0.4rem; background: rgba(var(--violet-rgb),0.06); border-radius: 6px; margin-bottom: 0.3rem; }
 .enchant-recipe.disabled { opacity: 0.5; }
 .enchant-recipe:last-child { margin-bottom: 0; }
 .recipe-info { display: flex; flex-direction: column; gap: 0.1rem; margin-bottom: 0.3rem; }

@@ -56,7 +56,7 @@ function resultText(rec) {
 .rec-row.lose .rec-result { color: var(--danger); }
 .rec-row.draw .rec-result { color: var(--accent); }
 .rec-vs { color: var(--text); }
-.bot-tag-small { font-size: 0.55rem; padding: 0.05rem 0.25rem; background: rgba(157,140,240,0.2); color: var(--accent2); border-radius: 3px; margin-left: 0.3rem; }
+.bot-tag-small { font-size: 0.55rem; padding: 0.05rem 0.25rem; background: rgba(var(--violet-rgb),0.2); color: var(--accent2); border-radius: 3px; margin-left: 0.3rem; }
 .rec-change { font-family: monospace; font-weight: 700; }
 .rec-change.up { color: var(--success); }
 .rec-change.down { color: var(--danger); }

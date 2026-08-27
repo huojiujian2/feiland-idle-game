@@ -69,7 +69,7 @@ const jobIcons = { thunder: '⚡', light: '✨', wind: '🌪', knight: '🛡', a
 .job-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.5rem; }
 .job-card { padding: 0.7rem; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(24,26,46,0.5); text-align: center; }
 .job-card:hover { border-color: var(--accent2); transform: translateY(-2px); }
-.job-card.selected { border-color: var(--accent); background: rgba(212,175,94,0.1); box-shadow: 0 0 0 1px var(--accent); }
+.job-card.selected { border-color: var(--accent); background: rgba(var(--gold-rgb),0.1); box-shadow: 0 0 0 1px var(--accent); }
 .job-icon { font-size: 1.6rem; margin-bottom: 0.2rem; }
 .job-name { font-weight: 600; font-size: 0.9rem; color: var(--accent); }
 .job-desc { font-size: 0.68rem; color: var(--muted); margin: 0.2rem 0; line-height: 1.3; }
@@ -92,12 +92,12 @@ const jobIcons = { thunder: '⚡', light: '✨', wind: '🌪', knight: '🛡', a
 .stage-node.done:not(:last-child)::before { background: var(--accent2); }
 .stage-dot { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 0.68rem; font-weight: 700; z-index: 1; background: var(--bg3); border: 2px solid var(--rule); color: var(--dim); }
 .stage-node.done .stage-dot { background: var(--accent2); border-color: var(--accent2); color: #0e0f1c; }
-.stage-node.current .stage-dot { background: var(--accent); border-color: var(--accent); color: #0e0f1c; box-shadow: 0 0 8px rgba(212,175,94,0.4); }
+.stage-node.current .stage-dot { background: var(--accent); border-color: var(--accent); color: #0e0f1c; box-shadow: 0 0 8px rgba(var(--gold-rgb),0.4); }
 .stage-name { font-size: 0.85rem; font-weight: 600; }
 .stage-node.done .stage-name { color: var(--accent2); }
 .stage-node.current .stage-name { color: var(--accent); }
 .stage-node.future .stage-name { color: var(--dim); }
 .stage-level { font-size: 0.68rem; color: var(--muted); }
 .stage-desc { font-size: 0.72rem; color: var(--dim); margin-top: 0.1rem; }
-.next-hint { margin-top: 0.8rem; padding: 0.5rem 0.7rem; background: rgba(212,175,94,0.08); border: 1px solid rgba(212,175,94,0.2); border-radius: 6px; font-size: 0.78rem; color: var(--accent); }
+.next-hint { margin-top: 0.8rem; padding: 0.5rem 0.7rem; background: rgba(var(--gold-rgb),0.08); border: 1px solid rgba(var(--gold-rgb),0.2); border-radius: 6px; font-size: 0.78rem; color: var(--accent); }
 </style>

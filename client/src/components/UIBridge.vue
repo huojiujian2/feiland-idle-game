@@ -59,7 +59,7 @@ import { state } from '../ui-bridge.js'
   min-width: 180px;
   max-width: 320px;
   padding: 10px 14px;
-  background: linear-gradient(135deg, rgba(28,30,54,0.96), rgba(20,22,42,0.94));
+  background: linear-gradient(135deg, rgba(var(--panel2-rgb),0.96), rgba(var(--panel-rgb),0.94));
   backdrop-filter: blur(12px);
   color: var(--ink);
   border-radius: 8px;
@@ -68,7 +68,7 @@ import { state } from '../ui-bridge.js'
   align-items: center;
   gap: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-  border: 1px solid rgba(157,140,240,0.18);
+  border: 1px solid rgba(var(--violet-rgb),0.18);
   border-left-width: 3px;
 }
 .toast-icon {
@@ -85,9 +85,9 @@ import { state } from '../ui-bridge.js'
 .toast-error { border-left-color: var(--danger); }
 .toast-error .toast-icon { background: rgba(224,88,88,0.15); color: var(--danger); }
 .toast-warn { border-left-color: var(--accent); }
-.toast-warn .toast-icon { background: rgba(212,175,94,0.15); color: var(--accent); }
+.toast-warn .toast-icon { background: rgba(var(--gold-rgb),0.15); color: var(--accent); }
 .toast-info { border-left-color: var(--accent2); }
-.toast-info .toast-icon { background: rgba(157,140,240,0.15); color: var(--accent2); }
+.toast-info .toast-icon { background: rgba(var(--violet-rgb),0.15); color: var(--accent2); }
 
 /* toast 过渡 */
 .toast-enter-from, .toast-leave-to {
@@ -113,11 +113,11 @@ import { state } from '../ui-bridge.js'
 .modal-box {
   width: 100%;
   max-width: 320px;
-  background: linear-gradient(135deg, rgba(28,30,54,0.96), rgba(20,22,42,0.94));
+  background: linear-gradient(135deg, rgba(var(--panel2-rgb),0.96), rgba(var(--panel-rgb),0.94));
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(212,175,94,0.3);
+  border: 1px solid rgba(var(--gold-rgb),0.3);
   border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(212,175,94,0.15);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(var(--gold-rgb),0.15);
   padding: 1rem 1.1rem 1.1rem;
   position: relative;
   overflow: hidden;
@@ -127,7 +127,7 @@ import { state } from '../ui-bridge.js'
   position: absolute;
   top: 0; left: 16px; right: 16px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(212,175,94,0.6), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--gold-rgb),0.6), transparent);
 }
 .modal-warning { border-color: rgba(224,88,88,0.35); }
 .modal-warning::before { background: linear-gradient(90deg, transparent, rgba(224,88,88,0.5), transparent); }

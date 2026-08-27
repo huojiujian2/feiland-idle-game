@@ -94,9 +94,9 @@
               </p>
 
               <div class="parchment-actions">
-                <button class="btn-rune btn-rune--primary" @click="handleLogin">
+                <button class="btn-rune btn-rune--primary" :disabled="submitting" @click="handleLogin">
                   <span class="btn-rune-flame"></span>
-                  <span class="btn-rune-text">⚔ 踏入世界</span>
+                  <span class="btn-rune-text">{{ submitting ? '正在踏入…' : '⚔ 踏入世界' }}</span>
                 </button>
                 <button class="btn-rune btn-rune--ghost" @click="switchTo('register')">
                   <span class="btn-rune-text">★ 缔结契约</span>
@@ -236,7 +236,7 @@
                   :disabled="!canRegister"
                 >
                   <span class="btn-rune-flame"></span>
-                  <span class="btn-rune-text">★ 刻下契约</span>
+                  <span class="btn-rune-text">{{ submitting ? '正在刻下…' : '★ 刻下契约' }}</span>
                 </button>
                 <button class="btn-rune btn-rune--ghost" @click="switchTo('login')">
                   <span class="btn-rune-text">↩ 返回归途</span>
@@ -404,7 +404,7 @@
 // @module login-screen
 // @description 沉浸式西幻主题：羊皮卷轴 + 符文星图 + 烛光 + 翻书动画
 //              + 真名实时校验 + 灵魂强度密码反馈 + 注册成功神谕过渡
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import IconBase from './icons/IconBase.vue';
 import { toast } from '../ui-bridge.js';
 
@@ -449,12 +449,15 @@ if (_remembered) {
 // v0.9：登录失败的 inline 错误提示（卷轴味文案）
 const loginError = ref('');
 const registerError = ref('');
-// 用户开始重新输入时自动清掉错误（避免一直挂在那）
-watch([usernameInput, passwordInput], () => { if (loginError.value) loginError.value = ''; });
-watch([usernameInput, passwordInput, passwordConfirm], () => { if (registerError.value) registerError.value = ''; });
 const charNameInput = ref('');
 const rememberMe = ref(!!_remembered);
 const agreedToLaws = ref(false);
+// 用户开始重新输入时自动清掉错误（避免一直挂在那）
+// v2.7：注册页把所有相关字段都监听到，任何输入变化都清错误
+watch([usernameInput, passwordInput], () => { if (loginError.value) loginError.value = ''; });
+watch([usernameInput, passwordInput, passwordConfirm, agreedToLaws], () => {
+  if (registerError.value) registerError.value = '';
+});
 const showPwd = ref(false);
 const focusField = ref('');
 const registeredName = ref('');
@@ -558,8 +561,13 @@ watch(usernameInput, (val) => {
   }, 350);
 });
 
+// v2.7 fix：防重复提交锁——快速双击"刻下契约/踏入世界"会发出两次请求，
+//   第二次因"账号已存在"失败，造成"先成功后报错"的混乱反馈
+const submitting = ref(false);
+
 const canRegister = computed(
   () =>
+    !submitting.value &&
     usernameInput.value.length >= 2 &&
     passwordInput.value.length >= 8 &&
     passwordInput.value === passwordConfirm.value &&
@@ -578,19 +586,26 @@ function switchTo(step) {
 }
 
 // ====== 业务：登录 / 注册 / 建角色 ======
-function handleLogin() {
+async function handleLogin() {
+  if (submitting.value) return;              // v2.7 fix：防重复提交
   if (!usernameInput.value || !passwordInput.value) {
     return toast.warn('请输入真名与秘钥');
   }
-  // v2.5：按"铭记此身"勾选决定是否持久化
-  if (rememberMe.value) {
-    saveRemembered(usernameInput.value, passwordInput.value);
-  } else {
-    clearRemembered();
+  submitting.value = true;
+  try {
+    // v2.5：按"铭记此身"勾选决定是否持久化
+    if (rememberMe.value) {
+      saveRemembered(usernameInput.value, passwordInput.value);
+    } else {
+      clearRemembered();
+    }
+    await emit('login', { username: usernameInput.value, password: passwordInput.value });
+  } finally {
+    submitting.value = false;
   }
-  emit('login', { username: usernameInput.value, password: passwordInput.value });
 }
 async function handleRegister() {
+  if (submitting.value) return;              // v2.7 fix：防重复提交
   if (!usernameInput.value || !passwordInput.value) {
     return toast.warn('请填写真名与秘钥');
   }
@@ -606,25 +621,12 @@ async function handleRegister() {
   if (nameCheck.value.state === 'taken') {
     return toast.warn('此真名已被另一个灵魂烙印');
   }
+  submitting.value = true;
   registeredName.value = usernameInput.value;
-  // 关键修复：等 App.vue 完成注册（含 toast 提示），再决定是否翻到神谕面板
-  // App.vue 现在会返回 res（成功/失败）
-  const res = await emit('register', { username: usernameInput.value, password: passwordInput.value });
-  if (!res || res.success === false) {
-    // 注册失败：不翻页，留在注册页（toast 已显示，inline 也显示）
-    const raw = (res && res.message) || '契约未成';
-    registerError.value = raw.includes('已存在')
-      ? '此真名已被另一个灵魂烙印，请换一个'
-      : raw;
-    return;
-  }
-  registerError.value = '';
-  // 翻到神谕过渡面板
-  switchTo('created');
-  // 2.4s 后回到登录页（契约成立后等待服务器建账号态）
-  setTimeout(() => {
-    if (loginStep.value === 'created') switchTo('login');
-  }, 2400);
+  // v2.8 fix：当前 Vue 版本的 emit 不会把父组件 handleRegister 的返回值传回来，
+  //   拿到的永远是 undefined（旧代码因此"注册成功也报契约未成"）。
+  //   改为：App.vue 注册完成后调用 setRegisterResult() 回传结果并解除 submitting 锁
+  emit('register', { username: usernameInput.value, password: passwordInput.value });
 }
 function handleCreateChar() {
   const name = charNameInput.value.trim();
@@ -638,6 +640,31 @@ defineExpose({
   // v0.9：让 App.vue 设置/清空 inline 错误
   setLoginError: (msg) => { loginError.value = msg || ''; },
   setRegisterError: (msg) => { registerError.value = msg || ''; },
+  // v2.8 fix：App.vue 注册完成后回传结果（emit 不回传父函数返回值）
+  //   ok=true：清错误 → 翻到神谕面板 → 2.4s 后回登录页
+  //   ok=false：留在注册页显示 inline 错误
+  setRegisterResult: (ok, rawMsg) => {
+    submitting.value = false;
+    if (ok) {
+      registerError.value = '';
+      switchTo('created');
+      // 2.4s 后回到登录页（契约成立后等待服务器建账号态）
+      setTimeout(() => {
+        if (loginStep.value === 'created') switchTo('login');
+      }, 2400);
+      return;
+    }
+    // v2.7 文案规则：以"契约未成"开头，配合后端真实原因
+    const raw = rawMsg || '契约未成';
+    registerError.value = raw.includes('已存在')
+      ? '此真名已被另一个灵魂烙印，请换一个'
+      : `契约未成：${raw}`;
+    // 滚动到错误位置（防止错误在视口外用户看不到）
+    nextTick(() => {
+      const el = document.querySelector('.login-error-msg');
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  },
 });
 
 onMounted(() => {
@@ -672,8 +699,8 @@ onMounted(() => {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse at 20% 10%, rgba(157,140,240,0.18), transparent 55%),
-    radial-gradient(ellipse at 80% 90%, rgba(212,175,94,0.12), transparent 55%),
+    radial-gradient(ellipse at 20% 10%, rgba(var(--violet-rgb),0.18), transparent 55%),
+    radial-gradient(ellipse at 80% 90%, rgba(var(--gold-rgb),0.12), transparent 55%),
     radial-gradient(ellipse at 50% 50%, rgba(255,200,120,0.05), transparent 70%),
     linear-gradient(180deg, #0a0b14 0%, #06070d 100%);
 }
@@ -683,9 +710,9 @@ onMounted(() => {
   inset: 0;
   background-image:
     radial-gradient(1px 1px at 12% 18%, rgba(255,235,180,0.9), transparent 50%),
-    radial-gradient(1px 1px at 28% 72%, rgba(212,175,94,0.7), transparent 50%),
+    radial-gradient(1px 1px at 28% 72%, rgba(var(--gold-rgb),0.7), transparent 50%),
     radial-gradient(1px 1px at 45% 35%, rgba(255,255,255,0.8), transparent 50%),
-    radial-gradient(1px 1px at 68% 22%, rgba(157,140,240,0.8), transparent 50%),
+    radial-gradient(1px 1px at 68% 22%, rgba(var(--violet-rgb),0.8), transparent 50%),
     radial-gradient(2px 2px at 82% 65%, rgba(255,220,140,0.6), transparent 50%),
     radial-gradient(1px 1px at 8% 88%, rgba(255,235,180,0.6), transparent 50%),
     radial-gradient(1px 1px at 92% 12%, rgba(255,255,255,0.7), transparent 50%);
@@ -705,7 +732,7 @@ onMounted(() => {
   width: 520px;
   height: 520px;
   transform: translateX(-50%);
-  border: 1px dashed rgba(212,175,94,0.18);
+  border: 1px dashed rgba(var(--gold-rgb),0.18);
   border-radius: 50%;
   animation: rune-rotate 60s linear infinite;
 }
@@ -714,13 +741,13 @@ onMounted(() => {
   content: '';
   position: absolute;
   inset: 36px;
-  border: 1px solid rgba(212,175,94,0.08);
+  border: 1px solid rgba(var(--gold-rgb),0.08);
   border-radius: 50%;
 }
 .imm-rune-ring::after {
   inset: 72px;
   border-style: dotted;
-  border-color: rgba(157,140,240,0.15);
+  border-color: rgba(var(--violet-rgb),0.15);
   animation: rune-rotate 90s linear infinite reverse;
 }
 @keyframes rune-rotate {
@@ -749,8 +776,8 @@ onMounted(() => {
   position: absolute;
   inset: 0;
   background:
-    repeating-linear-gradient(45deg, rgba(212,175,94,0.018) 0 2px, transparent 2px 8px),
-    repeating-linear-gradient(-45deg, rgba(157,140,240,0.018) 0 2px, transparent 2px 8px);
+    repeating-linear-gradient(45deg, rgba(var(--gold-rgb),0.018) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(-45deg, rgba(var(--violet-rgb),0.018) 0 2px, transparent 2px 8px);
   mix-blend-mode: screen;
   opacity: 0.7;
 }
@@ -798,14 +825,14 @@ onMounted(() => {
   content: '';
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(212,175,94,0.35);
+  border: 1px solid rgba(var(--gold-rgb),0.35);
   border-radius: 50%;
   animation: rune-rotate 22s linear infinite;
 }
 .hero-rune::after {
   inset: 8px;
   border-style: dotted;
-  border-color: rgba(157,140,240,0.3);
+  border-color: rgba(var(--violet-rgb),0.3);
   animation-duration: 14s;
   animation-direction: reverse;
 }
@@ -814,12 +841,12 @@ onMounted(() => {
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 16px rgba(212,175,94,0.7), 0 0 4px #fff;
+  box-shadow: 0 0 16px rgba(var(--gold-rgb),0.7), 0 0 4px #fff;
   animation: rune-pulse 2.4s ease-in-out infinite;
 }
 @keyframes rune-pulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 16px rgba(212,175,94,0.7), 0 0 4px #fff; }
-  50% { transform: scale(1.25); box-shadow: 0 0 24px rgba(212,175,94,1), 0 0 6px #fff; }
+  0%, 100% { transform: scale(1); box-shadow: 0 0 16px rgba(var(--gold-rgb),0.7), 0 0 4px #fff; }
+  50% { transform: scale(1.25); box-shadow: 0 0 24px rgba(var(--gold-rgb),1), 0 0 6px #fff; }
 }
 .login-title {
   font-family: var(--font-display, 'Cinzel', serif);
@@ -834,12 +861,12 @@ onMounted(() => {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  text-shadow: 0 0 36px rgba(212,175,94,0.3);
-  filter: drop-shadow(0 0 12px rgba(212,175,94,0.25));
+  text-shadow: 0 0 36px rgba(var(--gold-rgb),0.3);
+  filter: drop-shadow(0 0 12px rgba(var(--gold-rgb),0.25));
 }
 .login-subtitle {
   font-size: 0.82rem;
-  color: rgba(212,175,94,0.7);
+  color: rgba(var(--gold-rgb),0.7);
   letter-spacing: 0.16em;
   margin-top: 0.4rem;
   font-style: italic;
@@ -859,12 +886,12 @@ onMounted(() => {
     /* 羊皮纸暖色基底 */
     linear-gradient(135deg, rgba(60,46,28,0.88) 0%, rgba(38,28,16,0.92) 100%);
   /* 卷轴纸边：淡化金线，避免硬边矩形感；保留纸质感 */
-  border: 1px solid rgba(212,175,94,0.18);
+  border: 1px solid rgba(var(--gold-rgb),0.18);
   border-radius: 4px;
   padding: 1.6rem 1.6rem 1.4rem;
   box-shadow:
     0 0 0 1px rgba(0,0,0,0.4) inset,
-    0 0 24px rgba(212,175,94,0.10),
+    0 0 24px rgba(var(--gold-rgb),0.10),
     0 8px 28px rgba(0,0,0,0.5);
 }
 /* 羊皮纸四条边的双线 + 角饰 */
@@ -874,7 +901,7 @@ onMounted(() => {
   position: absolute;
   left: 8px; right: 8px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(212,175,94,0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--gold-rgb),0.55), transparent);
 }
 .parchment::before { top: 6px; }
 .parchment::after { bottom: 6px; }
@@ -898,7 +925,7 @@ onMounted(() => {
   color: #1a1208;
   font-size: 9px;
   border-radius: 50%;
-  box-shadow: 0 0 8px rgba(212,175,94,0.7);
+  box-shadow: 0 0 8px rgba(var(--gold-rgb),0.7);
   z-index: 2;
 }
 .parchment-inner::after {
@@ -912,7 +939,7 @@ onMounted(() => {
   color: #1a1208;
   font-size: 9px;
   border-radius: 50%;
-  box-shadow: 0 0 10px rgba(212,175,94,0.6);
+  box-shadow: 0 0 10px rgba(var(--gold-rgb),0.6);
 }
 
 /* ============ 字段（卷轴书写区：无边框，仅底边线 + 聚焦描边） ============ */
@@ -925,7 +952,7 @@ onMounted(() => {
   letter-spacing: 0.12em;
   margin-bottom: 0.35rem;
   font-family: var(--font-display, 'Cinzel', serif);
-  text-shadow: 0 0 8px rgba(212,175,94,0.25);
+  text-shadow: 0 0 8px rgba(var(--gold-rgb),0.25);
 }
 /* 字段行：去掉突兀方框，改用「卷轴书写区」样式 —— 透明背景 + 底部金线 + 微凹阴影 */
 .field-row {
@@ -934,7 +961,7 @@ onMounted(() => {
   align-items: center;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid rgba(212,175,94,0.35);
+  border-bottom: 1px solid rgba(var(--gold-rgb),0.35);
   border-radius: 0;
   padding: 0.2rem 0.1rem 0.55rem;
   transition: border-color 0.25s var(--ease-out, ease), background 0.25s;
@@ -950,7 +977,7 @@ onMounted(() => {
 }
 .field-row.is-focus {
   border-bottom-color: var(--accent);
-  background: linear-gradient(180deg, transparent 0%, rgba(212,175,94,0.06) 100%);
+  background: linear-gradient(180deg, transparent 0%, rgba(var(--gold-rgb),0.06) 100%);
 }
 .field-row.is-focus::before { opacity: 0; }
 .field-row.is-valid {
@@ -974,7 +1001,7 @@ onMounted(() => {
   letter-spacing: 0.04em;
   caret-color: var(--accent);
 }
-.parchment-input::placeholder { color: rgba(212,175,94,0.4); font-style: italic; }
+.parchment-input::placeholder { color: rgba(var(--gold-rgb),0.4); font-style: italic; }
 /* 密码输入：字符掩码在 type=password 模式下由浏览器原生提供（Cinzel 字体下视觉接近 ◆） */
 .parchment-input--rune {
   font-family: 'Cinzel', 'Noto Sans SC', serif;
@@ -983,7 +1010,7 @@ onMounted(() => {
 /* 字段右侧图标 —— 与羊皮纸卷面无缝融合，静态纯图标（不闪烁） */
 .field-icon {
   padding: 0 0.4rem;
-  color: rgba(212,175,94,0.6);
+  color: rgba(var(--gold-rgb),0.6);
   font-size: 1rem;
   display: flex;
   align-items: center;
@@ -1003,7 +1030,7 @@ onMounted(() => {
   border: 0;
   padding: 0 0.4rem;
   cursor: pointer;
-  color: rgba(212,175,94,0.55);
+  color: rgba(var(--gold-rgb),0.55);
   font-size: 1.05rem;
   display: flex;
   align-items: center;
@@ -1015,10 +1042,10 @@ onMounted(() => {
 }
 .rune-toggle:hover { color: var(--accent); }
 .rune-eye { line-height: 1; }
-.rune-eye--closed { color: rgba(157,140,240,0.55); }
+.rune-eye--closed { color: rgba(var(--violet-rgb),0.55); }
 .field-hint {
   font-size: 0.7rem;
-  color: rgba(212,175,94,0.55);
+  color: rgba(var(--gold-rgb),0.55);
   margin: 0.35rem 0 0 0.1rem;
   letter-spacing: 0.05em;
   font-style: italic;
@@ -1091,7 +1118,7 @@ onMounted(() => {
   appearance: none;
   -webkit-appearance: none;
   background: rgba(8,8,14,0.55);
-  border: 1px solid rgba(212,175,94,0.45);
+  border: 1px solid rgba(var(--gold-rgb),0.45);
   border-radius: 3px;
   cursor: pointer;
   position: relative;
@@ -1100,7 +1127,7 @@ onMounted(() => {
 .remember-cb:checked {
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 0 8px rgba(212,175,94,0.4);
+  box-shadow: 0 0 8px rgba(var(--gold-rgb),0.4);
 }
 .remember-cb:checked::after {
   content: '✓';
@@ -1125,7 +1152,7 @@ onMounted(() => {
   position: relative;
   width: 100%;
   padding: 0.75rem 1rem;
-  border: 1px solid rgba(212,175,94,0.45);
+  border: 1px solid rgba(var(--gold-rgb),0.45);
   border-radius: 4px;
   background: linear-gradient(135deg, rgba(60,46,28,0.85), rgba(38,28,16,0.85));
   color: #f3e8c4;
@@ -1141,7 +1168,7 @@ onMounted(() => {
   content: '';
   position: absolute;
   inset: 1px;
-  border: 1px solid rgba(212,175,94,0.18);
+  border: 1px solid rgba(var(--gold-rgb),0.18);
   border-radius: 3px;
   pointer-events: none;
 }
@@ -1151,14 +1178,14 @@ onMounted(() => {
   color: #1a1208;
   border-color: #d4af5e;
   box-shadow:
-    0 2px 12px rgba(212,175,94,0.35),
+    0 2px 12px rgba(var(--gold-rgb),0.35),
     inset 0 1px 0 rgba(255,235,180,0.3);
 }
 .btn-rune--primary:hover {
   background: linear-gradient(135deg, #f0d896 0%, var(--accent) 50%, #8a6c2e 100%);
   transform: translateY(-1px);
   box-shadow:
-    0 4px 18px rgba(212,175,94,0.55),
+    0 4px 18px rgba(var(--gold-rgb),0.55),
     inset 0 1px 0 rgba(255,235,180,0.5);
 }
 /* 火焰微动效 */
@@ -1177,12 +1204,12 @@ onMounted(() => {
 }
 .btn-rune--ghost {
   background: transparent;
-  border-color: rgba(157,140,240,0.35);
-  color: rgba(157,140,240,0.85);
+  border-color: rgba(var(--violet-rgb),0.35);
+  color: rgba(var(--violet-rgb),0.85);
 }
 .btn-rune--ghost:hover {
-  background: rgba(157,140,240,0.08);
-  border-color: rgba(157,140,240,0.6);
+  background: rgba(var(--violet-rgb),0.08);
+  border-color: rgba(var(--violet-rgb),0.6);
   color: #c9bcf8;
   transform: translateY(-1px);
 }
@@ -1208,20 +1235,20 @@ onMounted(() => {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1px solid rgba(212,175,94,0.45);
+  border: 1px solid rgba(var(--gold-rgb),0.45);
   animation: rune-rotate 8s linear infinite;
 }
 .oracle-ring--1 { inset: 0; }
 .oracle-ring--2 { inset: 12px; border-style: dashed; animation-duration: 6s; animation-direction: reverse; }
-.oracle-ring--3 { inset: 24px; border-color: rgba(157,140,240,0.5); animation-duration: 5s; }
+.oracle-ring--3 { inset: 24px; border-color: rgba(var(--violet-rgb),0.5); animation-duration: 5s; }
 .oracle-star {
   position: absolute;
   inset: 0;
   display: flex; align-items: center; justify-content: center;
   font-size: 1.8rem;
   color: var(--accent);
-  filter: drop-shadow(0 0 12px rgba(212,175,94,0.7));
-  animation: rune-pulse 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 12px rgba(var(--gold-rgb),0.7));
+  /* v2.8 fix：去掉 rune-pulse 循环缩放爆光（用户反馈"一闪一闪"），改为静止常亮 */
 }
 .oracle-text {
   font-family: var(--font-display, 'Cinzel', serif);
@@ -1231,8 +1258,8 @@ onMounted(() => {
   letter-spacing: 0.05em;
   line-height: 1.6;
 }
-.oracle-text--dim { color: rgba(212,175,94,0.6); font-style: italic; font-size: 0.88rem; }
-.oracle-name { color: var(--accent); font-weight: 700; text-shadow: 0 0 8px rgba(212,175,94,0.5); }
+.oracle-text--dim { color: rgba(var(--gold-rgb),0.6); font-style: italic; font-size: 0.88rem; }
+.oracle-name { color: var(--accent); font-weight: 700; text-shadow: 0 0 8px rgba(var(--gold-rgb),0.5); }
 
 /* ============ 底部神谕 ============ */
 .oracle-quote {
@@ -1240,7 +1267,7 @@ onMounted(() => {
   font-family: var(--font-display, 'Cinzel', serif);
   font-style: italic;
   font-size: 0.78rem;
-  color: rgba(212,175,94,0.55);
+  color: rgba(var(--gold-rgb),0.55);
   letter-spacing: 0.06em;
   text-align: center;
   animation: fadeIn 0.6s var(--ease-out, ease) both;
@@ -1264,7 +1291,7 @@ onMounted(() => {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 0%, rgba(212,175,94,0.15) 50%, transparent 100%);
+  background: linear-gradient(180deg, transparent 0%, rgba(var(--gold-rgb),0.15) 50%, transparent 100%);
   animation: flip-shimmer 0.28s ease-in-out;
   pointer-events: none;
 }
@@ -1285,7 +1312,7 @@ onMounted(() => {
 }
 .create-intro-line {
   font-size: 0.72rem;
-  color: rgba(212,175,94,0.55);
+  color: rgba(var(--gold-rgb),0.55);
   letter-spacing: 0.16em;
   font-style: italic;
 }
@@ -1295,7 +1322,7 @@ onMounted(() => {
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 0.18em;
-  text-shadow: 0 0 12px rgba(212,175,94,0.3);
+  text-shadow: 0 0 12px rgba(var(--gold-rgb),0.3);
 }
 
 /* 三族试听 */
@@ -1313,7 +1340,7 @@ onMounted(() => {
   gap: 0.4rem;
   padding: 0.5rem 0.3rem 0.55rem;
   background: rgba(8,8,14,0.55);
-  border: 1px solid rgba(212,175,94,0.18);
+  border: 1px solid rgba(var(--gold-rgb),0.18);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.25s var(--ease-out, ease);
@@ -1322,17 +1349,17 @@ onMounted(() => {
   animation: fadeInUp 0.5s var(--ease-out, ease) both;
 }
 .race-card:hover {
-  border-color: rgba(212,175,94,0.5);
+  border-color: rgba(var(--gold-rgb),0.5);
   background: rgba(8,8,14,0.75);
   transform: translateY(-2px);
   box-shadow: 0 4px 14px rgba(0,0,0,0.4);
 }
 .race-card.is-active {
   border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(212,175,94,0.12) 0%, rgba(8,8,14,0.75) 100%);
+  background: linear-gradient(180deg, rgba(var(--gold-rgb),0.12) 0%, rgba(8,8,14,0.75) 100%);
   box-shadow:
-    0 0 0 1px rgba(212,175,94,0.4),
-    0 0 18px rgba(212,175,94,0.25);
+    0 0 0 1px rgba(var(--gold-rgb),0.4),
+    0 0 18px rgba(var(--gold-rgb),0.25);
 }
 .race-card.is-active::before {
   content: '';
@@ -1347,7 +1374,7 @@ onMounted(() => {
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 3px;
-  border: 1px solid rgba(212,175,94,0.3);
+  border: 1px solid rgba(var(--gold-rgb),0.3);
 }
 .race-card-img {
   width: 100%;
@@ -1371,7 +1398,7 @@ onMounted(() => {
   font-family: var(--font-display, 'Cinzel', serif);
   font-size: 0.95rem;
   color: var(--accent);
-  text-shadow: 0 0 8px rgba(212,175,94,0.6);
+  text-shadow: 0 0 8px rgba(var(--gold-rgb),0.6);
   filter: drop-shadow(0 0 4px rgba(0,0,0,0.8));
 }
 .race-card-meta { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; }
@@ -1383,7 +1410,7 @@ onMounted(() => {
   font-family: var(--font-display, 'Cinzel', serif);
   letter-spacing: 0.06em;
 }
-.race-card.is-active .race-card-name { color: var(--accent); text-shadow: 0 0 6px rgba(212,175,94,0.4); }
+.race-card.is-active .race-card-name { color: var(--accent); text-shadow: 0 0 6px rgba(var(--gold-rgb),0.4); }
 /* 预览态：翼人/天使不让选，只能看看 —— 整张卡降饱和+右上角「观」角徽 */
 .race-card.is-preview {
   filter: brightness(0.72) saturate(0.7);
@@ -1394,10 +1421,10 @@ onMounted(() => {
   opacity: 0.95;
 }
 .race-card.is-preview .race-card-frame {
-  border-color: rgba(212,175,94,0.18);
+  border-color: rgba(var(--gold-rgb),0.18);
 }
 .race-card.is-preview .race-card-mark {
-  color: rgba(212,175,94,0.5);
+  color: rgba(var(--gold-rgb),0.5);
   text-shadow: none;
 }
 .race-card-lock {
@@ -1406,17 +1433,17 @@ onMounted(() => {
   width: 18px; height: 18px;
   display: flex; align-items: center; justify-content: center;
   background: rgba(8,8,14,0.7);
-  border: 1px solid rgba(212,175,94,0.5);
+  border: 1px solid rgba(var(--gold-rgb),0.5);
   color: var(--accent);
   font-family: var(--font-display, 'Cinzel', serif);
   font-size: 10px;
   font-weight: 700;
   border-radius: 50%;
-  box-shadow: 0 0 6px rgba(212,175,94,0.4);
+  box-shadow: 0 0 6px rgba(var(--gold-rgb),0.4);
 }
 .race-card-tier {
   font-size: 0.6rem;
-  color: rgba(157,140,240,0.7);
+  color: rgba(var(--violet-rgb),0.7);
   letter-spacing: 0.08em;
 }
 
@@ -1429,7 +1456,7 @@ onMounted(() => {
 }
 .race-oracle-line {
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(212,175,94,0.45), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--gold-rgb),0.45), transparent);
   margin: 0.3rem 0;
 }
 .race-oracle-text {
@@ -1442,7 +1469,7 @@ onMounted(() => {
   font-style: italic;
 }
 .race-oracle-text--dim {
-  color: rgba(212,175,94,0.55);
+  color: rgba(var(--gold-rgb),0.55);
   font-size: 0.74rem;
 }
 .race-oracle-text--hint {
@@ -1468,7 +1495,7 @@ onMounted(() => {
   margin: 0.4rem 0 0.9rem;
   padding: 0.5rem 0.7rem;
   background: rgba(8,8,14,0.65);
-  border: 1px dashed rgba(212,175,94,0.35);
+  border: 1px dashed rgba(var(--gold-rgb),0.35);
   border-radius: 3px;
   font-family: var(--font-display, 'Cinzel', serif);
   font-size: 0.84rem;
@@ -1476,10 +1503,10 @@ onMounted(() => {
 .fate-book-line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(212,175,94,0.4), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--gold-rgb),0.4), transparent);
 }
 .fate-book-text {
-  color: rgba(212,175,94,0.75);
+  color: rgba(var(--gold-rgb),0.75);
   letter-spacing: 0.1em;
   font-style: italic;
   white-space: nowrap;
@@ -1490,7 +1517,7 @@ onMounted(() => {
 .fate-book-name {
   color: var(--accent);
   font-weight: 700;
-  text-shadow: 0 0 8px rgba(212,175,94,0.5);
+  text-shadow: 0 0 8px rgba(var(--gold-rgb),0.5);
   font-style: normal;
 }
 

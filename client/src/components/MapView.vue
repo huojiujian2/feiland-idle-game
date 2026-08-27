@@ -161,7 +161,7 @@ function goBackToSelect() {
   gap: 0.25rem;
   padding: 0.32rem 0.65rem 0.32rem 0.5rem;
   background: linear-gradient(135deg, rgba(60,46,28,0.85) 0%, rgba(38,28,16,0.85) 100%);
-  border: 1px solid rgba(212,175,94,0.45);
+  border: 1px solid rgba(var(--gold-rgb),0.45);
   border-radius: 4px;
   color: var(--accent);
   font-family: var(--font-display, 'Cinzel', serif);
@@ -171,13 +171,13 @@ function goBackToSelect() {
   cursor: pointer;
   transition: all 0.2s var(--ease-out, ease);
   z-index: 2;
-  box-shadow: 0 0 10px rgba(212,175,94,0.15);
+  box-shadow: 0 0 10px rgba(var(--gold-rgb),0.15);
 }
 .back-btn:hover {
   background: linear-gradient(135deg, var(--accent) 0%, #a8884a 100%);
   color: #1a1208;
   border-color: var(--accent);
-  box-shadow: 0 0 16px rgba(212,175,94,0.4);
+  box-shadow: 0 0 16px rgba(var(--gold-rgb),0.4);
   transform: translateX(-1px);
 }
 .back-arrow { font-size: 1.05rem; line-height: 1; }
@@ -193,8 +193,8 @@ function goBackToSelect() {
   align-items: center;
   gap: 0.4rem;
   padding: 0.32rem 0.85rem;
-  background: linear-gradient(180deg, rgba(212,175,94,0.15) 0%, rgba(8,8,14,0.85) 100%);
-  border: 1px solid rgba(212,175,94,0.45);
+  background: linear-gradient(180deg, rgba(var(--gold-rgb),0.15) 0%, rgba(8,8,14,0.85) 100%);
+  border: 1px solid rgba(var(--gold-rgb),0.45);
   border-radius: 16px;
   font-family: var(--font-display, 'Cinzel', serif);
   font-size: 0.82rem;
@@ -203,24 +203,24 @@ function goBackToSelect() {
   cursor: pointer;
   transition: all 0.2s var(--ease-out, ease);
   z-index: 2;
-  box-shadow: 0 0 14px rgba(212,175,94,0.2), inset 0 1px 0 rgba(255,235,180,0.18);
+  box-shadow: 0 0 14px rgba(var(--gold-rgb),0.2), inset 0 1px 0 rgba(255,235,180,0.18);
 }
 .current-area:hover {
   border-color: var(--accent);
-  box-shadow: 0 0 20px rgba(212,175,94,0.35), inset 0 1px 0 rgba(255,235,180,0.3);
+  box-shadow: 0 0 20px rgba(var(--gold-rgb),0.35), inset 0 1px 0 rgba(255,235,180,0.3);
 }
 .current-area-glyph {
   font-size: 0.95rem;
   color: var(--accent);
-  text-shadow: 0 0 6px rgba(212,175,94,0.5);
+  text-shadow: 0 0 6px rgba(var(--gold-rgb),0.5);
 }
 .current-area-name {
   letter-spacing: 0.06em;
-  text-shadow: 0 0 6px rgba(212,175,94,0.25);
+  text-shadow: 0 0 6px rgba(var(--gold-rgb),0.25);
 }
 .current-area-lv {
   font-size: 0.7rem;
-  color: rgba(157,140,240,0.75);
+  color: rgba(var(--violet-rgb),0.75);
   font-family: monospace;
   letter-spacing: 0.04em;
 }
@@ -236,10 +236,10 @@ function goBackToSelect() {
 /* ============ 右侧侧栏（两页通用） ============ */
 .side-panel { position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 50; }
 .side-toggle { width: 24px; height: 60px; background: var(--bg2); border: 1px solid var(--rule); border-right: none; border-radius: 6px 0 0 6px; cursor: pointer; color: var(--muted); font-size: 0.8rem; }
-.side-toggle:hover { background: rgba(157,140,240,0.1); }
+.side-toggle:hover { background: rgba(var(--violet-rgb),0.1); }
 .side-tabs { background: var(--bg2); border: 1px solid var(--rule); border-right: none; border-radius: 6px 0 0 6px; padding: 0.4rem 0; display: flex; flex-direction: column; gap: 0.3rem; min-width: 90px; }
 .side-tab-item { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.5rem 0.3rem; cursor: pointer; border-radius: 4px; transition: background 0.15s; }
-.side-tab-item:hover { background: rgba(157,140,240,0.1); }
+.side-tab-item:hover { background: rgba(var(--violet-rgb),0.1); }
 .side-tab-icon { font-size: 1.2rem; color: var(--accent2); }
 .side-tab-label { font-size: 0.7rem; color: var(--muted); }
 

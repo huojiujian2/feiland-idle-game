@@ -75,13 +75,40 @@ function buildCodexData(store) {
   const genesis = meta && meta.genesis;
   if (genesis) {
     // 自创装备（id 在 EQUIP_TEMPLATES 里一定有；这里只覆盖 sources 为该自创者投放的地图）
+    //   v2.6：rate 不再硬编码 0 —— 从 monsters 列表里反查"绑定了这件装备的自创怪"的真实掉率
+    //   同一件装备可能被多个怪物绑定，sources 列出来源怪物 + 各自掉率
     for (const e of (genesis.equips || [])) {
       const tpl = EQUIP_TEMPLATES[e.id];
       if (tpl) {
+        const sources = [];
+        // 找到所有"装备 id === e.id"的自创怪（按 kind='equip' 匹配）
+        for (const m of (genesis.monsters || [])) {
+          for (const drop of (m.drops || [])) {
+            if (drop.kind === 'equip' && drop.name === e.id) {
+              sources.push({
+                area: m.areaId,
+                areaName: AREAS[m.areaId]?.name || m.areaId,
+                rate: drop.rate,
+                monster: m.name,         // v2.6：告诉玩家来自哪只怪
+                monsterCreator: m.creator,
+              });
+            }
+          }
+        }
+        // 兜底：装备投放了但还没怪物绑定（worldState='pending' 阶段）
+        if (sources.length === 0) {
+          sources.push({
+            area: e.areaId,
+            areaName: AREAS[e.areaId]?.name || e.areaId,
+            rate: 0,
+            monster: null,              // 还没怪物绑定
+            monsterCreator: null,
+          });
+        }
         equipMap.set(e.id, {
           templateId: e.id,
           ...tpl,
-          sources: [{ area: e.areaId, areaName: AREAS[e.areaId]?.name || e.areaId, rate: 0 }],
+          sources,
           shopPrice: null,
           creator: e.creator,
           creatorUsername: e.creatorUsername,   // v2.2：方便前端解析真名

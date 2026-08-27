@@ -84,10 +84,10 @@ const avatarIcon = computed(() => {
   /* 魔法卷轴纹理（横向平铺）+ 深色兜底 */
   background:
     url('/img/header-bg.png') repeat-x center / auto 100%,
-    linear-gradient(180deg, rgba(20,22,42,0.7), rgba(10,11,20,0.85));
+    linear-gradient(180deg, rgba(var(--panel-rgb),0.7), rgba(10,11,20,0.85));
   backdrop-filter: blur(12px);
   border-top: none;
-  border-bottom: 1px solid rgba(157,140,240,0.1);
+  border-bottom: 1px solid rgba(var(--violet-rgb),0.1);
   position: relative;
   z-index: 50;
 }
@@ -116,7 +116,7 @@ const avatarIcon = computed(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 0 12px rgba(212,175,94,0.4);
+  box-shadow: 0 0 12px rgba(var(--gold-rgb),0.4);
   font-size: 26px;
   line-height: 1;
 }
@@ -139,8 +139,8 @@ const avatarIcon = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
-  background: linear-gradient(135deg, rgba(28,30,54,0.85), rgba(20,22,42,0.75));
-  border: 1px solid rgba(212,175,94,0.3);
+  background: linear-gradient(135deg, rgba(var(--panel2-rgb),0.85), rgba(var(--panel-rgb),0.75));
+  border: 1px solid rgba(var(--gold-rgb),0.3);
   border-radius: 8px;
   font-size: 13px;
   font-weight: 700;
@@ -176,8 +176,8 @@ const avatarIcon = computed(() => {
   align-items: center;
   gap: 4px;
   padding: 2px 7px;
-  background: linear-gradient(135deg, rgba(28,30,54,0.75), rgba(20,22,42,0.65));
-  border: 1px solid rgba(157,140,240,0.18);
+  background: linear-gradient(135deg, rgba(var(--panel2-rgb),0.75), rgba(var(--panel-rgb),0.65));
+  border: 1px solid rgba(var(--violet-rgb),0.18);
   border-radius: 6px;
   font-size: 10px;
   line-height: 1.4;
@@ -196,13 +196,13 @@ const avatarIcon = computed(() => {
 }
 .header-chip.godhood {
   border-color: var(--accent2);
-  background: rgba(157,140,240,0.15);
+  background: rgba(var(--violet-rgb),0.15);
 }
 .header-chip.godhood .chip-val { color: var(--accent2); }
 .header-chip.godhood.god {
   border-color: var(--accent);
-  background: rgba(212,175,94,0.15);
-  box-shadow: 0 0 6px rgba(212,175,94,0.3);
+  background: rgba(var(--gold-rgb),0.15);
+  box-shadow: 0 0 6px rgba(var(--gold-rgb),0.3);
 }
 .header-chip.godhood.god .chip-val { color: var(--accent); }
 
@@ -220,8 +220,8 @@ const avatarIcon = computed(() => {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  background: linear-gradient(135deg, rgba(28,30,54,0.85), rgba(20,22,42,0.75));
-  border: 1px solid rgba(212,175,94,0.3);
+  background: linear-gradient(135deg, rgba(var(--panel2-rgb),0.85), rgba(var(--panel-rgb),0.75));
+  border: 1px solid rgba(var(--gold-rgb),0.3);
   border-radius: 999px;
   color: var(--accent);
   font-weight: 700;
@@ -233,8 +233,8 @@ const avatarIcon = computed(() => {
 .header-icon-btn {
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, rgba(28,30,54,0.6), rgba(20,22,42,0.5));
-  border: 1px solid rgba(157,140,240,0.2);
+  background: linear-gradient(135deg, rgba(var(--panel2-rgb),0.6), rgba(var(--panel-rgb),0.5));
+  border: 1px solid rgba(var(--violet-rgb),0.2);
   border-radius: 8px;
   color: var(--muted);
   cursor: pointer;
@@ -246,9 +246,9 @@ const avatarIcon = computed(() => {
 .header-icon-btn:hover {
   border-color: var(--accent2);
   color: var(--accent2);
-  background: rgba(157,140,240,0.15);
+  background: rgba(var(--violet-rgb),0.15);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(157,140,240,0.2);
+  box-shadow: 0 2px 8px rgba(var(--violet-rgb),0.2);
 }
 .header-icon-btn:active { transform: translateY(0) scale(0.95); }
 

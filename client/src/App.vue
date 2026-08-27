@@ -222,9 +222,14 @@ async function handleRegister({ username, password }) {
       ? '此真名已被另一个灵魂烙印'
       : (res.message || '契约未成，星空未接受');
     toast.error(msg);
-    return res;   // 返回给 LoginScreen 决定是否翻页
+    // v2.8 fix：emit 不回传本函数返回值，改用 ref 方法把结果告知 LoginScreen（失败不翻页）
+    loginScreenRef.value?.setRegisterResult(false, res.message || msg);
+    return res;
   }
-  toast.success('契约成立！请登录');
+  // v2.7 fix：注册成功只 toast "契约成立"，不催玩家"请登录"
+  //   LoginScreen 会自动切到神谕面板 → 2.4s 后切回登录页让玩家输入账号密码
+  toast.success('契约成立');
+  loginScreenRef.value?.setRegisterResult(true);
   return res;
 }
 

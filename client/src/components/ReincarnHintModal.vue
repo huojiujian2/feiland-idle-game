@@ -93,7 +93,7 @@ defineEmits(['close', 'goReincarn']);
   max-width: 380px;
   width: 100%;
   text-align: center;
-  box-shadow: 0 0 50px rgba(212,175,94,0.35), 0 0 100px rgba(212,175,94,0.15);
+  box-shadow: 0 0 50px rgba(var(--gold-rgb),0.35), 0 0 100px rgba(var(--gold-rgb),0.15);
   animation: popIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -110,14 +110,14 @@ defineEmits(['close', 'goReincarn']);
 .reinc-hint-glyph {
   font-size: 3.5rem;
   color: var(--accent);
-  text-shadow: 0 0 24px rgba(212,175,94,0.6);
+  text-shadow: 0 0 24px rgba(var(--gold-rgb),0.6);
   font-family: var(--font-display, serif);
   margin-bottom: 0.4rem;
   animation: glyphPulse 2s ease-in-out infinite;
 }
 @keyframes glyphPulse {
-  0%, 100% { transform: scale(1); text-shadow: 0 0 24px rgba(212,175,94,0.6); }
-  50% { transform: scale(1.08); text-shadow: 0 0 36px rgba(212,175,94,0.9); }
+  0%, 100% { transform: scale(1); text-shadow: 0 0 24px rgba(var(--gold-rgb),0.6); }
+  50% { transform: scale(1.08); text-shadow: 0 0 36px rgba(var(--gold-rgb),0.9); }
 }
 
 .reinc-hint-title {
@@ -155,8 +155,8 @@ defineEmits(['close', 'goReincarn']);
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 0.7rem;
-  background: rgba(212,175,94,0.08);
-  border: 1px solid rgba(212,175,94,0.2);
+  background: rgba(var(--gold-rgb),0.08);
+  border: 1px solid rgba(var(--gold-rgb),0.2);
   border-radius: 6px;
 }
 .buff-label {

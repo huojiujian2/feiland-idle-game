@@ -43,9 +43,9 @@ const currentAreaName = computed(() => props.areas.find(a => a.id === props.play
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; font-size: 0.85rem; color: var(--muted); }
 .current-area { color: var(--accent); font-size: 0.72rem; }
 .area-list { display: flex; flex-direction: column; gap: 0.3rem; max-height: 240px; overflow-y: auto; }
-.area-item { padding: 0.5rem 0.6rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; transition: all 0.15s; }
-.area-item:hover:not(.locked) { border-color: var(--accent2); background: rgba(157,140,240,0.06); }
-.area-item.active { border-color: var(--accent); background: rgba(212,175,94,0.1); }
+.area-item { padding: 0.5rem 0.6rem; background: rgba(var(--panel-rgb),0.5); border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+.area-item:hover:not(.locked) { border-color: var(--accent2); background: rgba(var(--violet-rgb),0.06); }
+.area-item.active { border-color: var(--accent); background: rgba(var(--gold-rgb),0.1); }
 .area-item.locked { opacity: 0.5; cursor: not-allowed; }
 .area-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem; }
 .area-name { font-weight: 700; font-size: 0.85rem; }

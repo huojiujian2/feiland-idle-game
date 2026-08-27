@@ -77,9 +77,17 @@
           <div class="detail-row"><span class="dl">售价</span><span class="dv">💰{{ selected.price }}</span></div>
           <div class="detail-section-title">获取来源</div>
           <div v-if="selected.sources.length" class="source-list">
-            <div v-for="src in selected.sources" :key="src.area" class="source-item">
-              <span class="src-area">📍 {{ src.areaName }}</span>
-              <span class="src-rate">掉率 {{ (src.rate * 100).toFixed(1) }}%</span>
+            <div v-for="src in selected.sources" :key="src.area + (src.monster || '')" class="source-item">
+              <span class="src-area">
+                📍 {{ src.areaName }}<span v-if="src.monster"> · {{ src.monster }}</span>
+              </span>
+              <span class="src-rate">
+                <template v-if="src.rate > 0">
+                  掉率 {{ (src.rate * 100).toFixed(1) }}%
+                  <span class="src-greedy-hint" title="贪婪掠夺策略 +5% 掉落">→ {{ ((src.rate * 1.05) * 100).toFixed(1) }}%</span>
+                </template>
+                <template v-else>未绑定怪物（待投入世界）</template>
+              </span>
             </div>
           </div>
           <div v-else class="no-source">商店购买或任务获取</div>
@@ -91,7 +99,7 @@
 
         <!-- 装备详情 -->
         <template v-if="activeCat === 'equip'">
-          <div class="detail-title" :style="{ color: qualityColors[selected.quality] }">{{ equipIcons[selected.slot] }} {{ selected.name }}<span v-if="selected.creator || selected.creatorUsername" class="creator-tag" :title="`造物主：${displayCreator(selected)}`">{{ displayCreator(selected) }}造</span></div>
+          <div class="detail-title" :style="{ color: qualityColors[selected.quality] }"><IconBase :name="equipIcons[selected.slot]" :size="18" class="title-icon" /> {{ selected.name }}<span v-if="selected.creator || selected.creatorUsername" class="creator-tag" :title="`造物主：${displayCreator(selected)}`">{{ displayCreator(selected) }}造</span></div>
           <div class="detail-row" v-if="selected.customDesc"><span class="dl">神谕</span><span class="dv">{{ selected.customDesc }}</span></div>
           <div class="detail-row"><span class="dl">品质</span><span class="dv" :style="{ color: qualityColors[selected.quality] }">{{ qualityLabels[selected.quality] }}</span></div>
           <div class="detail-row"><span class="dl">类型</span><span class="dv">{{ slotLabels[selected.slot] }}</span></div>
@@ -106,7 +114,10 @@
           <div v-if="selected.sources.length" class="source-list">
             <div v-for="src in selected.sources" :key="src.area" class="source-item">
               <span class="src-area">📍 {{ src.areaName }}</span>
-              <span class="src-rate">掉率 {{ (src.rate * 100).toFixed(1) }}%</span>
+              <span class="src-rate">
+                掉率 {{ (src.rate * 100).toFixed(1) }}%
+                <span class="src-greedy-hint" title="贪婪掠夺策略 +5% 掉落">→ {{ ((src.rate * 1.05) * 100).toFixed(1) }}%</span>
+              </span>
             </div>
           </div>
           <div v-if="selected.shopPrice" class="detail-row"><span class="dl">商店价格</span><span class="dv">💰{{ selected.shopPrice }}</span></div>
@@ -269,9 +280,9 @@ onMounted(async () => {
 
 /* 分类tab */
 .codex-tabs { display: flex; gap: 0.3rem; }
-.codex-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.4rem; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(20,22,42,0.5); }
+.codex-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.4rem; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(var(--panel-rgb),0.5); }
 .codex-tab:hover { border-color: var(--accent2); }
-.codex-tab.active { border-color: var(--accent); background: rgba(212,175,94,0.1); }
+.codex-tab.active { border-color: var(--accent); background: rgba(var(--gold-rgb),0.1); }
 .cat-icon { font-size: 1.1rem; }
 .cat-label { font-size: 0.68rem; color: var(--muted); }
 .codex-tab.active .cat-label { color: var(--accent); font-weight: 600; }
@@ -281,7 +292,7 @@ onMounted(async () => {
 .search-icon { position: absolute; left: 0.6rem; color: var(--dim); z-index: 1; }
 .search-input {
   width: 100%; padding: 0.45rem 2rem 0.45rem 1.8rem;
-  background: rgba(20, 22, 42, 0.6);
+  background: rgba(var(--panel-rgb), 0.6);
   border: 1px solid var(--rule);
   border-radius: 6px;
   color: var(--text);
@@ -325,22 +336,24 @@ onMounted(async () => {
 /* 详情弹窗 */
 .detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 1rem; }
 .detail-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.2rem; max-width: 340px; width: 100%; max-height: 85vh; overflow-y: auto; }
-.detail-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
+.detail-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.3rem; }
+.detail-title .title-icon { color: inherit; flex-shrink: 0; }
 .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 0.2rem 0; font-size: 0.82rem; }
 .dl { color: var(--muted); }
 .dv { color: var(--accent); font-weight: 600; }
 .detail-section-title { font-size: 0.78rem; color: var(--accent2); font-weight: 600; margin: 0.6rem 0 0.3rem; }
 .source-list { display: flex; flex-direction: column; gap: 0.2rem; }
-.source-item { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0.5rem; background: rgba(157,140,240,0.06); border-radius: 6px; font-size: 0.75rem; }
+.source-item { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0.5rem; background: rgba(var(--violet-rgb),0.06); border-radius: 6px; font-size: 0.75rem; gap: 0.4rem; }
 .src-area { color: var(--accent2); }
-.src-rate { color: var(--accent); font-weight: 600; }
+.src-rate { color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 0.4rem; }
+.src-greedy-hint { font-size: 0.66rem; color: #5eda7a; font-weight: 400; padding: 1px 5px; background: rgba(94,218,122,0.12); border-radius: 4px; }
 .no-source { font-size: 0.75rem; color: var(--dim); }
 .use-list { display: flex; flex-direction: column; gap: 0.2rem; }
 .use-item { font-size: 0.75rem; color: var(--muted); padding: 0.2rem 0.5rem; background: rgba(94,218,122,0.06); border-radius: 4px; }
 .stat-list { display: flex; flex-direction: column; gap: 0.2rem; }
-.stat-item { font-size: 0.8rem; color: var(--accent2); background: rgba(157,140,240,0.08); padding: 0.2rem 0.5rem; border-radius: 4px; }
+.stat-item { font-size: 0.8rem; color: var(--accent2); background: rgba(var(--violet-rgb),0.08); padding: 0.2rem 0.5rem; border-radius: 4px; }
 .monster-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
-.ms-item { display: flex; flex-direction: column; align-items: center; padding: 0.3rem; background: rgba(20,22,42,0.5); border-radius: 6px; }
+.ms-item { display: flex; flex-direction: column; align-items: center; padding: 0.3rem; background: rgba(var(--panel-rgb),0.5); border-radius: 6px; }
 .ms-label { font-size: 0.62rem; color: var(--dim); }
 .ms-val { font-size: 0.85rem; font-weight: 700; color: var(--accent); }
 .monster-skills { display: flex; flex-direction: column; gap: 0.2rem; }
@@ -352,8 +365,8 @@ onMounted(async () => {
 
 /* 分页器 */
 .pager { display: flex; justify-content: center; align-items: center; gap: 0.6rem; padding: 0.4rem 0; }
-.pager-btn { padding: 0.3rem 0.8rem; border: 1px solid var(--rule); border-radius: 6px; background: rgba(20,22,42,0.5); color: var(--ink); font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
-.pager-btn:hover:not(:disabled) { border-color: var(--accent2); background: rgba(157,140,240,0.08); }
+.pager-btn { padding: 0.3rem 0.8rem; border: 1px solid var(--rule); border-radius: 6px; background: rgba(var(--panel-rgb),0.5); color: var(--ink); font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
+.pager-btn:hover:not(:disabled) { border-color: var(--accent2); background: rgba(var(--violet-rgb),0.08); }
 .pager-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .pager-info { font-size: 0.75rem; color: var(--muted); font-family: monospace; }
 .pager-info-single { text-align: center; font-size: 0.7rem; color: var(--dim); padding: 0.3rem; }

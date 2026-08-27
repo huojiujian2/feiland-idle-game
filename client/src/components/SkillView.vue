@@ -243,8 +243,8 @@ function handleUnequip() {
 .skill-view { display: flex; flex-direction: column; gap: 0.6rem; max-width: 560px; margin: 0 auto; }
 
 .sub-tabs { display: flex; gap: 0.3rem; }
-.sub-tab { flex: 1; padding: 0.5rem; border: 1px solid rgba(157,140,240,0.1); border-radius: 8px; background: rgba(20,22,42,0.4); color: var(--muted); font-size: 0.85rem; cursor: pointer; transition: all var(--duration-normal) var(--ease-out); font-family: inherit; }
-.sub-tab.active { background: rgba(212,175,94,0.08); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(212,175,94,0.1); }
+.sub-tab { flex: 1; padding: 0.5rem; border: 1px solid rgba(var(--violet-rgb),0.1); border-radius: 8px; background: rgba(var(--panel-rgb),0.4); color: var(--muted); font-size: 0.85rem; cursor: pointer; transition: all var(--duration-normal) var(--ease-out); font-family: inherit; }
+.sub-tab.active { background: rgba(var(--gold-rgb),0.08); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(var(--gold-rgb),0.1); }
 
 .section { padding: 0.6rem 0.8rem; }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; font-size: 0.85rem; color: var(--muted); }
@@ -257,7 +257,7 @@ function handleUnequip() {
 .slot-label { font-size: 0.72rem; color: var(--muted); width: 32px; flex-shrink: 0; text-align: center; font-weight: 600; }
 .slot-box { flex: 1; padding: 0.4rem 0.5rem; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(24,26,46,0.4); min-height: 44px; display: flex; flex-direction: column; gap: 0.1rem; justify-content: center; }
 .slot-box:hover { border-color: var(--accent2); }
-.slot-box.filled { border-color: rgba(212,175,94,0.25); background: rgba(212,175,94,0.05); }
+.slot-box.filled { border-color: rgba(var(--gold-rgb),0.25); background: rgba(var(--gold-rgb),0.05); }
 .slot-box.mini { min-height: 36px; align-items: center; justify-content: center; text-align: center; }
 .slot-name { font-size: 0.78rem; font-weight: 600; color: var(--accent2); }
 .slot-name.active { color: var(--accent); }
@@ -268,15 +268,15 @@ function handleUnequip() {
 
 /* 等级筛选 */
 .level-filter { display: flex; gap: 0.3rem; flex-wrap: wrap; }
-.level-btn { padding: 0.25rem 0.6rem; border: 1px solid var(--rule); border-radius: 6px; background: rgba(20,22,42,0.4); color: var(--muted); font-size: 0.72rem; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+.level-btn { padding: 0.25rem 0.6rem; border: 1px solid var(--rule); border-radius: 6px; background: rgba(var(--panel-rgb),0.4); color: var(--muted); font-size: 0.72rem; cursor: pointer; transition: all 0.15s; font-family: inherit; }
 .level-btn:hover { border-color: var(--accent2); }
-.level-btn.active { background: rgba(157,140,240,0.12); border-color: var(--accent2); color: var(--accent2); }
+.level-btn.active { background: rgba(var(--violet-rgb),0.12); border-color: var(--accent2); color: var(--accent2); }
 
 /* 网格 */
 .item-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; }
 .grid-cell { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.4rem 0.2rem; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; transition: all 0.15s; background: rgba(24,26,46,0.4); position: relative; text-align: center; }
-.grid-cell:hover { border-color: var(--accent2); transform: translateY(-2px); background: rgba(157,140,240,0.06); }
-.grid-cell.equipped { background: rgba(212,175,94,0.08); }
+.grid-cell:hover { border-color: var(--accent2); transform: translateY(-2px); background: rgba(var(--violet-rgb),0.06); }
+.grid-cell.equipped { background: rgba(var(--gold-rgb),0.08); }
 .cell-icon { font-size: 1.3rem; display: flex; align-items: center; justify-content: center; min-height: 28px; min-width: 28px; }
 .cell-name { font-size: 0.65rem; font-weight: 600; word-break: break-all; line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
 .cell-cat { font-size: 0.55rem; color: var(--dim); }
@@ -285,7 +285,7 @@ function handleUnequip() {
 
 /* 分页器 */
 .pager { display: flex; justify-content: center; align-items: center; gap: 0.5rem; padding: 0.3rem 0 0.1rem; }
-.pager-btn { padding: 0.2rem 0.6rem; border: 1px solid var(--rule); border-radius: 6px; background: rgba(20,22,42,0.5); color: var(--ink); font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
+.pager-btn { padding: 0.2rem 0.6rem; border: 1px solid var(--rule); border-radius: 6px; background: rgba(var(--panel-rgb),0.5); color: var(--ink); font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
 .pager-btn:hover:not(:disabled) { border-color: var(--accent2); }
 .pager-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .pager-info { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
@@ -294,13 +294,13 @@ function handleUnequip() {
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 1rem; }
 .modal-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1.2rem; max-width: 340px; width: 100%; max-height: 85vh; overflow-y: auto; }
 .modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
-.modal-level-tag { font-size: 0.68rem; color: var(--accent2); background: rgba(157,140,240,0.12); padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 400; }
+.modal-level-tag { font-size: 0.68rem; color: var(--accent2); background: rgba(var(--violet-rgb),0.12); padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 400; }
 .modal-row { display: flex; justify-content: space-between; align-items: center; padding: 0.2rem 0; font-size: 0.82rem; }
 .ml { color: var(--muted); }
 .mv { color: var(--accent); font-weight: 600; }
-.modal-desc { font-size: 0.78rem; color: var(--dim); margin: 0.4rem 0; padding: 0.4rem 0.5rem; background: rgba(157,140,240,0.05); border-radius: 6px; line-height: 1.5; }
+.modal-desc { font-size: 0.78rem; color: var(--dim); margin: 0.4rem 0; padding: 0.4rem 0.5rem; background: rgba(var(--violet-rgb),0.05); border-radius: 6px; line-height: 1.5; }
 .modal-stats { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.4rem 0; }
-.stat-chip { font-size: 0.72rem; color: var(--accent2); background: rgba(157,140,240,0.1); padding: 0.15rem 0.4rem; border-radius: 4px; }
+.stat-chip { font-size: 0.72rem; color: var(--accent2); background: rgba(var(--violet-rgb),0.1); padding: 0.15rem 0.4rem; border-radius: 4px; }
 .modal-actions { display: flex; gap: 0.3rem; margin-top: 0.5rem; }
 .modal-actions .btn { flex: 1; }
 </style>

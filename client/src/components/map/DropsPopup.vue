@@ -35,7 +35,7 @@ defineEmits(['close']);
 .drops-popup-box { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; padding: 1rem; max-width: 300px; width: 100%; }
 .drops-popup-title { display: flex; align-items: center; gap: 0.4rem; font-size: 0.95rem; font-weight: 700; margin-bottom: 0.8rem; color: var(--accent2); }
 .drops-popup-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 50vh; overflow-y: auto; margin-bottom: 0.8rem; }
-.drops-popup-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(157,140,240,0.08); border-radius: 6px; font-size: 0.82rem; }
+.drops-popup-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(var(--violet-rgb),0.08); border-radius: 6px; font-size: 0.82rem; }
 .drop-icon { flex-shrink: 0; }
 .drop-name { color: var(--text); }
 .drops-popup-close { width: 100%; }

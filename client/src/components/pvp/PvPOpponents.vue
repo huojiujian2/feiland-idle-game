@@ -50,7 +50,7 @@ defineEmits(['challenge']);
 .opp-card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .opp-top { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem; }
 .opp-name { font-weight: 700; font-size: 0.9rem; }
-.bot-tag { font-size: 0.6rem; padding: 0.05rem 0.3rem; background: rgba(157,140,240,0.2); color: var(--accent2); border-radius: 3px; display: inline-flex; align-items: center; gap: 0.15rem; }
+.bot-tag { font-size: 0.6rem; padding: 0.05rem 0.3rem; background: rgba(var(--violet-rgb),0.2); color: var(--accent2); border-radius: 3px; display: inline-flex; align-items: center; gap: 0.15rem; }
 .opp-tag { font-size: 0.6rem; padding: 0.05rem 0.3rem; border-radius: 3px; font-weight: 700; }
 .opp-tag.god { background: var(--accent); color: var(--bg); }
 .opp-tag.demi { background: var(--accent2); color: var(--bg); }

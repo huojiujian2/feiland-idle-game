@@ -300,6 +300,17 @@
 
     <!-- v0.8+：词条摘要已删除（独立「技能」页承担全部词条管理） -->
 
+    <!-- v2.9：设置栏（界面风格切换，纯前端换肤，不动任何数值） -->
+    <div class="settings-section card">
+      <div class="section-header">
+        <span><IconBase name="scroll" :size="14" class="section-icon" /> 设置</span>
+      </div>
+      <button class="theme-setting-btn" type="button" @click="showThemeModal = true">
+        <span class="theme-setting-label">界面风格</span>
+        <span class="theme-setting-current">{{ currentThemeName }} ▸</span>
+      </button>
+    </div>
+
     <!-- 右侧折叠面板：进阶/任务 -->
     <div class="side-panel" :class="{ expanded: sideOpen }">
       <button class="side-toggle" @click="sideOpen = !sideOpen">
@@ -345,6 +356,9 @@
       @close="detailItem = null"
       @unequip="handleUnequip"
       @enchant="handleEnchant" />
+
+    <!-- v2.9：界面风格切换弹窗 -->
+    <ThemeModal v-if="showThemeModal" :current="currentTheme" @apply="onThemeApply" @close="showThemeModal = false" />
   </div>
 </template>
 
@@ -352,11 +366,22 @@
 import { ref, computed, reactive } from 'vue'
 import IconBase from './icons/IconBase.vue'
 import EquipDetailModal from './EquipDetailModal.vue'
+import ThemeModal from './ThemeModal.vue'
 import { modalConfirm } from '../ui-bridge.js'
 import { useLongPress } from '../composables/useLongPress.js'
+import { THEMES, getTheme, applyTheme } from '../theme'
 
 const props = defineProps(['player', 'jobTree'])
 const emit = defineEmits(['allocate', 'equip', 'unequip', 'enchant', 'chooseJob', 'goSkill', 'goEvo', 'goQuest', 'goGenesis', 'refresh', 'savePreset', 'applyPresetRatio', 'deletePreset'])
+
+// v2.9：界面风格切换（纯前端换肤，选项保存在 localStorage）
+const showThemeModal = ref(false)
+const currentTheme = ref(getTheme())
+const currentThemeName = computed(() => THEMES.find(t => t.key === currentTheme.value)?.name || THEMES[0].name)
+function onThemeApply(key) {
+  applyTheme(key)
+  currentTheme.value = key
+}
 
 // v0.8+：主"属性"卡片的 +/- 长按三段式加速
 //   长按 + ~0.35s 才触发 → 慢速（120ms / +1）→ 1.5s 后冲刺（45ms / +1）
@@ -619,12 +644,12 @@ function handleUnequip() {
 
 /* 装备格子 */
 .equip-grid { display: flex; gap: 0.4rem; }
-.equip-slot { width: 64px; padding: 0.4rem; border: 1px solid rgba(157,140,240,0.1); border-radius: 8px; text-align: center; cursor: pointer; background: rgba(20,22,42,0.5); transition: all var(--duration-normal) var(--ease-out); position: relative; }
+.equip-slot { width: 64px; padding: 0.4rem; border: 1px solid rgba(var(--violet-rgb),0.1); border-radius: 8px; text-align: center; cursor: pointer; background: rgba(var(--panel-rgb),0.5); transition: all var(--duration-normal) var(--ease-out); position: relative; }
 .equip-slot:hover { border-color: var(--accent2); transform: translateY(-2px); }
-.equip-slot.filled { border-color: rgba(157,140,240,0.25); }
+.equip-slot.filled { border-color: rgba(var(--violet-rgb),0.25); }
 /* v2.5：根据附魔数量染色边框（0=默认紫，1=史诗紫，2=传说金，3=神话橙） */
-.equip-slot.filled.enchant-1 { border-color: #9d8cf0; box-shadow: 0 0 6px rgba(157,140,240,0.35); }
-.equip-slot.filled.enchant-2 { border-color: #d4af5e; box-shadow: 0 0 6px rgba(212,175,94,0.4); }
+.equip-slot.filled.enchant-1 { border-color: #9d8cf0; box-shadow: 0 0 6px rgba(var(--violet-rgb),0.35); }
+.equip-slot.filled.enchant-2 { border-color: #d4af5e; box-shadow: 0 0 6px rgba(var(--gold-rgb),0.4); }
 .equip-slot.filled.enchant-3 { border-color: #ff6738; box-shadow: 0 0 8px rgba(255,103,56,0.55); }
 .slot-icon { font-size: 1rem; }
 .slot-label { font-size: 0.65rem; color: var(--muted); margin: 0.1rem 0; }
@@ -639,8 +664,8 @@ function handleUnequip() {
   font-weight: 700;
   font-family: monospace;
   color: #fff;
-  background: rgba(20,22,42,0.7);
-  border: 1px solid rgba(212,175,94,0.4);
+  background: rgba(var(--panel-rgb),0.7);
+  border: 1px solid rgba(var(--gold-rgb),0.4);
   border-radius: 6px;
   padding: 0 4px;
   line-height: 1.2;
@@ -663,9 +688,9 @@ function handleUnequip() {
   font-size: 0.72rem;
   font-weight: 600;
   padding: 0.1rem 0.4rem;
-  border: 1px solid rgba(212,175,94,0.35);
+  border: 1px solid rgba(var(--gold-rgb),0.35);
   border-radius: 4px;
-  background: rgba(212,175,94,0.06);
+  background: rgba(var(--gold-rgb),0.06);
   font-family: monospace;
   letter-spacing: 0.04em;
 }
@@ -675,7 +700,7 @@ function handleUnequip() {
   background: transparent;
 }
 .attr-list { display: flex; flex-direction: column; gap: 0.25rem; }
-.attr-row { display: flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0; border-bottom: 1px dashed rgba(212,175,94,0.1); }
+.attr-row { display: flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0; border-bottom: 1px dashed rgba(var(--gold-rgb),0.1); }
 .attr-row:last-child { border-bottom: 0; }
 .attr-name { font-size: 0.82rem; width: 36px; }
 .attr-val { font-size: 0.85rem; font-weight: 600; min-width: 36px; }
@@ -703,11 +728,11 @@ function handleUnequip() {
 }
 .adj-btn:active:not(:disabled) {
   transform: scale(0.92);
-  box-shadow: 0 0 14px rgba(212,175,94,0.5);
+  box-shadow: 0 0 14px rgba(var(--gold-rgb),0.5);
 }
 .adj-btn.plus {
   border-color: var(--accent2);
-  background: rgba(157,140,240,0.16);
+  background: rgba(var(--violet-rgb),0.16);
   color: var(--accent2);
 }
 .adj-btn.plus:hover:not(:disabled) { background: var(--accent2); color: #0e0f1c; }
@@ -724,8 +749,8 @@ function handleUnequip() {
   font-style: italic;
   margin-top: 0.4rem;
   padding: 0.3rem 0.5rem;
-  background: rgba(212,175,94,0.06);
-  border: 1px dashed rgba(212,175,94,0.3);
+  background: rgba(var(--gold-rgb),0.06);
+  border: 1px dashed rgba(var(--gold-rgb),0.3);
   border-radius: 4px;
   text-align: center;
 }
@@ -743,7 +768,7 @@ function handleUnequip() {
 .confirm-btn { width: 100%; margin-top: 0.5rem; padding: 0.5rem; }
 .reset-btn { padding: 0.5rem; font-size: 0.82rem; }
 .auto-btn { width: 100%; padding: 0.5rem; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0e0f1c; font-weight: 700; border: none; }
-.auto-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(212,175,94,0.4); }
+.auto-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(var(--gold-rgb),0.4); }
 
 /* 属性预设（v0.8+：4 槽位方案一/二/三/四） */
 .attr-presets { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid var(--rule); }
@@ -753,7 +778,7 @@ function handleUnequip() {
 .presets-body { padding: 0.4rem 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .presets-hint {
   font-size: 0.7rem;
-  color: rgba(212,175,94,0.55);
+  color: rgba(var(--gold-rgb),0.55);
   font-style: italic;
   margin: 0;
   padding: 0.05rem 0.1rem;
@@ -762,7 +787,7 @@ function handleUnequip() {
 .preset-list { display: flex; flex-direction: column; gap: 0.4rem; }
 .preset-card {
   padding: 0.5rem 0.6rem;
-  background: rgba(20,22,42,0.5);
+  background: rgba(var(--panel-rgb),0.5);
   border: 1px solid var(--rule);
   border-radius: 6px;
 }
@@ -811,7 +836,7 @@ function handleUnequip() {
   flex-wrap: wrap;
   margin-bottom: 0.4rem;
 }
-.pa-item { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(157,140,240,0.1); font-family: monospace; }
+.pa-item { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(var(--violet-rgb),0.1); font-family: monospace; }
 .pa-item.atk { color: var(--danger); }
 .pa-item.def { color: var(--accent2); }
 .pa-item.hp { color: var(--success); }
@@ -845,15 +870,15 @@ function handleUnequip() {
   border-color: var(--danger);
   color: var(--danger);
 }
-.preset-save { background: rgba(157,140,240,0.06); }
+.preset-save { background: rgba(var(--violet-rgb),0.06); }
 .combat-summary { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--rule); }
-.cs-item { font-size: 0.72rem; color: var(--accent2); background: rgba(157,140,240,0.08); padding: 0.1rem 0.4rem; border-radius: 4px; }
+.cs-item { font-size: 0.72rem; color: var(--accent2); background: rgba(var(--violet-rgb),0.08); padding: 0.1rem 0.4rem; border-radius: 4px; }
 
 /* 战斗统计 */
 .combat-record { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid var(--rule); }
 .record-title { font-size: 0.8rem; color: var(--accent2); font-weight: 700; margin-bottom: 0.4rem; }
 .record-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.3rem; }
-.record-item { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0.5rem; background: rgba(20,22,42,0.5); border-radius: 5px; font-size: 0.72rem; }
+.record-item { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0.5rem; background: rgba(var(--panel-rgb),0.5); border-radius: 5px; font-size: 0.72rem; }
 .record-label { color: var(--muted); }
 .record-value { font-weight: 700; color: var(--text); font-family: monospace; }
 .record-value.highlight { color: var(--accent); font-size: 0.85rem; }
@@ -867,7 +892,7 @@ function handleUnequip() {
 .job-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.4rem; }
 .job-card-mini { padding: 0.5rem; border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; transition: all 0.2s; background: rgba(24,26,46,0.5); text-align: center; }
 .job-card-mini:hover { border-color: var(--accent2); }
-.job-card-mini.selected { border-color: var(--accent); background: rgba(212,175,94,0.1); }
+.job-card-mini.selected { border-color: var(--accent); background: rgba(var(--gold-rgb),0.1); }
 .job-card-icon { font-size: 1.3rem; }
 .job-card-name { font-weight: 600; font-size: 0.82rem; color: var(--accent); margin: 0.15rem 0; }
 .job-card-desc { font-size: 0.65rem; color: var(--muted); line-height: 1.3; }
@@ -880,27 +905,50 @@ function handleUnequip() {
 .job-path-name { font-size: 0.72rem; color: var(--muted); }
 .job-current-name { font-size: 1rem; font-weight: 600; color: var(--accent); }
 
+/* v2.9：设置栏（界面风格入口） */
+.settings-section { margin-top: 0.6rem; }
+.theme-setting-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid rgba(var(--violet-rgb), 0.18);
+  background: rgba(var(--panel-rgb), 0.5);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: all var(--duration-normal, 200ms) var(--ease-out, ease);
+}
+.theme-setting-btn:hover {
+  border-color: rgba(var(--gold-rgb), 0.45);
+  background: rgba(var(--panel2-rgb), 0.7);
+}
+.theme-setting-label { color: var(--muted); }
+.theme-setting-current { color: var(--accent); font-weight: 600; }
+
 /* 成长系数 */
-.growth-box { margin-bottom: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(20,22,42,0.5); border-radius: 6px; }
+.growth-box { margin-bottom: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(var(--panel-rgb),0.5); border-radius: 6px; }
 .growth-title { font-size: 0.7rem; color: var(--muted); margin-bottom: 0.2rem; }
 .growth-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .growth-item { font-size: 0.68rem; color: var(--accent2); }
 .growth-item b { color: var(--accent); }
 
 /* 天赋 */
-.talent-box { margin-bottom: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(212,175,94,0.05); border: 1px solid rgba(212,175,94,0.15); border-radius: 6px; }
+.talent-box { margin-bottom: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(var(--gold-rgb),0.05); border: 1px solid rgba(var(--gold-rgb),0.15); border-radius: 6px; }
 .talent-title { font-size: 0.7rem; color: var(--accent); margin-bottom: 0.2rem; font-weight: 600; }
 .talent-item { display: flex; flex-direction: column; gap: 0.05rem; margin-bottom: 0.25rem; }
 .talent-name { font-size: 0.75rem; color: var(--accent); font-weight: 600; }
 .talent-desc { font-size: 0.68rem; color: var(--muted); }
 
 /* 机制 */
-.mechanic-box { margin-bottom: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(157,140,240,0.05); border: 1px solid rgba(157,140,240,0.12); border-radius: 6px; }
+.mechanic-box { margin-bottom: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(var(--violet-rgb),0.05); border: 1px solid rgba(var(--violet-rgb),0.12); border-radius: 6px; }
 .mechanic-title { font-size: 0.7rem; color: var(--accent2); margin-bottom: 0.2rem; font-weight: 600; }
 .mechanic-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0; font-size: 0.72rem; }
 .mechanic-item.unlocked { color: var(--accent2); }
 .mechanic-item.locked { color: var(--dim); opacity: 0.6; }
-.mechanic-stage { font-size: 0.65rem; background: rgba(157,140,240,0.15); padding: 0.05rem 0.3rem; border-radius: 3px; }
+.mechanic-stage { font-size: 0.65rem; background: rgba(var(--violet-rgb),0.15); padding: 0.05rem 0.3rem; border-radius: 3px; }
 .mechanic-name { font-weight: 600; }
 .mechanic-desc { color: var(--muted); flex: 1; }
 .mechanic-status { font-size: 0.75rem; }
@@ -912,14 +960,14 @@ function handleUnequip() {
 .stage-node.done:not(:last-child)::before { background: var(--accent2); }
 .stage-dot { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 0.62rem; font-weight: 700; z-index: 1; background: var(--bg3); border: 2px solid var(--rule); color: var(--dim); }
 .stage-node.done .stage-dot { background: var(--accent2); border-color: var(--accent2); color: #0e0f1c; }
-.stage-node.current .stage-dot { background: var(--accent); border-color: var(--accent); color: #0e0f1c; box-shadow: 0 0 8px rgba(212,175,94,0.4); }
+.stage-node.current .stage-dot { background: var(--accent); border-color: var(--accent); color: #0e0f1c; box-shadow: 0 0 8px rgba(var(--gold-rgb),0.4); }
 .stage-name { font-size: 0.78rem; font-weight: 600; }
 .stage-node.done .stage-name { color: var(--accent2); }
 .stage-node.current .stage-name { color: var(--accent); }
 .stage-node.future .stage-name { color: var(--dim); }
 .stage-level { font-size: 0.65rem; color: var(--muted); }
 .stage-desc { font-size: 0.68rem; color: var(--dim); margin-top: 0.05rem; }
-.next-hint { margin-top: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(212,175,94,0.08); border: 1px solid rgba(212,175,94,0.2); border-radius: 6px; font-size: 0.75rem; color: var(--accent); }
+.next-hint { margin-top: 0.5rem; padding: 0.4rem 0.6rem; background: rgba(var(--gold-rgb),0.08); border: 1px solid rgba(var(--gold-rgb),0.2); border-radius: 6px; font-size: 0.75rem; color: var(--accent); }
 
 /* v0.8+：词条摘要样式已删除（独立「技能」页承担全部词条管理） */
 
@@ -950,7 +998,7 @@ function handleUnequip() {
   border-radius: 8px; cursor: pointer; white-space: nowrap;
   transition: all 0.15s ease; color: var(--muted, #9d9bb8);
 }
-.side-tab-item:hover { background: rgba(157,140,240,0.08); color: var(--ink, #ece9f5); }
+.side-tab-item:hover { background: rgba(var(--violet-rgb),0.08); color: var(--ink, #ece9f5); }
 .side-tab-icon { font-size: 1rem; }
 .side-tab-label { font-size: 0.72rem; font-weight: 600; }
 .side-tab-badge {
@@ -958,18 +1006,18 @@ function handleUnequip() {
   min-width: 14px; height: 14px; line-height: 14px; text-align: center;
   border-radius: 7px; padding: 0 3px; margin-left: auto;
 }
-.side-tab-badge--gold { background: var(--accent, #d4af5e); box-shadow: 0 0 8px rgba(212,175,94,0.4); }
+.side-tab-badge--gold { background: var(--accent, #d4af5e); box-shadow: 0 0 8px rgba(var(--gold-rgb),0.4); }
 /* v0.8+ 创世之书专属样式：金边 + 微光，区别于普通任务侧栏 */
 .side-tab-item--genesis {
-  border: 1px solid rgba(212,175,94,0.45);
-  background: linear-gradient(135deg, rgba(212,175,94,0.10) 0%, rgba(28,30,54,0.7) 100%);
+  border: 1px solid rgba(var(--gold-rgb),0.45);
+  background: linear-gradient(135deg, rgba(var(--gold-rgb),0.10) 0%, rgba(var(--panel2-rgb),0.7) 100%);
   margin-top: 0.4rem;
-  box-shadow: 0 0 12px rgba(212,175,94,0.18);
+  box-shadow: 0 0 12px rgba(var(--gold-rgb),0.18);
 }
 .side-tab-item--genesis:hover {
-  background: linear-gradient(135deg, rgba(212,175,94,0.18) 0%, rgba(28,30,54,0.85) 100%);
+  background: linear-gradient(135deg, rgba(var(--gold-rgb),0.18) 0%, rgba(var(--panel2-rgb),0.85) 100%);
   border-color: var(--accent, #d4af5e);
-  box-shadow: 0 0 18px rgba(212,175,94,0.35);
+  box-shadow: 0 0 18px rgba(var(--gold-rgb),0.35);
 }
 .side-slide-enter-active, .side-slide-leave-active {
   transition: all var(--duration-fast, 150ms) var(--ease-out, ease);

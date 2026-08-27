@@ -152,6 +152,6 @@ onMounted(() => {
 <style scoped>
 .evo-view { display: flex; flex-direction: column; gap: 0.6rem; max-width: 560px; margin: 0 auto; }
 .sub-tabs { display: flex; gap: 0.3rem; }
-.sub-tab { flex: 1; padding: 0.5rem; border: 1px solid var(--rule); border-radius: 8px; background: rgba(20,22,42,0.4); color: var(--muted); font-size: 0.8rem; cursor: pointer; transition: all var(--duration-normal) var(--ease-out); font-family: inherit; }
-.sub-tab.active { background: rgba(212,175,94,0.08); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(212,175,94,0.1); }
+.sub-tab { flex: 1; padding: 0.5rem; border: 1px solid var(--rule); border-radius: 8px; background: rgba(var(--panel-rgb),0.4); color: var(--muted); font-size: 0.8rem; cursor: pointer; transition: all var(--duration-normal) var(--ease-out); font-family: inherit; }
+.sub-tab.active { background: rgba(var(--gold-rgb),0.08); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(var(--gold-rgb),0.1); }
 </style>

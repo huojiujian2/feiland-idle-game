@@ -66,5 +66,5 @@ const svgContent = computed(() => {
   /* 透明背景化：白色像素跟深色 UI 背景叠加时透出 */
   mix-blend-mode: screen;
 }
-.icon-glow { filter: drop-shadow(0 0 6px rgba(212,175,94,0.45)); }
+.icon-glow { filter: drop-shadow(0 0 6px rgba(var(--gold-rgb),0.45)); }
 </style>

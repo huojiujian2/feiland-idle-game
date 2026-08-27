@@ -105,16 +105,21 @@ function birthMonster(player, draft, meta) {
 
   // 4. 校验掉落：可以是材料（kind='material'）或自创装备（kind='equip'）
   //   装备只有被怪物掉落才算"投入世界"——v2.1 装备投入世界的真正入口
+  //   v2.7：玩家造怪物不再自定义掉率，用全局默认常量
+  //     自创装备 → 3%（维持原 5% 再砍 2pp，因为现在是唯一获取途径）
+  //     自创材料 → 5%
   const drops = Array.isArray(draft.drops) ? draft.drops : [];
   if (drops.length > MAX_MONSTER_DROPS) return { success: false, message: `最多挂 ${MAX_MONSTER_DROPS} 件掉落` };
   const knownMaterial = new Set(Object.keys(require('../data/equipment').MATERIAL_PRICES));
+  const DEFAULT_DROP_RATE_MATERIAL = 0.05;   // 自创材料默认 5%
+  const DEFAULT_DROP_RATE_EQUIP = 0.03;      // 自创装备默认 3%
   const normalizedDrops = [];
   for (const d of drops) {
     if (!d || !d.name) return { success: false, message: '掉落物不合法' };
     const kind = d.kind || 'material';   // 旧数据默认 material 兼容
     if (kind === 'material') {
       if (!knownMaterial.has(d.name)) return { success: false, message: `未知材料：${d.name}` };
-      normalizedDrops.push({ kind: 'material', name: d.name, rate: Number(d.rate) > 0 ? Math.min(0.5, Number(d.rate)) : 0.08 });
+      normalizedDrops.push({ kind: 'material', name: d.name, rate: DEFAULT_DROP_RATE_MATERIAL });
     } else if (kind === 'equip') {
       // 必须是该地图下的自创装备
       const eq = w.equips.find(e => e.id === d.name);
@@ -123,7 +128,7 @@ function birthMonster(player, draft, meta) {
       // 同一装备已被其他怪物挂着则禁止
       const lockedBy = w.monsters.find(m => (m.drops || []).some(x => x.kind === 'equip' && x.name === d.name));
       if (lockedBy) return { success: false, message: `装备「${eq.name}」已被怪物「${lockedBy.name}」绑定，请先解除` };
-      normalizedDrops.push({ kind: 'equip', name: d.name, rate: Number(d.rate) > 0 ? Math.min(0.5, Number(d.rate)) : 0.05 });
+      normalizedDrops.push({ kind: 'equip', name: d.name, rate: DEFAULT_DROP_RATE_EQUIP });
     } else {
       return { success: false, message: `未知掉落类型：${kind}` };
     }

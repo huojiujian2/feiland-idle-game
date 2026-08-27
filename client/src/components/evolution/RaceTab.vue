@@ -84,14 +84,14 @@ const hasMaterial = computed(() => {
 });
 
 const raceStageColor = computed(() => {
-  if (props.player.raceStage === 0) return 'rgba(157,140,240,0.3)';
+  if (props.player.raceStage === 0) return 'rgba(var(--violet-rgb),0.3)';
   if (props.player.raceStage === 1) return 'rgba(94,218,122,0.3)';
-  return 'rgba(212,175,94,0.4)';
+  return 'rgba(var(--gold-rgb),0.4)';
 });
 </script>
 
 <style scoped>
-.card { padding: 0.7rem 0.9rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 8px; }
+.card { padding: 0.7rem 0.9rem; background: rgba(var(--panel-rgb),0.6); border: 1px solid var(--rule); border-radius: 8px; }
 .evo-section { display: flex; flex-direction: column; gap: 0.6rem; }
 
 .race-current { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; text-align: center; position: relative; }
@@ -101,7 +101,7 @@ const raceStageColor = computed(() => {
 .race-portrait img { width: 100%; height: 100%; object-fit: cover; }
 .race-name { font-size: 1.2rem; font-weight: 800; color: var(--accent); }
 .race-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
-.race-bonus { font-size: 0.72rem; color: var(--accent2); padding: 0.3rem 0.6rem; background: rgba(157,140,240,0.1); border-radius: 4px; }
+.race-bonus { font-size: 0.72rem; color: var(--accent2); padding: 0.3rem 0.6rem; background: rgba(var(--violet-rgb),0.1); border-radius: 4px; }
 
 .race-path { display: flex; flex-direction: column; gap: 0.4rem; }
 .section-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--muted); }
@@ -110,7 +110,7 @@ const raceStageColor = computed(() => {
 .race-next-bonus { font-size: 0.72rem; color: var(--accent2); padding: 0.3rem 0.6rem; background: rgba(94,218,122,0.08); border-radius: 4px; }
 
 .evo-reqs { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.4rem 0; }
-.evo-req { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem; background: rgba(20,22,42,0.5); border-radius: 4px; font-size: 0.78rem; }
+.evo-req { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem; background: rgba(var(--panel-rgb),0.5); border-radius: 4px; font-size: 0.78rem; }
 .evo-req.met { background: rgba(94,218,122,0.08); border: 1px solid rgba(94,218,122,0.3); }
 .req-icon { font-size: 0.85rem; }
 .evo-req.met .req-icon { color: var(--success); }

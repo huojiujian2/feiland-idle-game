@@ -1,0 +1,99 @@
+/* ====== v2.9 换肤系统：暗金风 / 羊皮纸风 ======
+   机制：html 标签上的 data-theme 属性切换主题。
+   - 不设置 data-theme（默认）= 原·星夜风，style.css 的 :root 值直接生效，视觉零变化
+   - 主题只覆盖变量与少数全局选择器，不改动 style.css 的任何原有规则
+   纯前端换肤，不涉及任何后端数值 */
+
+/* ============ 暗金风：玄黑鎏金 ============ */
+html[data-theme='dark-gold'] {
+  --bg: #0b0805;
+  --bg2: #171008;
+  --bg3: #221809;
+  --ink: #f2e6c8;
+  --muted: #b5a37c;
+  --dim: #8a7a58;
+  --rule: #3d2f14;
+
+  --accent: #e6c06a;
+  --accent-dim: #b08f45;
+  --accent2: #d9a648;
+  --accent2-dim: #a97f33;
+
+  /* 三元组覆盖：所有半透明面板/描边从蓝紫 → 暗金 */
+  --panel-rgb: 33, 24, 10;
+  --panel2-rgb: 43, 32, 13;
+  --violet-rgb: 230, 192, 106;
+  --gold-rgb: 230, 192, 106;
+}
+html[data-theme='dark-gold'] body {
+  background-image:
+    radial-gradient(ellipse at 15% 5%, rgba(230,192,106,0.10), transparent 50%),
+    radial-gradient(ellipse at 85% 90%, rgba(176,143,69,0.08), transparent 50%),
+    linear-gradient(180deg, #0b0805 0%, #050302 100%);
+  background-size: auto, auto, 100% 100%;
+  background-position: center, center, center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+/* 顶栏与转生弹窗的十六进制渐变单独覆盖 */
+html[data-theme='dark-gold'] .topbar {
+  background: linear-gradient(135deg, #2a1f0c, #171008);
+}
+html[data-theme='dark-gold'] .reinc-hint-box {
+  background: linear-gradient(160deg, #241a09 0%, #0b0805 100%);
+}
+
+/* ============ 羊皮纸风：古卷褐墨（浅色） ============ */
+html[data-theme='parchment'] {
+  --bg: #e7dbc0;
+  --bg2: #efe5cd;
+  --bg3: #f6eedb;
+  --ink: #3b2f1a;
+  --muted: #6d5d3f;
+  --dim: #97896a;
+  --rule: #c8b78e;
+
+  --accent: #8a5d24;
+  --accent-dim: #6e4a1c;
+  --accent2: #7a5230;
+  --accent2-dim: #5e401f;
+  --danger: #a83a2e;
+  --success: #3f7d3a;
+
+  /* 品质色在浅底上加深保证对比度 */
+  --q-normal: #5c5342;
+  --q-fine: #2e7d3a;
+  --q-epic: #6a56d6;
+  --q-legend: #9c7418;
+  --q-mythic: #cc4e10;
+
+  /* 三元组覆盖：深色半透明面板 → 米白羊皮 */
+  --panel-rgb: 250, 244, 226;
+  --panel2-rgb: 240, 231, 206;
+  --violet-rgb: 138, 93, 36;
+  --gold-rgb: 138, 93, 36;
+}
+html[data-theme='parchment'] body {
+  background-image:
+    radial-gradient(ellipse at 15% 5%, rgba(138,93,36,0.08), transparent 50%),
+    radial-gradient(ellipse at 85% 90%, rgba(110,74,28,0.06), transparent 50%),
+    linear-gradient(180deg, #ece2c9 0%, #ddd0ae 100%);
+  background-size: auto, auto, 100% 100%;
+  background-position: center, center, center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+html[data-theme='parchment'] .topbar {
+  background: linear-gradient(135deg, #e2d5b4, #d6c69c);
+}
+html[data-theme='parchment'] .reinc-hint-box {
+  background: linear-gradient(160deg, #f2ead4 0%, #e6dabb 100%);
+}
+/* 浅色下软化深色投影，避免卡片"脏"感 */
+html[data-theme='parchment'] .card {
+  box-shadow: 0 4px 16px rgba(90, 70, 30, 0.15);
+}
+/* 主按钮金辉阴影在浅色下减淡 */
+html[data-theme='parchment'] .btn-primary {
+  box-shadow: 0 2px 8px rgba(138, 93, 36, 0.2);
+}

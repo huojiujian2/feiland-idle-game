@@ -193,12 +193,12 @@ function formatTime(ts) {
 .log-empty { text-align: center; color: var(--dim); padding: 1.5rem; font-style: italic; }
 
 .log-entry { padding: 0.3rem 0.4rem; border-radius: 6px; font-size: 0.75rem; border-left: 2px solid transparent; }
-.log-entry.battle { border-left-color: var(--accent2); background: rgba(20,22,42,0.4); cursor: pointer; transition: background var(--duration-fast) var(--ease-out); }
-.log-entry.battle:hover { background: rgba(20,22,42,0.6); }
-.log-entry.levelup { background: rgba(212,175,94,0.08); border-left-color: var(--accent); }
-.log-entry.job { background: rgba(157,140,240,0.08); border-left-color: var(--accent2); }
+.log-entry.battle { border-left-color: var(--accent2); background: rgba(var(--panel-rgb),0.4); cursor: pointer; transition: background var(--duration-fast) var(--ease-out); }
+.log-entry.battle:hover { background: rgba(var(--panel-rgb),0.6); }
+.log-entry.levelup { background: rgba(var(--gold-rgb),0.08); border-left-color: var(--accent); }
+.log-entry.job { background: rgba(var(--violet-rgb),0.08); border-left-color: var(--accent2); }
 .log-entry.skill { background: rgba(94,218,122,0.08); border-left-color: var(--success); }
-.log-entry.evolve { background: rgba(212,175,94,0.08); border-left-color: var(--accent); }
+.log-entry.evolve { background: rgba(var(--gold-rgb),0.08); border-left-color: var(--accent); }
 .log-time { font-size: 0.65rem; color: var(--dim); margin-right: 0.4rem; font-family: monospace; }
 .log-text { color: var(--text); }
 .levelup-text { color: var(--accent); font-weight: 700; }
@@ -211,9 +211,9 @@ function formatTime(ts) {
 .battle-result { font-weight: 700; font-size: 0.78rem; padding: 0.05rem 0.35rem; border-radius: 4px; }
 .battle-result.win { background: rgba(94,218,122,0.2); color: var(--success); }
 .battle-result.lose { background: rgba(224,88,88,0.2); color: var(--danger); }
-.battle-result.timeout { background: rgba(212,175,94,0.2); color: var(--accent); }
+.battle-result.timeout { background: rgba(var(--gold-rgb),0.2); color: var(--accent); }
 /* v0.8+ 平局样式（500 回合兜底或真·平局）—— 与 timeout 视觉一致 */
-.battle-result.draw { background: rgba(212,175,94,0.2); color: var(--accent); }
+.battle-result.draw { background: rgba(var(--gold-rgb),0.2); color: var(--accent); }
 .battle-vs { color: var(--muted); font-size: 0.72rem; }
 .monster { color: var(--text); font-weight: 600; }
 .battle-rounds { font-size: 0.68rem; color: var(--dim); }

@@ -549,8 +549,8 @@ function handleEnchant(recipeId) {
 .bag-view { display: flex; flex-direction: column; gap: 0.6rem; max-width: 560px; margin: 0 auto; }
 
 .sub-tabs { display: flex; gap: 0.3rem; }
-.sub-tab { flex: 1; padding: 0.5rem; border: 1px solid rgba(157,140,240,0.1); border-radius: 8px; background: rgba(20,22,42,0.4); color: var(--muted); font-size: 0.85rem; cursor: pointer; transition: all var(--duration-normal) var(--ease-out); font-family: inherit; }
-.sub-tab.active { background: rgba(212,175,94,0.08); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(212,175,94,0.1); }
+.sub-tab { flex: 1; padding: 0.5rem; border: 1px solid rgba(var(--violet-rgb),0.1); border-radius: 8px; background: rgba(var(--panel-rgb),0.4); color: var(--muted); font-size: 0.85rem; cursor: pointer; transition: all var(--duration-normal) var(--ease-out); font-family: inherit; }
+.sub-tab.active { background: rgba(var(--gold-rgb),0.08); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(var(--gold-rgb),0.1); }
 
 .section { padding: 0.6rem 0.8rem; }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; font-size: 0.85rem; color: var(--muted); }
@@ -562,7 +562,7 @@ function handleEnchant(recipeId) {
 .search-icon { position: absolute; left: 0.6rem; color: var(--dim); z-index: 1; }
 .search-input {
   width: 100%; padding: 0.45rem 2rem 0.45rem 1.8rem;
-  background: rgba(20, 22, 42, 0.6);
+  background: rgba(var(--panel-rgb), 0.6);
   border: 1px solid var(--rule);
   border-radius: 6px;
   color: var(--text);
@@ -584,7 +584,7 @@ function handleEnchant(recipeId) {
 /* 网格 */
 .item-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; }
 .grid-cell { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.4rem 0.2rem; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; transition: all 0.15s; background: rgba(24,26,46,0.4); position: relative; text-align: center; }
-.grid-cell:hover { border-color: var(--accent2); transform: translateY(-2px); background: rgba(157,140,240,0.06); }
+.grid-cell:hover { border-color: var(--accent2); transform: translateY(-2px); background: rgba(var(--violet-rgb),0.06); }
 .cell-icon { font-size: 1.3rem; }
 .cell-icon.consumable { }
 .cell-icon.equip { }
@@ -597,7 +597,7 @@ function handleEnchant(recipeId) {
 
 /* 分页器 */
 .pager { display: flex; justify-content: center; align-items: center; gap: 0.5rem; padding: 0.3rem 0 0.1rem; }
-.pager-btn { padding: 0.2rem 0.6rem; border: 1px solid var(--rule); border-radius: 6px; background: rgba(20,22,42,0.5); color: var(--ink); font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
+.pager-btn { padding: 0.2rem 0.6rem; border: 1px solid var(--rule); border-radius: 6px; background: rgba(var(--panel-rgb),0.5); color: var(--ink); font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
 .pager-btn:hover:not(:disabled) { border-color: var(--accent2); }
 .pager-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .pager-info { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
@@ -609,7 +609,7 @@ function handleEnchant(recipeId) {
 .modal-row { display: flex; justify-content: space-between; align-items: center; padding: 0.2rem 0; font-size: 0.82rem; }
 .ml { color: var(--muted); }
 .mv { color: var(--accent); font-weight: 600; }
-.modal-desc { font-size: 0.78rem; color: var(--dim); margin: 0.3rem 0; padding: 0.3rem 0.5rem; background: rgba(157,140,240,0.05); border-radius: 6px; }
+.modal-desc { font-size: 0.78rem; color: var(--dim); margin: 0.3rem 0; padding: 0.3rem 0.5rem; background: rgba(var(--violet-rgb),0.05); border-radius: 6px; }
 .modal-section { margin-top: 0.4rem; }
 .modal-section-title { font-size: 0.78rem; color: var(--accent2); font-weight: 600; margin-bottom: 0.3rem; }
 .modal-total { font-size: 0.75rem; color: var(--accent); font-weight: 600; margin: 0.3rem 0; }
@@ -618,7 +618,7 @@ function handleEnchant(recipeId) {
 .modal-actions .btn { flex: 1; }
 
 /* 锻造 / 合成 / 重铸 */
-.forge-section { padding: 0.5rem; border: 1px solid var(--rule); border-radius: 6px; margin-top: 0.4rem; background: rgba(212,175,94,0.04); }
+.forge-section { padding: 0.5rem; border: 1px solid var(--rule); border-radius: 6px; margin-top: 0.4rem; background: rgba(var(--gold-rgb),0.04); }
 .forge-header { font-size: 0.8rem; font-weight: 600; color: var(--accent); margin-bottom: 0.3rem; }
 .forge-cost { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.3rem; }
 .forge-btn { width: 100%; }
@@ -627,10 +627,10 @@ function handleEnchant(recipeId) {
 
 /* 数量控制 */
 .qty-controls { display: flex; align-items: center; gap: 0.15rem; }
-.qty-btn { width: 24px; height: 24px; border-radius: 4px; border: 1px solid var(--rule); background: rgba(20,22,42,0.6); color: var(--muted); font-size: 0.85rem; cursor: pointer; line-height: 1; font-family: inherit; transition: all 0.15s; }
+.qty-btn { width: 24px; height: 24px; border-radius: 4px; border: 1px solid var(--rule); background: rgba(var(--panel-rgb),0.6); color: var(--muted); font-size: 0.85rem; cursor: pointer; line-height: 1; font-family: inherit; transition: all 0.15s; }
 .qty-btn:hover { border-color: var(--accent2); color: var(--accent2); }
 .qty-val { font-size: 0.78rem; font-weight: 600; color: var(--accent); min-width: 20px; text-align: center; }
-.quick-btn { font-size: 0.62rem !important; padding: 0.1rem 0.35rem !important; color: var(--accent2) !important; border-color: rgba(157,140,240,0.2) !important; }
+.quick-btn { font-size: 0.62rem !important; padding: 0.1rem 0.35rem !important; color: var(--accent2) !important; border-color: rgba(var(--violet-rgb),0.2) !important; }
 
 /* 装备详情弹窗 */
 .equip-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 1rem; }
@@ -638,14 +638,14 @@ function handleEnchant(recipeId) {
 .detail-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.2rem; }
 .detail-quality { font-size: 0.75rem; margin-bottom: 0.6rem; color: var(--muted); }
 .detail-stats { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.6rem; }
-.detail-stat { font-size: 0.82rem; color: var(--accent2); background: rgba(157,140,240,0.08); padding: 0.15rem 0.4rem; border-radius: 4px; }
+.detail-stat { font-size: 0.82rem; color: var(--accent2); background: rgba(var(--violet-rgb),0.08); padding: 0.15rem 0.4rem; border-radius: 4px; }
 
-.enchanted-list { margin-bottom: 0.6rem; padding: 0.5rem; background: rgba(212,175,94,0.05); border-radius: 6px; border: 1px solid rgba(212,175,94,0.15); }
+.enchanted-list { margin-bottom: 0.6rem; padding: 0.5rem; background: rgba(var(--gold-rgb),0.05); border-radius: 6px; border: 1px solid rgba(var(--gold-rgb),0.15); }
 .enchant-header { font-size: 0.78rem; color: var(--accent); font-weight: 600; margin-bottom: 0.3rem; }
 .enchant-item { display: flex; flex-direction: column; gap: 0.1rem; margin-bottom: 0.3rem; }
 .enchant-name { font-size: 0.78rem; color: var(--accent); font-weight: 600; }
 .enchant-desc { font-size: 0.7rem; color: var(--muted); }
-.enchant-section { margin-bottom: 0.6rem; padding: 0.5rem; background: rgba(157,140,240,0.05); border-radius: 6px; border: 1px solid rgba(157,140,240,0.12); }
+.enchant-section { margin-bottom: 0.6rem; padding: 0.5rem; background: rgba(var(--violet-rgb),0.05); border-radius: 6px; border: 1px solid rgba(var(--violet-rgb),0.12); }
 .enchant-recipe { display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; padding: 0.35rem 0; border-bottom: 1px solid var(--rule); }
 .enchant-recipe:last-child { border-bottom: none; }
 .enchant-recipe.disabled { opacity: 0.5; }
@@ -657,11 +657,11 @@ function handleEnchant(recipeId) {
 .detail-actions .btn { flex: 1; }
 
 /* 批量出售 */
-.bulk-sell-btn { padding: 0.2rem 0.6rem; font-size: 0.7rem; color: var(--accent2); border-color: rgba(157,140,240,0.2); }
+.bulk-sell-btn { padding: 0.2rem 0.6rem; font-size: 0.7rem; color: var(--accent2); border-color: rgba(var(--violet-rgb),0.2); }
 .section-actions { display: flex; gap: 0.3rem; align-items: center; }
-.bulk-merge-btn { padding: 0.2rem 0.55rem; font-size: 0.7rem; color: #d4af5e; border-color: rgba(212,175,94,0.3); display: inline-flex; align-items: center; gap: 0.25rem; }
+.bulk-merge-btn { padding: 0.2rem 0.55rem; font-size: 0.7rem; color: #d4af5e; border-color: rgba(var(--gold-rgb),0.3); display: inline-flex; align-items: center; gap: 0.25rem; }
 .bulk-merge-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.bulk-merge-badge { background: rgba(212,175,94,0.25); color: #d4af5e; padding: 0 5px; border-radius: 8px; font-size: 0.62rem; font-weight: 700; }
+.bulk-merge-badge { background: rgba(var(--gold-rgb),0.25); color: #d4af5e; padding: 0 5px; border-radius: 8px; font-size: 0.62rem; font-weight: 700; }
 .bulk-merge-list { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.4rem 0; max-height: 50vh; overflow-y: auto; }
 .bulk-merge-row {
   display: grid;
@@ -669,15 +669,15 @@ function handleEnchant(recipeId) {
   align-items: center;
   gap: 0.4rem;
   padding: 0.5rem 0.6rem;
-  background: rgba(20,22,42,0.55);
+  background: rgba(var(--panel-rgb),0.55);
   border: 1px solid var(--rule);
   border-radius: 6px;
   font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.15s;
 }
-.bulk-merge-row:hover { border-color: rgba(212,175,94,0.4); }
-.bulk-merge-row.active { background: rgba(212,175,94,0.12); border-color: var(--accent); }
+.bulk-merge-row:hover { border-color: rgba(var(--gold-rgb),0.4); }
+.bulk-merge-row.active { background: rgba(var(--gold-rgb),0.12); border-color: var(--accent); }
 .bulk-merge-check { font-size: 0.95rem; color: var(--accent); text-align: center; }
 .bulk-merge-quality { font-weight: 700; font-size: 0.85rem; }
 .bulk-merge-slot { color: var(--muted); font-size: 0.75rem; }
@@ -686,9 +686,9 @@ function handleEnchant(recipeId) {
 .bulk-merge-count { color: var(--accent2); font-size: 0.75rem; font-family: monospace; }
 .bulk-hint { font-size: 0.72rem; color: var(--muted); margin: 0.4rem 0; line-height: 1.5; }
 .bulk-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; margin: 0.4rem 0; }
-.bulk-opt { padding: 0.45rem 0.3rem; font-size: 0.78rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.bulk-opt { padding: 0.45rem 0.3rem; font-size: 0.78rem; background: rgba(var(--panel-rgb),0.6); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-family: inherit; transition: all 0.15s; }
 .bulk-opt:hover { border-color: var(--accent2); color: var(--accent2); }
-.bulk-opt.active { background: rgba(212,175,94,0.1); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.bulk-opt.active { background: rgba(var(--gold-rgb),0.1); border-color: var(--accent); color: var(--accent); font-weight: 700; }
 .bulk-quality-list { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.3rem 0 0.5rem; }
-.bulk-quality-item { padding: 0.15rem 0.4rem; font-size: 0.7rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 3px; font-weight: 600; }
+.bulk-quality-item { padding: 0.15rem 0.4rem; font-size: 0.7rem; background: rgba(var(--panel-rgb),0.6); border: 1px solid var(--rule); border-radius: 3px; font-weight: 600; }
 </style>

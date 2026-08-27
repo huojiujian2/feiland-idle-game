@@ -91,25 +91,25 @@ function bonusLabel(key) {
 </script>
 
 <style scoped>
-.card { padding: 0.7rem 0.9rem; background: rgba(20,22,42,0.6); border: 1px solid var(--rule); border-radius: 8px; }
+.card { padding: 0.7rem 0.9rem; background: rgba(var(--panel-rgb),0.6); border: 1px solid var(--rule); border-radius: 8px; }
 .evo-section { display: flex; flex-direction: column; gap: 0.6rem; }
 
 .section-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.4rem; }
 .next-god-name { color: var(--accent); font-weight: 700; font-size: 0.9rem; }
 
 .ascend-current { display: flex; flex-direction: column; gap: 0.4rem; align-items: center; }
-.godhood-display { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; background: linear-gradient(135deg, rgba(212,175,94,0.15), rgba(94,218,122,0.1)); border-radius: 8px; font-size: 1.2rem; font-weight: 800; color: var(--accent); }
-.godhood-display.none { background: rgba(20,22,42,0.5); color: var(--muted); }
+.godhood-display { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; background: linear-gradient(135deg, rgba(var(--gold-rgb),0.15), rgba(94,218,122,0.1)); border-radius: 8px; font-size: 1.2rem; font-weight: 800; color: var(--accent); }
+.godhood-display.none { background: rgba(var(--panel-rgb),0.5); color: var(--muted); }
 .godhood-icon { font-size: 1.4rem; }
 .godhood-bonus { display: flex; flex-wrap: wrap; gap: 0.3rem; justify-content: center; }
-.godhood-bonus-item { padding: 0.2rem 0.5rem; background: rgba(157,140,240,0.1); border-radius: 4px; font-size: 0.75rem; color: var(--accent2); }
+.godhood-bonus-item { padding: 0.2rem 0.5rem; background: rgba(var(--violet-rgb),0.1); border-radius: 4px; font-size: 0.75rem; color: var(--accent2); }
 
 .ascend-target { display: flex; flex-direction: column; gap: 0.4rem; }
 .ascend-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
 .ascend-bonus-text { padding: 0.4rem 0.6rem; background: rgba(94,218,122,0.08); border-radius: 4px; font-size: 0.78rem; color: var(--success); text-align: center; }
 
 .evo-reqs { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.5rem 0; }
-.evo-req { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem; background: rgba(20,22,42,0.5); border-radius: 4px; font-size: 0.78rem; }
+.evo-req { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem; background: rgba(var(--panel-rgb),0.5); border-radius: 4px; font-size: 0.78rem; }
 .evo-req.met { background: rgba(94,218,122,0.08); border: 1px solid rgba(94,218,122,0.3); }
 .req-icon { font-size: 0.85rem; }
 .evo-req.met .req-icon { color: var(--success); }

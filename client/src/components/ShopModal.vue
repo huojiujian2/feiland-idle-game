@@ -200,7 +200,7 @@ function getTypeName(item) {
 .sheet-close { width: 32px; height: 32px; }
 
 .shop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; padding: 0.8rem; overflow-y: auto; }
-.shop-cell { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.6rem 0.3rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; transition: all 0.15s; position: relative; }
+.shop-cell { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.6rem 0.3rem; background: rgba(var(--panel-rgb),0.5); border: 1px solid var(--rule); border-radius: 6px; cursor: pointer; transition: all 0.15s; position: relative; }
 .shop-cell:hover { border-color: var(--accent2); transform: translateY(-1px); }
 .shop-cell.locked { opacity: 0.45; filter: grayscale(0.8); }
 .shop-lock { position: absolute; top: 2px; right: 3px; font-size: 0.6rem; color: var(--muted); }
@@ -209,7 +209,7 @@ function getTypeName(item) {
 .shop-price { font-size: 0.68rem; color: var(--accent); font-weight: 700; font-family: monospace; }
 
 .shop-pager { display: flex; justify-content: center; align-items: center; gap: 0.5rem; padding: 0.5rem 0; }
-.pager-btn { padding: 0.3rem 0.7rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 0.85rem; }
+.pager-btn { padding: 0.3rem 0.7rem; background: rgba(var(--panel-rgb),0.5); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 0.85rem; }
 .pager-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .pager-info { font-size: 0.78rem; color: var(--muted); font-family: monospace; }
 
@@ -223,7 +223,7 @@ function getTypeName(item) {
 .sd-label { color: var(--muted); }
 .sd-val { color: var(--text); font-weight: 600; }
 .sd-desc { padding: 0.5rem 0; color: var(--text); font-size: 0.82rem; border-top: 1px solid var(--rule); margin-top: 0.3rem; }
-.sd-locked-tip { padding: 0.5rem; margin-top: 0.3rem; background: rgba(212,175,94,0.08); border: 1px dashed var(--rule); border-radius: 6px; color: var(--muted); font-size: 0.78rem; text-align: center; }
+.sd-locked-tip { padding: 0.5rem; margin-top: 0.3rem; background: rgba(var(--gold-rgb),0.08); border: 1px dashed var(--rule); border-radius: 6px; color: var(--muted); font-size: 0.78rem; text-align: center; }
 .sd-section { padding-top: 0.5rem; }
 .sd-section-title { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; }
 .qty-controls { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.5rem; flex-wrap: nowrap; }
@@ -232,7 +232,7 @@ function getTypeName(item) {
 .qty-controls .qty-btn { order: 0; }
 .qty-btn {
   width: 32px; height: 32px;
-  background: rgba(20,22,42,0.6);
+  background: rgba(var(--panel-rgb),0.6);
   border: 1px solid var(--rule);
   border-radius: 4px;
   color: var(--text);
@@ -244,13 +244,13 @@ function getTypeName(item) {
   touch-action: none;          /* v0.9：防止长按触发浏览器菜单/缩放 */
   transition: background 0.12s, transform 0.1s;
 }
-.qty-btn:active { background: rgba(157,140,240,0.25); transform: scale(0.94); }
+.qty-btn:active { background: rgba(var(--violet-rgb),0.25); transform: scale(0.94); }
 .qty-btn.qty-btn--big { width: 34px; height: 34px; font-size: 1.2rem; font-weight: 700; flex: 0 0 auto; }
 .qty-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .qty-val { min-width: 2.4rem; text-align: center; font-family: monospace; font-weight: 700; font-size: 1rem; }
 .quick-btn { padding: 0.3rem 0.6rem; font-size: 0.72rem; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
 .quick-btn--big { padding: 0.45rem 0.7rem; font-size: 0.85rem; font-weight: 600; min-height: 38px; }
-.quick-btn:active:not(:disabled) { background: rgba(157,140,240,0.25); transform: scale(0.96); }
+.quick-btn:active:not(:disabled) { background: rgba(var(--violet-rgb),0.25); transform: scale(0.96); }
 .quick-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .qty-cap-hint { color: var(--muted, #888); font-size: 0.7rem; font-weight: normal; margin-left: 0.3rem; }
 .sd-total { font-size: 0.85rem; color: var(--accent); font-weight: 700; font-family: monospace; margin: 0.3rem 0; }

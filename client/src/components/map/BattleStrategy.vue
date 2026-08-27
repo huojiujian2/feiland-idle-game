@@ -59,9 +59,9 @@ onUnmounted(() => {
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; font-size: 0.85rem; color: var(--muted); }
 .strategy-cd { font-size: 0.7rem; color: var(--danger); font-weight: 600; }
 .strategy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
-.strategy-btn { padding: 0.4rem 0.3rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; color: var(--text); cursor: pointer; transition: all 0.15s; font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 0.1rem; font-size: 0.75rem; }
-.strategy-btn:hover:not(:disabled) { border-color: var(--accent2); background: rgba(157,140,240,0.08); }
-.strategy-btn.active { border-color: var(--accent); background: rgba(212,175,94,0.15); }
+.strategy-btn { padding: 0.4rem 0.3rem; background: rgba(var(--panel-rgb),0.5); border: 1px solid var(--rule); border-radius: 6px; color: var(--text); cursor: pointer; transition: all 0.15s; font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 0.1rem; font-size: 0.75rem; }
+.strategy-btn:hover:not(:disabled) { border-color: var(--accent2); background: rgba(var(--violet-rgb),0.08); }
+.strategy-btn.active { border-color: var(--accent); background: rgba(var(--gold-rgb),0.15); }
 .strategy-btn.locked { opacity: 0.5; cursor: not-allowed; }
 .strategy-btn:disabled { cursor: not-allowed; }
 .strategy-name { font-weight: 700; }

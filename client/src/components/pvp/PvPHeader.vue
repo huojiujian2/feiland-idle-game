@@ -69,10 +69,10 @@ defineEmits(['goBack', 'tab']);
 </script>
 
 <style scoped>
-.pvp-header { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.6rem 0.8rem; background: rgba(20,22,42,0.4); border-radius: 8px; }
+.pvp-header { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.6rem 0.8rem; background: rgba(var(--panel-rgb),0.4); border-radius: 8px; }
 .pvp-back { display: flex; align-items: center; }
-.back-btn { padding: 0.3rem 0.7rem; background: rgba(157,140,240,0.1); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 0.75rem; }
-.back-btn:hover { background: rgba(157,140,240,0.2); color: var(--text); }
+.back-btn { padding: 0.3rem 0.7rem; background: rgba(var(--violet-rgb),0.1); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 0.75rem; }
+.back-btn:hover { background: rgba(var(--violet-rgb),0.2); color: var(--text); }
 
 .pvp-card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .pvp-card { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.7rem; background: var(--bg2); border: 1px solid var(--rule); border-radius: 8px; }
@@ -91,13 +91,13 @@ defineEmits(['goBack', 'tab']);
 
 .pvp-cd { padding: 0.3rem 0.5rem; background: rgba(224,88,88,0.15); color: var(--danger); border-radius: 4px; text-align: center; font-size: 0.78rem; font-weight: 600; }
 
-.season-bar { display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.5rem; background: rgba(212,175,94,0.1); border-radius: 4px; font-size: 0.75rem; }
+.season-bar { display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.5rem; background: rgba(var(--gold-rgb),0.1); border-radius: 4px; font-size: 0.75rem; }
 .season-icon { display: flex; }
 .season-label { font-weight: 700; color: var(--accent); }
 .season-info { color: var(--muted); margin-left: auto; }
 
 .pvp-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.2rem; }
-.pvp-tab { padding: 0.4rem; background: rgba(20,22,42,0.5); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 0.78rem; font-family: inherit; transition: all 0.15s; }
+.pvp-tab { padding: 0.4rem; background: rgba(var(--panel-rgb),0.5); border: 1px solid var(--rule); border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 0.78rem; font-family: inherit; transition: all 0.15s; }
 .pvp-tab:hover { border-color: var(--accent2); }
-.pvp-tab.active { background: rgba(212,175,94,0.15); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.pvp-tab.active { background: rgba(var(--gold-rgb),0.15); border-color: var(--accent); color: var(--accent); font-weight: 700; }
 </style>

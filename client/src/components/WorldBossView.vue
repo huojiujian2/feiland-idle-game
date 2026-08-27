@@ -160,12 +160,12 @@ onUnmounted(() => {
 
 <style scoped>
 .boss-view { display: flex; flex-direction: column; gap: 0.6rem; max-width: 560px; margin: 0 auto; }
-.boss-card { padding: 1rem; background: linear-gradient(135deg, rgba(212,175,94,0.06), rgba(157,140,240,0.06)); }
+.boss-card { padding: 1rem; background: linear-gradient(135deg, rgba(var(--gold-rgb),0.06), rgba(var(--violet-rgb),0.06)); }
 .boss-header { display: flex; align-items: flex-start; gap: 0.8rem; }
 .boss-portrait {
   width: 80px; height: 80px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, rgba(212,175,94,0.15), rgba(157,140,240,0.15));
+  background: linear-gradient(135deg, rgba(var(--gold-rgb),0.15), rgba(var(--violet-rgb),0.15));
   border: 1px solid var(--accent); flex-shrink: 0;
 }
 .boss-icon { color: var(--accent); }
@@ -173,9 +173,9 @@ onUnmounted(() => {
 .boss-name { font-size: 1.3rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 .boss-desc { font-size: 0.72rem; color: var(--muted); margin: 0.3rem 0; line-height: 1.4; }
 .boss-stats { display: flex; gap: 0.3rem; flex-wrap: wrap; }
-.stat-chip { font-size: 0.7rem; color: var(--ink); background: rgba(20,22,42,0.5); padding: 0.1rem 0.4rem; border-radius: 4px; }
+.stat-chip { font-size: 0.7rem; color: var(--ink); background: rgba(var(--panel-rgb),0.5); padding: 0.1rem 0.4rem; border-radius: 4px; }
 .hp-section { margin-top: 0.8rem; }
-.hp-bar { width: 100%; height: 14px; background: rgba(20,22,42,0.6); border-radius: 7px; overflow: hidden; border: 1px solid var(--rule); }
+.hp-bar { width: 100%; height: 14px; background: rgba(var(--panel-rgb),0.6); border-radius: 7px; overflow: hidden; border: 1px solid var(--rule); }
 .hp-bar-fill { height: 100%; background: linear-gradient(90deg, #e0bc6b, #c04545); transition: width 0.3s ease; }
 .hp-text { display: flex; justify-content: space-between; margin-top: 0.3rem; font-size: 0.78rem; }
 .hp-num { color: var(--ink); font-weight: 600; font-family: monospace; }
@@ -183,14 +183,14 @@ onUnmounted(() => {
 .attack-section { margin-top: 0.8rem; }
 .attack-btn { width: 100%; padding: 0.7rem; font-size: 1rem; font-weight: 700; }
 .last-damage { margin-top: 0.4rem; text-align: center; padding: 0.3rem; font-size: 0.82rem; color: var(--success); background: rgba(94,218,122,0.1); border-radius: 6px; font-weight: 600; }
-.last-damage.crit { color: var(--dmg-crit, #d4af5e); background: rgba(212,175,94,0.15); }
+.last-damage.crit { color: var(--dmg-crit, #d4af5e); background: rgba(var(--gold-rgb),0.15); }
 .last-damage.kill { color: #ff6b35; background: rgba(255,107,53,0.15); }
 .boss-empty { text-align: center; padding: 2rem; color: var(--muted); }
 .ranking-card { padding: 0.8rem; }
 .my-rank { font-size: 0.78rem; color: var(--accent); font-weight: 600; }
 .rank-list { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.4rem; }
-.rank-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.3rem 0.5rem; background: rgba(20,22,42,0.4); border-radius: 6px; border: 1px solid var(--rule); }
-.rank-row.self { border-color: var(--accent); background: rgba(212,175,94,0.08); }
+.rank-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.3rem 0.5rem; background: rgba(var(--panel-rgb),0.4); border-radius: 6px; border: 1px solid var(--rule); }
+.rank-row.self { border-color: var(--accent); background: rgba(var(--gold-rgb),0.08); }
 .rank-row.top1 { border-color: #d4af5e; }
 .rank-row.top2 { border-color: #c0c0c0; }
 .rank-row.top3 { border-color: #cd7f32; }
@@ -200,6 +200,6 @@ onUnmounted(() => {
 .reward-card { padding: 0.8rem; }
 .reward-list { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.3rem; }
 .reward-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--ink); padding: 0.15rem 0; }
-.final-hit-reward { margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(212,175,94,0.3); }
+.final-hit-reward { margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(var(--gold-rgb),0.3); }
 .final-hit-title { font-size: 0.82rem; color: #d4af5e; font-weight: 700; margin-bottom: 0.3rem; }
 </style>
