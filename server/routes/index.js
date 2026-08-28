@@ -1,4 +1,4 @@
-// ====== 路由统一挂载 ======
+// ====== 路由统一挂载 =====
 const { registerAuthRoutes } = require('./auth');
 const { registerAccountExistsRoute } = require('./account-exists');
 const { registerPlayerRoutes } = require('./player');
@@ -11,6 +11,7 @@ const { registerWorldBossRoutes } = require('./worldboss');
 const { registerStrategyRoute } = require('./strategy');
 const { registerQuestRoutes } = require('./quest');
 const { registerGenesisRoutes } = require('./genesis');
+const { registerTitleRoutes } = require('./titles');
 
 function registerRoutes(app, store) {
   registerAuthRoutes(app, store);
@@ -25,6 +26,7 @@ function registerRoutes(app, store) {
   registerStrategyRoute(app, store);
   registerQuestRoutes(app, store);
   registerGenesisRoutes(app, store);
+  registerTitleRoutes(app, store);
 }
 
 module.exports = { registerRoutes };

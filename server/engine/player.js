@@ -43,6 +43,7 @@ function createCharacter(username, charName) {
     reincarnation: 0,
     bossKills: 0,
     stats: { maxClearedArea: 'gaomanshan' },
+    avatar: '', // v1.02：自定义头像 emoji（空 = 用 player.name 首字）
     currentArea: 'gaomanshan',
     lastActiveAt: now,
     inventory: [],
@@ -144,6 +145,8 @@ function migratePlayer(player) {
   if (!Number.isFinite(player.tutorialStep)) player.tutorialStep = 0;
   player.tutorialStep = normalizeTutorialStep(player.tutorialStep);
   if (!Array.isArray(player.attrPresets)) player.attrPresets = [];
+  // v1.02：自定义头像字段迁移（缺失 → 留空走首字 fallback）
+  if (typeof player.avatar !== 'string') player.avatar = '';
   // 过滤掉 null 项（旧版本可能 push null 占位，避免下面逻辑踩到）
   player.attrPresets = player.attrPresets.filter(Boolean);
   if (!player.pvpStats || typeof player.pvpStats !== 'object') player.pvpStats = {};

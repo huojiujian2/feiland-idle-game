@@ -41,7 +41,8 @@
         <div class="qty-controls">
           <button class="btn btn-sm quick-btn quick-btn--big" :disabled="!canSub10(detail)" v-bind="longPressSub10">-10</button>
           <button class="qty-btn qty-btn--big" v-bind="longPressMinus">−</button>
-          <span class="qty-val">{{ buyQty[detail.id] || 1 }}</span>
+          <input class="qty-input" type="number" min="1" :max="maxBuyQty(detail)"
+            :value="buyQty[detail.id] || 1" @input="onQtyInput(detail, $event)" />
           <button class="qty-btn qty-btn--big" v-bind="longPressPlus">+</button>
           <button class="btn btn-sm quick-btn quick-btn--big" :disabled="!canAdd10(detail)" v-bind="longPressAdd10">+10</button>
           <button class="btn btn-sm quick-btn quick-btn--big" :disabled="!canAddMax(detail)" @click="addMax(detail)">max</button>
@@ -137,6 +138,15 @@ function addMax(item) {
   buyQty.value = { ...buyQty.value, [item.id]: Math.max(1, cap) };
 }
 
+// 手动输入数量时，自动限制在金币可购买范围内
+function onQtyInput(item, event) {
+  const raw = Number.parseInt(event.target.value, 10);
+  const cap = maxBuyQty(item);
+  const next = Number.isFinite(raw) ? Math.max(1, Math.min(cap, raw)) : 1;
+  buyQty.value = { ...buyQty.value, [item.id]: next };
+  event.target.value = String(next);
+}
+
 // v0.9：长按 +/- 三段式加速（与属性点同款体验）
 // 注意：每次 detail 变化时重新创建 hook 实例（旧的会被 onBeforeUnmount 清理）
 const EMPTY_HANDLERS = { onPointerdown: () => {}, onPointerup: () => {}, onPointerleave: () => {}, onPointercancel: () => {}, onKeydown: () => {}, onKeyup: () => {}, onBlur: () => {}, onTouchstart: () => {}, onTouchend: () => {}, onTouchcancel: () => {} };
@@ -228,7 +238,7 @@ function getTypeName(item) {
 .sd-section-title { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; }
 .qty-controls { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.5rem; flex-wrap: nowrap; }
 .qty-controls .quick-btn { flex: 1 1 0; min-width: 0; padding: 0.3rem 0.35rem; }
-.qty-controls .qty-val { flex: 0 0 auto; min-width: 2.4rem; order: 0; }
+.qty-controls .qty-input { flex: 0 1 3.2rem; min-width: 2.4rem; order: 0; }
 .qty-controls .qty-btn { order: 0; }
 .qty-btn {
   width: 32px; height: 32px;
@@ -247,7 +257,12 @@ function getTypeName(item) {
 .qty-btn:active { background: rgba(var(--violet-rgb),0.25); transform: scale(0.94); }
 .qty-btn.qty-btn--big { width: 34px; height: 34px; font-size: 1.2rem; font-weight: 700; flex: 0 0 auto; }
 .qty-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.qty-val { min-width: 2.4rem; text-align: center; font-family: monospace; font-weight: 700; font-size: 1rem; }
+.qty-input { width: 3.2rem; min-width: 0; height: 34px; box-sizing: border-box; padding: 0.2rem 0.15rem; text-align: center; color: var(--text); background: var(--bg); border: 1px solid var(--accent2); border-radius: 4px; font-family: monospace; font-weight: 700; font-size: 1rem; overflow: hidden; text-overflow: clip; }
+.qty-input:focus { outline: 2px solid rgba(var(--accent2-rgb), 0.35); outline-offset: 1px; }
+/* 去掉 Chrome、Edge、Safari 数字输入框的上下箭头 */
+.qty-input::-webkit-inner-spin-button, .qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* Firefox 数字输入框不显示上下箭头 */
+.qty-input { -moz-appearance: textfield; }
 .quick-btn { padding: 0.3rem 0.6rem; font-size: 0.72rem; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
 .quick-btn--big { padding: 0.45rem 0.7rem; font-size: 0.85rem; font-weight: 600; min-height: 38px; }
 .quick-btn:active:not(:disabled) { background: rgba(var(--violet-rgb),0.25); transform: scale(0.96); }

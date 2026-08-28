@@ -2,6 +2,50 @@
 
 > 📖 主入口：[../README.md](../README.md)
 
+## v1.02 · 2026-08-28
+
+### 🆕 新增功能
+
+#### 世界 BOSS 全面重构
+- **BOSS 数值 = 全服当前最强玩家 × 10 倍**，按生命 5 : 攻击 3 : 防御 1 : 敏捷 1 分配到 BOSS
+  - 计算公式：`hp = strongest.hp × 5`，`atk = strongest.atk × 3`，`def = strongest.def × 1`，`agi = strongest.agi × 1`（共 5+3+1+1=10 倍拆解）
+  - 锚点评估函数 `getStrongestPlayer` 按 `hp/10 + atk + def*2 + agi + level*5` 取最高分；找不到玩家时退回模板数值
+- **每日刷新**：BOSS 在每日 0 点强制死亡结算（无论是否被打死），次日 0 点重生；`expiresAt` 字段实时记录过期时间，前端倒计时 HH:MM:SS
+- **每日 1 次挑战**：玩家 `lastBossAttackDay` 字段按当日键判定；次数用完后按钮变为"今日次数已用完 · 等待次日重生"
+- **一次挑战 = 一次 5 回合战斗**：新增 `simulateBossBattle(player, boss, 5)` 战斗模拟器，5 回合上限，按 hit/defence/agi 比动态行动次数；返回战报含每回合 actions / pHp / mHp
+- **伤害前三 24h 称号奖励**：
+  - 🥇 第一名 【天命弑神者】
+  - 🥈 第二名 【深渊征服者】
+  - 🥉 第三名 【暗影屠戮者】
+  - 存入 `player.titleExpiry`，下次 `/api/titles` 拉取时自动剔除过期
+  - 称号 UI 在 BOSS 战报下方金色"称号奖励"卡片即时展示
+
+#### 称号系统（贯穿游戏）
+- **后端 `server/data/titles.js`**：扫描 `JOB_TREE[].stages` 自动派生 5 职业 × 4 阶段 = 20 个职业阶段称号（key 形如 `thunder:御雷者`），加上 3 个世界 BOSS 限时称号
+- **职业称号解锁规则**：仅当玩家 `jobPath === meta.jobId` 且 `level >= meta.requiresLevel` 时才可佩戴
+- **限时称号有效期**：24 小时（`titleExpiry[key] = Date.now() + 86400000`）
+- **API**：
+  - `GET /api/player/:username/titles` → 返回 `currentTitle / unlocked / active(限时未过期) / all`
+  - `POST /api/player/:username/titles/equip` → 佩戴 / 卸下（key=null）
+  - `GET` 接口顺手清理过期称号 + 持久化
+- **角色页职业名称位置改为 currentTitle**：未佩戴时回退显示 `player.job`，佩戴后显示金色 / 银 / 铜三色限时称号
+- **角色页右侧折叠栏新增"称号"按钮**（与进阶/任务并列）：点击弹出 `TitleModal.vue`，按职业分组列出 4 个阶段（未解锁显示锁 + Lv.N），下方展示限时称号及剩余时间
+- 新增 `client/src/components/TitleModal.vue`、`server/data/titles.js`、`server/routes/titles.js`
+
+#### 背包整理按钮
+- 装备栏右上增加紫色"✨ 整理"按钮（在"一键合成"左侧）
+- 点击后按 **装备类别（武器→护甲→饰品）+ 类别内按最高属性降序** 重新排序
+- 前端乐观更新（玩家 equips 数组直接重排），后端保持不动（`props.player.equips` 即时生效，下次轮询会被覆盖前已排序好）
+- 前端 `client/src/App.vue` 增加 `handleInventorySort` 接收子组件 emit
+
+### 🔧 后端引擎
+- `server/engine/combat.js` 新增 `simulateBossBattle(player, boss, maxRounds=5)`，复用 `calcDamage` / `getActionCount`
+- `server/engine/worldboss.js` 重写：移除旧版模板数值生成，改为按全服最强玩家 × 10 倍；新增 `ensureBossFresh` 处理跨日强制结算；移除 `setRecalcMaxStatsHandler` 旧 seam
+- `server/engine/index.js` 新导出 `simulateBossBattle / getBossExpiresAt / getStrongestPlayer`，同步移除 `worldboss.setRecalcMaxStatsHandler` 调用
+- `server/routes/worldboss.js` 重构：active 路由增加 `expiresAt / challengedToday / remainingMs`，攻击路由返回完整 `battle / rewards / player`，移除旧 5 秒冷却
+
+---
+
 ## v1.01 · 2026-08-27
 
 ### 🆕 新增功能
@@ -24,402 +68,4 @@
 
 - **图鉴显示真实掉率**：自创装备的 `sources` 从硬编码 `rate: 0` 改为反查"绑定了该装备的自创怪"的真实掉率，并列出来源怪物名与造物主；`pending` 阶段兜底显示投放地图
 - **玩家造怪物不再自定义掉率**：统一用全局默认常量——自创装备 3% / 自创材料 5%（防刷）
-- **全局掉率压缩**（挂机放置类，等级越高越稀有）：装备掉率梯度 Lv1-30 约 1% → Lv200-250 约 0.05%（每升 1 级约 ×0.85），材料掉率统一砍半
-
----
-
-## v1.0 · 2026-08-27
-
-### 🆕 新增功能
-
-#### 创世造物主显示升级
-- 自创怪物/装备写入时新增 `creatorUsername` 字段（账号维度冗余），与原有 `creator`（真名维度）并行
-- 后端 `listByPlayer / countOf / deleteCustom / rehydrateFromMeta` 全部改为 `Set<username, name>` 双值匹配
-- 启动期 `rehydrateFromMeta` 自动给缺失 `creatorUsername` 的旧造物补字段（已对玩家"活久见 / 123"账号的 3 条历史造物完成回填）
-- 新接口 `GET /api/players/names` → `{ username: { username, name } }` 全服玩家名册
-- 前端 `App.vue` 登录后自动拉取并通过 `provide/inject` 注入给子组件
-- `GenesisView / CodexView` 改造"造物主"标签：自己造的显示 `player.name`，别人造的查名册显示真名（账号 → 真名）
-
-#### 装备一键合成（替代逐件选 3 件）
-- **新入口**：背包 → 装备区右上角金色"✨ 一键合成"按钮（与"批量出售"并列），按钮上带可合成组数徽章
-- **自动分桶**：按 `quality × slot` 分组，每桶满 3 件 → 1 次合成；自动跳过已穿戴/有附魔/已最高品质的装备
-- **弹窗预览**：列出每个可合成组（普通→精良、精良→史诗…），玩家可单独勾选/全选，确认后并发请求
-- **后端规则重写**（`server/engine/items.js` `mergeEquipment`）：
-  - 3 件必须**同品质 + 同槽位**（旧版"3 把武器 → 任意槽位装备"的随机 targetSlot 改为锁死）
-  - 拒绝已穿戴/有附魔的素材合成（避免误操作浪费）
-  - 跨品质合成时 `upgradeLevel` 重置为 0（旧强化倍数叠加新模板基础属性会过强）
-  - 错误文案修正："传说级" → "神话级"
-
-#### 重置附魔（替代"重铸词条"）
-- **语义变更**：原 `reforgeEquipment` 是清空 enchants+affixes 再随机塞 1 个被动词条 → 现在改成**只清空附魔**，玩家再用附魔列表一个个补回去（与"强化按 +1 累加"对齐）
-- UI 改名："重铸词条" → **"重置附魔"**（描述："消耗 1000 金币，重新附魔"）
-- 确认弹窗 + Toast 全部更新成新语义
-
-#### 附魔描述展开隐藏系数
-- 11 个 `ENCHANT_RECIPES.desc` 全部从"装备 X+Y"改成"实际加到战斗属性的效果"：
-  - 力量附魔："装备力量+3" → **"攻击+6"**（str ×2 展开）
-  - 精神附魔："装备精神+3" → **"MP+9"**（spi ×3 展开）
-  - 传说·破灭："攻击+20 力量+10" → **"攻击+40"**（20 + 10×2 = 40）
-  - 传说·不朽："防御+20 体质+10 HP+200" → **"防御+35 HP+250"**（20+10×1.5 / 200+10×5）
-  - 神话·灵蕴："精神+15 MP+200 攻击+10" → **"攻击+10 MP+245"**（200+15×3）
-- 玩家现在一眼能看穿附魔的真实收益，不再被"装备力量+3"误导
-
-#### 角色三件套视觉优化
-- **右上角改为强化等级徽标**：`+1` ~ `+15` 等宽字体显示（金色描边深底白字，等级 0 不显示）
-- **边框按附魔数量染色**：
-  - 0 附魔：默认紫色（不变）
-  - 1 附魔：史诗紫 `#9d8cf0` + 6px 紫色光晕
-  - 2 附魔：传说金 `#d4af5e` + 6px 金色光晕
-  - 3 附魔：神话橙 `#ff6738` + 8px 橙色强光晕
-
-#### 浏览器记忆"铭记此身"实装
-- `feiland_remember_v1` localStorage key 保存 `{ username, password, savedAt }`
-- 组件挂载时自动调用 `loadRemembered()`，有保存则**自动填充**账号密码 + 自动勾上"铭记此身"
-- 点击登录按钮时：勾选 → `saveRemembered(...)`；取消勾选 → `clearRemembered()`（玩家可主动"忘记"）
-- 端口约定统一：前端固定 3000（Vite `strictPort: true`），后端 API 固定 3001
-
-#### 满百级转生提醒
-- 第一次到 Lv.100 弹出金色神谕模态框（一次性 `reincarnHintShown` 标记，跨会话只弹一次）
-
-### 🐛 Bug 修复
-
-- **登录/注册缺错误提示**：`handleLogin / handleRegister` 改为 async + 返回 res，失败时格式化后端消息（"账号不存在"→"此真名未曾被星图记录" 等卷轴味文案），输入框下方显示 inline 错误，输入即清
-- **金币商店购买超购买力**：`maxBuyQty(item) = floor(playerGold / price)` 作为数量上限，`+1 / -1 / +10 / +max` 全部走上限保护；`+10 / +max` 在已满时禁用
-- **金币商店 +/- 单击不触发**：`useLongPress` 350ms 防误触窗口内点一下松开无反应 → 在 `stop()` 里检测"阶段 2 还没触发过"就补打一发 `onTick(dir, 1)`，单击立刻生效
-- **长按方向识别**：增加 `dirOf(key)` 支持 `'+10' / '-10' / '+max'` 等多种 key，自动判断方向
-- **属性预设分配不正确**：原版简单按比例 `floor(points * r[i] / rsum)`，剩余点全给最后一项 → 改为"先补齐比例缺口，再按比例分配"两步法 + 余数补给比例最大的维度（5:1:1:1 + 80点 + cur 40:5:10:8 → 92:17:17:17）
-- **属性预设分配产生小数**：旧算法的 `gap = k * r - cur` 浮点污染 `cur`，后续累加小数 → 补齐阶段 `Math.round()` + 出口处 `alloc = Math.round(alloc)` 兜底（已修复玩家"活久见"账号 `def/hp/agi = 727.6` 的旧数据）
-- **自创装备掉落后变成乱码道具**：`idle.js` 的 `dropList.push(...)` 没区分 material 和 equip，统一 push 了 `templateId`（如 `custom_xxx`）到材料堆 → 改为按 `drop.kind` 分流：equip 走 `template: d.name`，material 走 `name: d.name`
-- **图鉴只显示自己造的造物**：旧 codex 路由只把当前登录用户造的注入 → 改为读 `meta.genesis` 全服共享，所有玩家都能在自己图鉴里看到别人造的内容
-- **PvP 排行榜对手列表走错图鉴路径**：复用 `getCodex` 时少了对 `equips.equipped` 的合并 → 改用 `codexByUsername` helper
-
-### 🎨 UI 改进
-
-- **金币商店 Action Sheet 修复被 TabBar 遮挡**：`.shop-overlay` z-index 400 → **1200**；`.shop-detail-overlay` 410 → **1210**；新增 `padding-bottom: var(--safe-bottom)` 适配 iOS 底部安全区
-- **TabBar 图标去边框放大**：移除 `.tabbar-icon-wrap` 的圆形描边 / 渐变背景 / box-shadow；图标尺寸放大到 28；hover/active 态只保留"图标上浮 2px"动效 + 文字变金色
-- **金币商店数量控件**：`-10 / -1 / N / +1 / +10 / max` 6 键排列，长按三段式加速（350ms 防误触 → 120ms 慢速 → 45ms 冲刺）
-- **底部 TabBar 适配浏览器**：fixed 定位 + `padding-bottom: env(safe-area-inset-bottom)` + `100dvh`，iOS Safari 小条不再遮挡
-- **属性预设按钮**：`+10` 同样支持长按三段式
-
-### 🔧 基础设施
-
-- 新建全服玩家名册接口（`/api/players/names`）+ 前端 provide/inject 注入机制
-
----
-
-## v0.9 · 2026-08-26
-
-### ✨ 创世之书系统大改（v2.0 + v2.1）
-
-#### 🆕 神话品质上线（橙色火焰感）
-- `equipment.js` 新增 `mythic` 品质（`#ff6738`），作为传说之上的终极品质
-- 12 件 Lv.130+ 高端传说装备升格为神话（星辰锻造之刃、原初之眼、时之甲等）
-- 强化材料"深渊之石"、强化费用 7×、出售价 5000 金币
-- 前端全套支持：创世页/图鉴/背包/装备详情/PvP/战斗日志均显示神话颜色与文案
-
-#### 🆕 创世自创装备——"递增累积"系统（v2.0）
-- 锚点 = "系统装备最大属性点"（同地图同槽位最强真实装备）
-- 自创预算 = `锚点 × 1.1`（首次）或 `上次最强 × 1.1`，硬上限 `= 锚点 × 10`
-- 品质加成：史诗 ×1 / 传说 ×1.25 / 神话 ×1.5
-- 删除自创不回退 maxPts（防刷分）
-- 公式在 `server/data/genesis.js`，增长曲线示例：
-  - Lv30 武器 史诗：53 → 58 → 75 → 129 → 327 → **530（封顶）**
-  - Lv250 武器 神话：3520 → 5808 → 13688 → 35494 → **52800（封顶）**
-
-#### 🆕 装备"投入世界"机制（v2.1）
-- `forgeEquip` 造出来只是 `worldState: 'pending'`，不立即 commit
-- 怪物掉落支持 `kind: 'equip'`，可挂自创装备为掉落
-- 怪物降生成功 → 挂载的装备 `committed`，正式写入 `equipsMax[areaId][slot]`
-- 装备被怪物绑定时不可删除；删除怪物时装备退回 pending
-- 同一件装备同一时间只能挂在一个怪物身上（唯一绑定）
-
-#### 🎨 创世页 UI 体验改进
-- 锻造时显示增长源徽章（紫色=系统基础 / 金色=上次最强 / 橙红=已达 10× 上限）
-- 锻造时显示"系统最强 → 本次" / "世界最强 → 本次"对比
-- 我的造物列表显示装备状态（紫=待投入 / 金=已投入世界）
-- 怪物创建时掉落新增"自创装备"类型选择
-- 提交造装备/造怪物后自动切到"我的造物"页签
-
-### 🐛 Bug 修复
-- **"我的造物"不显示自己造的装备/怪物**：`listByPlayer`/`deleteCustom`/`countOf` 三处过滤 `creator` 时只比对 `player.username`，未兼容 `player.name`（注册时填的真名）。改为 `Set<username, name>` 双值匹配
-- **百分比属性被当普通值加总**：旧装备预算公式直接 `Object.values().reduce(sum)`，把 `exp: 0.1` 当 0.1 点、负数扣分，导致品质倒挂（龙之眼 < 天使之羽）。改用 `PERCENT_STAT_WEIGHTS` 按权重折算
-- **预算参照只看 epic 模板**：旧公式仅在 epic 池中找最近等级，导致 Lv100+ 全部冻结在 53 点。改为遍历全部品质模板，按最强真实装备 + 等级插值
-- **强化上限误用 +15**（实为 +10）、**附魔加成估算过激**（实际每个附魔仅 +5/3/50 量级）→ 修正为基于真实 `UPGRADE_LEVEL_MAX=10` 和 `ENCHANT_RECIPES` 数据计算
-
----
-
-## v0.8 · 2026-08-25
-
-### ✨ UI 沉浸化（羊皮卷轴风格统一）
-
-- **登录/注册/创世之书**：沿用一套羊皮卷轴视觉
-  - 羊皮纸暖色基底 + 双线金边 + 四角 ✦ 卷角珠 + 真名/秘钥字段底边金线（去方框化）
-  - 沉浸背景层：星尘漂落 + 标题符文环 + 角落烛光摇曳 + 羊皮纸纹理 + 暗角
-  - "踏入世界""缔结契约""刻下契约"等按钮带火焰脉冲动效
-  - 密码掩码用 Cinzel 字体 + 0.18em 字距，呈现 ◆ 符文质感
-  - 神谕面板："失落的灵魂，回应星空的召唤吧" / "契约成立"卷轴气泡过渡
-- **角色页**：右侧折叠抽屉新增「创世」金色入口（v-if 二转可见）
-- **任务页**：底部金色横幅入口（v-if 二转可见），可直达创世之书
-- **创世之书解锁入口**（CharacterView/QuestView 右侧 + 底部双重入口，仅 `reincarnation >= 2` 显示）
-
-### ✨ 地图页改造（两段式）
-
-- **第一页**：仅显示挂机区域选择
-- **第二页**：战斗策略 + 战斗日志，右上角居中显示当前区域徽章 + 「‹ 返回选区」按钮
-- **触发逻辑**：玩家已选过区域 → 任何时候点"地图" Tab 直接进第二页；首次新号进第一页；选完区域自动切第二页
-- **页面切换**：左→右卷曲过渡动画
-
-### 🐛 Bug 修复
-
-- **挂机战斗回合限制**：去掉 30/200 回合上限，500 回合兜底；timeout 视为 draw（平局），玩家获得 30% 经验补偿
-- **PvP 平局支持**：严格 ELO `score=0.5` 平局分支，平局给少量奖励（4 竞技币 + 经验/金币的中间值），不消耗连胜
-- **创世接口后端**：`applyAttrPresetByRatio(player, ratio)` + 路由 `/attr-presets/apply-by-ratio`，4 模板按比例分配 player.attrPoints
-- **装备数值溢出 / 输入框上下箭头**：彻底隐藏 number 的 spin 按钮（Webkit/Firefox/Edge/IE 全覆盖），超长数字加宽框不被截断
-- **页面嵌套滚动条**：去掉 `login-scroll / genesis-scroll` 的 `overflow-y: auto + max-height`，改由外层 `view-container` 统一滚动
-- **占星图标不再闪烁**：移除 `.field-icon--astrolabe` 的 `animation: rune-pulse`，纯静态显示（与眼睛按钮 ◉/◌ 一致）
-- **同类小问题归并**：移除冗余重复样式、避免卡片包裹冲突、确保 dev 端口约束等
-
-### 🔧 基础设施
-
-- **代码索引** `docs/CODE_INDEX.md`：新增 AI 协作地图，含每个模块职责、关键 emit、对外 API、严禁事项
-- **API：`GET /api/account-exists?username=xxx`**：注册时真名实时占卜
-- **后端 `deleteAttrPresetBySlot(player, slot)` + 路由 `/attr-presets/delete-by-slot`**：按槽位索引删除属性预设（前端 3 槽位方案明确用 0/1/2，不用拿 id）
-
----
-
-## v0.7 · 2026-08-24
-
-### ✨ 登录/注册沉浸版
-
-- **羊皮卷轴视觉**：暗金 + 羊皮纸暖色基底，双线金边 + 四角 ✦ 卷角珠
-- **沉浸背景层**：星尘飘落（多层 radial-gradient 38s 漂移）+ 标题符文环（顺/逆时针双层旋转）+ 烛光摇曳（角落径向渐变脉冲）+ 羊皮纸纹理叠加 + 暗角
-- **真名 / 秘钥 措辞**：账号 → 真名，密码 → 秘钥，登录 → "踏入世界"，注册 → "缔结契约"，确认密码 → "确认秘钥"
-- **真名实时校验**：注册时右侧"占星"图标（⌛/✓/✗），输入后 350ms 防抖请求 `GET /api/account-exists`，色彩反馈已占用 / 可用
-- **灵魂强度**：密码按 5 维评分（长度 8/12 + 大小写 + 数字 + 符号）→ 薄弱/凡俗/英灵/半神 4 级 + 文字色
-- **秘钥符文字符**：Cinzel 字体 + 0.18em 字距，使浏览器原生 password 掩码呈现符文质感
-- **秘钥可见切换**：右侧眼睛按钮 `◉ / ◌`，切换 type=text/password
-- **火焰按钮**：主操作按钮 hover 时径向渐变 + 1.6s 脉冲（"火焰燃起"微动效）
-- **翻书页动画**：登录 ↔ 注册切换使用 `perspective + rotateX` 卷曲过渡 + 金色 shimmer
-- **神谕过渡面板**：注册成功后停留 2.4s "契约成立。[用户名]，你的名字已刻入命运之书。欢迎归来。" 三环旋转 ✦
-- **底部神谕句**：每个步骤独立一句诗化引导
-- **新路由**：`GET /api/account-exists?username=xxx`（在 `/api` 通配 404 之前注册）
-
-### ✨ 创建角色：三族试听 + 命运之书
-
-- **三族试听**：横向 3 张种族卡（鹰人 ⟁ / 翼人 ⌬ / 天使 ✶），点击切换选中态
-- **每张卡片**：专属符文角标 + 暗金徽记 + 阶梯式入场（80ms 错峰 fadeInUp）
-- **铭文过渡**：选中种族后用 `<transition name="oracle">` 平滑切换诗句与解说（fadeInUp 6px）
-- **命运之书**：底部"卷轴预览条"，实时显示 `[ 真名 · 血脉 ]` 拼装结果（输入为空时显示 `__________` 占位）
-- **种族铭文诗句**（与文档一致）：
-  - 鹰人：「生于绝壁，长于风暴——翼未丰，心已远」
-  - 翼人：「羽化登天，光在翼尖——夜为黎明之桥」
-  - 天使：「光铸其身，律法其声——万界回响，皆为圣名」
-- **真名校验**：2 字符以下 ✗ 提示，至少 2 字符才允许"踏入费兰德"
-- **底部神谕**：create 步骤独立诗句「血脉已择，真名待刻，卷轴在等」
-
-### 🔧 技术细节
-
-- `server/routes/account-exists.js`（12 行）：参数兜底 2~16 字符，返回 `{ exists }`
-- `server/routes/index.js` 注入新路由
-- `LoginScreen.vue` 维持单文件 < 1300 行；emit 接口零修改，App.vue 调用方零变更
-
----
-
-## v0.7 · 2026-08-24
-
-### ✨ 新增功能
-
-- **📜 创世之书（二转解锁）**
-  - **玩法循环**：挂机 → 自动战斗 → 二转 → 解锁创世之书 → 自定义怪物 / 装备 → **立即投放到全服世界** → 继续挂机会遇到自己造的东西
-  - **造怪物**：填名字 + 描述 + 选种族（8 大血脉：龙裔 / 荒兽 / 精灵 / 亡灵 / 元素体 / 魔族 / 构装体 / 神眷）+ 选特性（≤2 个怪物技能）+ 填四维属性 + 挂载掉落物（≤2 种）+ 选投放地图 → 点"降生"
-  - **造装备**：填名字 + 描述 + 选类型（武器 / 护甲 / 饰品）+ 填属性（≤4 种）+ 选投放地图 → 点"锻造"
-  - **预算护栏（防神装 + 防经验包怪）**：
-    - 怪物：四维总点数 ≤ 目标图最强怪总点数，单维上限 ≤ 最强怪对应维度 ×1.2；经验 / 金币由系统按图自动锁定，玩家不可填
-    - 装备：总属性点数 ≤ 同槽位同等级段史诗模板的总点数
-  - **数量上限**：每名玩家自创怪 / 自创装备各 **30 个**（满了要删旧的才能造新的）
-  - **造物门槛**：创建怪物 5000 金币 / 装备 8000 金币
-  - **全服共享 + 永久投放**：自创内容存在 `meta.genesis`，所有玩家都能遇到；自创装备以 `custom_` 前缀注册到 `EQUIP_TEMPLATES`，自动获得掉落 / 合成 / 附魔 / 重铸兼容
-  - **权限**：只有造物主可以抹去自己的造物
-  - **重启恢复**：服务启动期自动把存档里的自创装备重新注册回装备模板表
-  - **神谕文案**：每次创建 / 删除都有"你低语真名……熔岩蜗牛从灰烬中诞生"风格的随机反馈
-  - **图鉴集成**：自创内容自动出现在图鉴的"怪物"和"装备"分类，带紫色"自造"徽章 + 造物主悬停提示 + 神谕原文展示
-
-### 🐛 Bug 修复
-
-- 商店 `/api/shop` 重写为按等级过滤材料货架（之前整盘返回，材料未和地图解锁绑定）
-- 数值校验前置：装备属性 / 怪物四维超出预算立即拒绝（避免后置结算才报错）
-- 自创装备 `reqLevel` 之前错误取地图等级，现改为参照史诗模板的等级门槛（与全游戏成长曲线一致）
-- 创世之书数据迁移：早期用账号名 `player.username` 存储的 `creator` 字段已批量迁移为角色名 `player.name`
-
-### 📚 文档
-
-- README.md 版本号 v0.6 → v0.7
-- 核心特性表新增"创世之书"一行
-- 本变更日志新增 v0.7 章节
-
----
-
-## v0.6 · 2026-08-24
-
-### ✨ 新增功能
-
-- **💎 深渊之石附魔配方「神话·灵蕴」**
-  - 饰品附魔：精神+15 / MP+200 / 攻击+10
-  - 消耗：深渊之石 ×1 + 光明晶 ×3 + 附魔卷轴 ×5（8000 金币）
-  - 为终局材料「深渊之石」提供了新的稳定消耗出口
-
-### 🔧 其他
-
-- 优化了部分 bug
-
----
-
-## v0.5 · 2026-08-22
-
-### 🎨 AI 生图全面接入
-
-- **28 个暗黑 RPG 图标重新生成**：全部透明背景，风格统一（魔兽暗黑风）
-- **3 张主背景图**（minimax-m3 生成 + Pillow 裁剪去水印）：
-  - `bg-main.png`：紫夜城堡主背景（1080×1920），body 全局铺底
-  - `header-bg.png`：魔法卷轴纹理（768×80），TopBar 横向平铺
-  - `tabbar-bg.png`：雕花石座 + 紫色符文（768×80），TabBar 横向平铺
-
-### 🍞 全局 UI 桥接系统
-
-- 新增 `client/src/ui-bridge.js`：全局响应式 Toast 栈 + Modal 队列
-- 新增 `client/src/components/UIBridge.vue`：统一渲染层，App.vue 全局挂载
-- API：`toast.success/error/warn/info`、`modalAlert(msg)`、`modalConfirm(msg)`（返回 Promise）
-- 替换全部浏览器原生弹窗：9 处 `confirm()` + 50+ 处 `alert()`（背包/进化/角色/世界BOSS/登录/任务等）
-
-### 🧙 游戏感 UI 增强
-
-- **基础控件游戏化**：按钮 / 输入框 / 下拉框 / 滚动条全局重写（style.css）
-- **TopBar 重构**：金边头像 + 名牌（名字·种族）+ 属性 chip（Lv/职业/神位）+ 金币胶囊
-- **TabBar 重构**：34px 圆形图标底座 + 金色激活态 + 中心地图大按钮 + 徽章脉冲动画
-- **品质边框系统**：`.q-normal / .q-fine / .q-epic / .q-legend` 四档品质色边框与发光
-- **奖励徽章动画**：`.reward-badge` 弹跳入场
-
-### 🐛 Bug 修复
-
-- **TabBar 图标溢出**：`--tabbar-h` 58px → 64px，图标 38px → 34px，中心地图按钮取消凸出
-- **金色渐变线清理**：移除 `.card::before`、`.tabbar-item::before`、`.tabbar-item.active::before`、`*:focus-visible` 等多余金线
-- **EquipDetailModal 重复样式**：清理重复定义的 `.btn-danger`
-
-### ✅ 验证
-
-- `npm run build` 94 modules 转换成功
-- 登录 / 挂机 / 背包 / 转生 / 世界 BOSS 全流程回归正常
-
----
-
-## v0.4 · 2026-08-21
-
-### ✨ 新增功能
-
-- **🔄 转生轮回系统**
-  - 解锁条件：Lv.100 + 通关龙岛
-  - 永久加成：经验 +2%/次（封顶30%）、金币 +2%/次（封顶30%）、基础属性 +5/次
-  - 转生点数 = 总属性 / 100
-  - 入口：角色 → 转生/进化 → 转生 tab
-
-- **🔨 装备锻造系统**
-  - 升级：装备 +1 ~ +10，每级 +5% 基础属性
-  - 合成：3 件同品质 → 1 件高一阶品质
-  - 重铸：1000 金币重洗词条
-  - 入口：背包 → 装备详情
-
-- **👹 世界 BOSS 系统**
-  - 3 个 BOSS 模板（虚空领主 / 深渊巨蛇 / 泰坦之魂），30 分钟自动刷新
-  - 全服共享血量，按伤害占比发奖励
-  - 伤害排行榜 + 最后一击额外奖励
-  - 入口：地图 → 侧边抽屉 → 世界 BOSS
-
-- **🗺️ 7 个新区域**
-  - 元素深渊（Lv.130）/ 星界战场（Lv.150）/ 神魔殿（Lv.180）
-  - 永恒虚空（Lv.200）/ 时之境（Lv.220）/ 创世核心（Lv.250）
-  - 终极 BOSS「万界之眼」HP 30,000,000
-
-- **⚔️ 22 件新装备**
-  - 中段过渡 5 件（Lv.50-90）
-  - 高阶 4 件（Lv.110-140）
-  - 终极 3 件（Lv.200-250，无尽之刃 / 时之甲 / 全知之眼）
-
-- **🧪 9 个新怪物技能**
-  - 虚空新星 / 时间停止 / 星辰箭 / 神怒一击 / 元素风暴 / 神圣审判 / 灵魂分裂 / 界域崩裂
-
-### 🐛 Bug 修复
-
-- **PVP 平衡修复**：`engine.js:simulatePvP` 引用未定义变量 `round` → 改成 `rounds.length`
-- **挂机收益修复**：`engine.js:calculateIdle` 引用未定义变量 `reincBonus` → 补充声明
-- **TabBar 金色横线**：`.tabbar::before` 渐变线悬空 → 改用居中 60% 宽度的 ::before 伪元素
-- **图鉴页文字图标**：CodexView 直接渲染 emoji → 改用 IconBase 组件
-- **竞技场手动结算**：删除手动按钮 + doSettle 函数 + 简化结算 tab
-
-### 🎨 视觉升级
-
-- **AI 图标全量替换**：emoji → 28 个魔兽暗黑风 PNG 图标
-- **图标背景透明化**：CSS `mix-blend-mode: screen` 让 PNG 白底与深色 UI 融合
-- **图鉴图标**：4 个分类 tab 全部接入 IconBase 组件
-
-### 📚 文档
-
-- README.md 重写为 v0.4
-- 拆分到 `docs/README/` 子目录（6 个文件）
-- 删除 GAMEPLAY_TASKS.md（被 README 取代）
-- 新增 [00-code-style.md](00-code-style.md) **代码模块化规范**（行数规则 / 文件清单模板 / 拆分原则）
-
-### 🧱 模块化重构（v0.4 同日）
-
-按代码规范（行数 300-500 为理想 / > 800 必须拆）实施拆分：
-
-- **后端 `server/`**：
-  - `data.js` 987 → 4 行 + `data/` 9 个子模块 + `affixes/` 按等级 4 子文件
-  - `engine.js` 2780 → 4 行 + `engine/` 13 个子模块（state/utils/daily/player/stats/combat/pvp/items/progression/worldboss/idle/view/index）
-  - `index.js` 1160 → 103 行 + `routes/` 11 个路由模块 + `_helpers.js`
-  - 所有文件 ≤ 500 行，循环依赖通过 setHandler 注入模式解耦
-- **前端 `client/src/components/`**：
-  - `MapView.vue` 799 → 87 行（拆为 `map/` 7 个子组件 + `battleLogUtils.js`）
-  - `PvPView.vue` 799 → 171 行（拆为 `pvp/` 7 个子组件 + `pvpUtils.js`）
-  - `EvolutionView.vue` 488 → 134 行（拆为 `evolution/` 4 个 Tab 子组件）
-  - `App.vue` 656 → 327 行（拆出 LoginScreen/TopBar/TabBar/OfflineRewardModal/LevelUpNotice/ShopModal）
-  - `CharacterView.vue` 642 → 560 行（抽出 `EquipDetailModal.vue`）
-- **验证**：`skill.test.js` 19/19 通过；`npm run build` 91 modules 成功；13 个 GET 路由验证 200
-- **兼容性**：所有原 `require('./engine')` / `require('./data')` 通过 4 行重定向壳正常工作，调用方零修改
-
-### 🐛 Bug 修复（v0.4 同日补丁）
-
-- **dev 启动端口冲突修复**：`vite.config.js` 的 `/api` proxy 之前硬编码 `http://localhost:3000`，与 dev:server 同时占用 3000 端口时会启动失败 → 改为读取 `process.env.PORT || 3000`，并通过 `PORT=3001` 启动两个独立进程
-- **启动方式**：手动启动后端 `set PORT=3001 && node server/index.js`，前端 `set PORT=3001 && npx vite --port 3000 --host`
-
-### 🐛 Bug 修复 + 功能优化（2026-08-22）
-
-- **法则 Tab 崩溃修复**：`LawTab.vue` 的 `getMaterialCount` 函数引用了未定义的 `player.value`（script setup 中没有 `player` 变量）→ 改为 `const props = defineProps(...)` 并使用 `props.player.inventory`，消除 `ReferenceError: player is not defined` 及其连锁的 3 条 Vue 渲染错误（shapeFlag/subTree/emitsOptions 为 null）
-- **转生按钮误触发兑换修复**：`ReincTab.vue` 兑换按钮的 `:click="$emit('buyReincItem', item)"` 是 prop 绑定而非事件监听（应为 `@click`）→ 修正为 `@click`，修复"点转生触发兑换转生点"的错位行为
-- **转生后地图不重置修复**：`doReincarnate` 函数重置等级/经验/属性但漏了 `currentArea`，转生后仍停留在高等级地图 → 新增 `player.currentArea = 'gaomanshan'`（保留 `maxClearedArea` 历史成就记录不重置，避免破坏二次转生门槛判定）
-- **商店批量购买逻辑修复**：`ShopModal.vue` 的 `setBuyQty` 用 `=` 覆盖数量导致点 `×10` 始终是 10 → 改为 `+=` 累加，按钮文案 `×10` → `+10`
-- **商店商品扩充**：`SHOP_ITEMS` 从 6 个扩到 17 个（消耗品 8 + 装备 9），新增大生命/法力药剂、高级经验卷轴等；装备复用 `EQUIP_TEMPLATES` 已有模板（铁制长矛/铁甲/水晶戒指/雷霆长枪/海灵胸甲/光之翼甲），同步适配 `useConsumable` 支持高级药水
-- **背包批量出售装备**：新增"按等级批量出售"功能
-  - 后端：`sellEquipsByLevel(player, maxLevel)` + 路由 `POST /api/player/:username/sell-equip-by-level`
-  - 前端：`InventoryView.vue` 装备区加"批量出售"按钮 + 弹窗（≤Lv.30/50/100/150/全部 五档快捷选择 + 实时预览件数/金币/品质分布）
-  - 安全保障：只卖 `player.equips`（背包中的），不影响 `player.equipped`（穿戴中的）；写入操作日志
-
-### 🔧 端口方案统一（2026-08-22）
-
-- **端口约定（所有模式统一）**：前端固定 **3000**（浏览器打开的地址），后端 API 固定 **3001**
-- `server/index.js`：默认端口 3000 → **3001**（纯 API 服务，不再托管前端）
-- `vite.config.js`：新增 `strictPort: true` 锁死 3000（被占用时报错而非自动跳端口）；`/api` 代理默认指向 3001
-- 新增 `server/web-server.js`：生产模式前端服务器，监听 3000 托管 `client/dist` 并把 `/api` 反代到 3001（零第三方依赖）
-- 新增 `server/start-all.js` + `package.json` 的 `npm start`：一键同时拉起前后端，任一退出则整体停止
-- Docker：`ENV PORT=3001`、新增 `EXPOSE 3001`、`CMD node server/start-all.js`；宿主机访问端口仍由 compose 的 `${PORT:-3000}` 映射到容器内前端 3000
-
----
-
-## v0.3 · 2026-08-20
-
-5 大职业 + 词条 + 附魔 + 种族进化 + 法则 + 登神 + 战斗策略 + 伤害飘字 + PVP + 任务/成就 + 新手引导 + 全服排行榜
-
----
-
-## v0.1-v0.2 · 早期
-
-基础挂机 + 账号系统 + 商店 + 图鉴 + Docker
+- **全局掉率压缩**（挂机放置类，等级越高装备越稀有）：装备掉率梯度 Lv1-30 约 1% → Lv200-250 约 0.05%（每升 1 级约 ×0.85），材料掉率统一砍半

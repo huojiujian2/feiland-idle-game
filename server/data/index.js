@@ -17,6 +17,7 @@ const { DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS, ACTIVE_SKILL_CD } = require('./
 const { PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, SEASON_MONTHS,
         ARENA_RANK_REWARDS, ARENA_EQUIPMENT, BOT_NAMES, BOT_JOB_PREF } = require('./pvp');
 const { STRATEGIES, STRATEGY_CD_MS, WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS } = require('./strategy');
+const { WORLD_BOSS_TITLES, JOB_TITLES, ALL_TITLES, getUnlockedJobTitles, getActiveTimeTitles, isValidTitleKey } = require('./titles');
 
 module.exports = {
   AREAS, AREA_ORDER,
@@ -35,4 +36,5 @@ module.exports = {
   BOT_NAMES, BOT_JOB_PREF,
   STRATEGIES, STRATEGY_CD_MS,
   WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS,
+  WORLD_BOSS_TITLES, JOB_TITLES, ALL_TITLES, getUnlockedJobTitles, getActiveTimeTitles, isValidTitleKey,
 };

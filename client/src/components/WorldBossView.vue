@@ -1,3 +1,10 @@
+<!--
+  ====== 世界 BOSS 页（v2.9 重构） ======
+  - BOSS 数值 = 全服最强玩家 × 10 倍（生命5:攻击3:防御1:敏捷1 分配）
+  - 每日 0 点强制死亡结算；当前 BOSS 在次日凌晨自动重生
+  - 玩家每日 1 次挑战次数；点一次按钮 → 后端跑 1 次 5 回合战斗 → 返回战报
+  - 伤害前三名玩家获得 24h 限时称号（天命弑神者 / 深渊征服者 / 暗影屠戮者）
+-->
 <template>
   <div class="view-container boss-view">
     <!-- BOSS 卡片 -->
@@ -10,9 +17,9 @@
           <div class="boss-name">{{ boss.name }}</div>
           <div class="boss-desc">{{ boss.desc }}</div>
           <div class="boss-stats">
-            <span class="stat-chip">⚔ {{ boss.atk }}</span>
-            <span class="stat-chip">🛡 {{ boss.def }}</span>
-            <span class="stat-chip">⚡ {{ boss.agi }}</span>
+            <span class="stat-chip">⚔ {{ boss.atk.toLocaleString() }}</span>
+            <span class="stat-chip">🛡 {{ boss.def.toLocaleString() }}</span>
+            <span class="stat-chip">⚡ {{ boss.agi.toLocaleString() }}</span>
           </div>
         </div>
       </div>
@@ -28,22 +35,71 @@
         </div>
       </div>
 
-      <!-- 攻击按钮 + 上次伤害 -->
+      <!-- 倒计时 -->
+      <div class="countdown-row" v-if="remainingLabel">
+        <span>⏳ 本次 BOSS 重生于：</span>
+        <span class="countdown-text">{{ remainingLabel }}</span>
+      </div>
+
+      <!-- 攻击按钮 + 状态提示 -->
       <div class="attack-section">
-        <button class="btn btn-danger attack-btn" :class="{ 'btn-disabled': attackCdLeft > 0 }"
-          @click="doAttack" :disabled="attackCdLeft > 0">
-          {{ attackCdLeft > 0 ? `冷却中 ${attackCdLeft}s` : '⚔ 攻击 BOSS' }}
+        <button v-if="!challengedToday" class="btn btn-danger attack-btn" @click="doAttack" :disabled="attacking">
+          {{ attacking ? '战斗中…' : '⚔ 挑战世界 BOSS（每日 1 次）' }}
         </button>
-        <div v-if="lastDamage" class="last-damage" :class="{ crit: lastIsCrit, kill: lastKilled }">
-          {{ lastKilled ? '🎉 最后一击！' : (lastIsCrit ? '💥 暴击' : '✦ 命中') }}
-          造成 {{ lastDamage.toLocaleString() }} 伤害
-        </div>
+        <button v-else class="btn attack-btn attack-btn--done" disabled>
+          今日次数已用完 · 等待次日重生
+        </button>
       </div>
     </div>
 
     <div v-else class="card boss-empty">
       <p>当前没有可攻击的世界 BOSS</p>
-      <button class="btn btn-sm" @click="forceSpawn">强制刷新（调试）</button>
+    </div>
+
+    <!-- 战斗报告 -->
+    <div v-if="lastBattle" class="card battle-card">
+      <div class="section-header">
+        <span><IconBase name="bolt" :size="14" class="section-icon" />本次战斗报告</span>
+        <span class="battle-summary">
+          <span v-if="lastBattle.result === 'win'" class="summary-win">✓ 5 回合击败</span>
+          <span v-else-if="lastBattle.result === 'lose'" class="summary-lose">✗ 落败</span>
+          <span v-else class="summary-timeout">⏱ 5 回合结束</span>
+        </span>
+      </div>
+      <div class="battle-stats-row">
+        <div class="bs-item"><span class="bs-label">造成伤害</span><span class="bs-val">{{ lastBattle.totalDamage.toLocaleString() }}</span></div>
+        <div class="bs-item"><span class="bs-label">剩余 HP</span><span class="bs-val">{{ (props.player?.hp || 0).toLocaleString() }} / {{ (props.player?.maxHp || 0).toLocaleString() }}</span></div>
+      </div>
+      <div class="battle-rounds">
+        <div v-for="r in lastBattle.rounds" :key="r.round" class="round-block">
+          <div class="round-title">第 {{ r.round }} 回合</div>
+          <div class="round-actions">
+            <div v-for="(a, i) in r.actions" :key="i" class="action" :class="`action--${a.actor}`">
+              <template v-if="a.actor === 'player'">
+                <span v-if="a.dodge" class="ac">⚡ {{ a.skill }}</span>
+                <span v-else-if="a.skill && a.damage">⚔ {{ a.skill }} → {{ a.damage.toLocaleString() }}<span v-if="a.crit" class="crit-mark"> 暴击</span></span>
+                <span v-else>⚔ {{ a.skill || '行动' }}</span>
+              </template>
+              <template v-else>
+                <span v-if="a.damage">💥 {{ a.skill }} → {{ a.damage.toLocaleString() }}</span>
+                <span v-else>💥 {{ a.skill || '行动' }}</span>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 称号获得提示 -->
+    <div v-if="titleWinners && titleWinners.length > 0" class="card title-card">
+      <div class="section-header"><span>🏅 称号奖励（前 3 名已发 24h 限时称号）</span></div>
+      <div class="title-winners">
+        <div v-for="w in titleWinners" :key="w.titleKey" class="title-winner">
+          <span class="rank-tag" :class="`rank-tag--${w.rank}`">{{ ['🥇','🥈','🥉'][w.rank-1] }}</span>
+          <span class="winner-name">{{ w.username }}</span>
+          <span class="winner-title">{{ allTitles[w.titleKey]?.name || w.titleKey }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- 伤害排行榜 -->
@@ -93,63 +149,85 @@ const props = defineProps(['player', 'currentUser'])
 
 const boss = ref(null)
 const ranking = ref([])
-const lastDamage = ref(0)
-const lastIsCrit = ref(false)
-const lastKilled = ref(false)
-const attackCdLeft = ref(0)
+const lastBattle = ref(null)
+const titleWinners = ref([])
+const allTitles = ref({})
+const attackedToday = ref(false)
+const remainingMs = ref(0)
+const attacking = ref(false)
+const expiresAt = ref(0)
 let pollTimer = null
 let cdTimer = null
 
 const hpPercent = computed(() => boss.value ? Math.max(0, (boss.value.hp / boss.value.maxHp) * 100) : 0)
 const myRank = computed(() => ranking.value.find(r => r.username === props.currentUser) || null)
+const challengedToday = computed(() => attackedToday.value || (props.player && props.player.lastBossAttackDay === new Date().toISOString().slice(0,10)))
+
+// 倒计时 "HH:MM:SS"
+const remainingLabel = computed(() => {
+  if (!remainingMs.value || remainingMs.value <= 0) return ''
+  const sec = Math.floor(remainingMs.value / 1000);
+  const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+  const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+  const s = String(sec % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+})
 
 async function refresh() {
   try {
-    const res = await api.getWorldBoss()
+    const res = await api.getWorldBoss(props.currentUser)
     if (res.success) {
       boss.value = res.data.boss
       ranking.value = res.data.ranking || []
+      attackedToday.value = !!res.data.challengedToday
+      remainingMs.value = res.data.remainingMs || 0
+      expiresAt.value = res.data.expiresAt || 0
     }
   } catch (e) { /* ignore */ }
 }
 
 async function doAttack() {
-  if (attackCdLeft.value > 0) return
+  if (attacking.value || challengedToday.value) return
+  attacking.value = true
   try {
     const res = await api.attackWorldBoss(props.currentUser)
     if (res.success) {
-      lastDamage.value = res.damage
-      lastIsCrit.value = res.isCrit
-      lastKilled.value = res.killed
-      attackCdLeft.value = 5
-      cdTimer = setInterval(() => {
-        if (attackCdLeft.value > 0) attackCdLeft.value--
-        else clearInterval(cdTimer)
-      }, 1000)
-      // 1.5s 后清掉"命中"提示
-      setTimeout(() => { if (!lastKilled.value) lastDamage.value = 0 }, 1800)
-      if (res.killed) {
-        // 击杀后 4s 自动拉新 BOSS
-        setTimeout(refresh, 4000)
-      } else {
-        await refresh()
+      lastBattle.value = res.battle
+      titleWinners.value = res.rewards?.titleWinners || []
+      allTitles.value = res.rewards?.allTitles || {}
+      remainingMs.value = res.remainingMs || 0
+      attackedToday.value = true
+      toast.success(res.killed ? '🎉 你击杀了世界 BOSS！' : `造成 ${res.myDamage.toLocaleString()} 伤害`)
+      // 把服务端返回的 player 数据回传给父组件（血量等已被 boss 扣血）
+      if (res.player && props.player) {
+        Object.assign(props.player, res.player)
       }
+      // 击杀后 4 秒拉新
+      if (res.killed) setTimeout(refresh, 4000)
+      else refresh()
     } else {
       toast.error(res.message)
     }
   } catch (e) {
-    toast.error('攻击失败：' + e.message)
+    toast.error('挑战失败：' + e.message)
+  } finally {
+    attacking.value = false
   }
-}
-
-async function forceSpawn() {
-  await fetch('/api/worldboss/spawn', { method: 'POST' })
-  await refresh()
 }
 
 onMounted(() => {
   refresh()
-  pollTimer = setInterval(refresh, 5000)
+  // 拉取称号库（用于顶部"称号奖励"展示）
+  api.getTitles(props.currentUser).then(r => { if (r.success) allTitles.value = r.data.all || {} }).catch(() => {})
+  pollTimer = setInterval(refresh, 10000)
+  cdTimer = setInterval(() => {
+    if (remainingMs.value > 0) remainingMs.value -= 1000
+    else if (expiresAt.value) {
+      const now = Date.now()
+      remainingMs.value = Math.max(0, expiresAt.value - now)
+      if (remainingMs.value === 0) refresh()
+    }
+  }, 1000)
 })
 
 onUnmounted(() => {
@@ -180,12 +258,41 @@ onUnmounted(() => {
 .hp-text { display: flex; justify-content: space-between; margin-top: 0.3rem; font-size: 0.78rem; }
 .hp-num { color: var(--ink); font-weight: 600; font-family: monospace; }
 .hp-pct { color: var(--accent); font-weight: 700; }
+.countdown-row { margin-top: 0.4rem; font-size: 0.72rem; color: var(--muted); display: flex; justify-content: space-between; }
+.countdown-text { color: var(--accent2); font-family: monospace; font-weight: 700; }
 .attack-section { margin-top: 0.8rem; }
 .attack-btn { width: 100%; padding: 0.7rem; font-size: 1rem; font-weight: 700; }
-.last-damage { margin-top: 0.4rem; text-align: center; padding: 0.3rem; font-size: 0.82rem; color: var(--success); background: rgba(94,218,122,0.1); border-radius: 6px; font-weight: 600; }
-.last-damage.crit { color: var(--dmg-crit, #d4af5e); background: rgba(var(--gold-rgb),0.15); }
-.last-damage.kill { color: #ff6b35; background: rgba(255,107,53,0.15); }
+.attack-btn--done { background: rgba(var(--panel-rgb),0.5); color: var(--muted); cursor: not-allowed; }
 .boss-empty { text-align: center; padding: 2rem; color: var(--muted); }
+
+/* 战斗报告 */
+.battle-card { padding: 0.8rem; }
+.battle-summary { font-size: 0.8rem; font-weight: 700; }
+.summary-win { color: var(--success); }
+.summary-lose { color: var(--danger); }
+.summary-timeout { color: var(--accent2); }
+.battle-stats-row { display: flex; gap: 0.5rem; margin-top: 0.4rem; }
+.bs-item { flex: 1; padding: 0.4rem 0.6rem; background: rgba(var(--panel-rgb),0.5); border-radius: 6px; display: flex; flex-direction: column; gap: 0.1rem; }
+.bs-label { font-size: 0.68rem; color: var(--muted); }
+.bs-val { font-size: 0.92rem; color: var(--accent); font-weight: 700; font-family: monospace; }
+.battle-rounds { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem; max-height: 300px; overflow-y: auto; }
+.round-block { padding: 0.4rem 0.6rem; background: rgba(var(--panel-rgb),0.4); border-radius: 6px; border: 1px solid var(--rule); }
+.round-title { font-size: 0.75rem; color: var(--accent); font-weight: 700; margin-bottom: 0.2rem; }
+.round-actions { display: flex; flex-direction: column; gap: 0.15rem; }
+.action { font-size: 0.72rem; color: var(--ink); }
+.action--player { color: var(--accent2); }
+.action--monster { color: var(--danger); }
+.crit-mark { color: #ff6b35; font-weight: 700; margin-left: 0.2rem; }
+
+/* 称号奖励 */
+.title-card { padding: 0.8rem; }
+.title-winners { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.3rem; }
+.title-winner { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.5rem; background: rgba(var(--panel-rgb),0.5); border-radius: 6px; }
+.rank-tag { font-size: 1.1rem; }
+.winner-name { flex: 1; font-size: 0.85rem; color: var(--ink); }
+.winner-title { font-size: 0.78rem; color: var(--accent); font-weight: 600; }
+
+/* 排行榜 */
 .ranking-card { padding: 0.8rem; }
 .my-rank { font-size: 0.78rem; color: var(--accent); font-weight: 600; }
 .rank-list { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.4rem; }
@@ -197,6 +304,7 @@ onUnmounted(() => {
 .rank-num { font-weight: 700; color: var(--accent); width: 24px; text-align: center; }
 .rank-name { flex: 1; font-size: 0.85rem; }
 .rank-dmg { font-family: monospace; color: var(--ink); font-weight: 600; }
+
 .reward-card { padding: 0.8rem; }
 .reward-list { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.3rem; }
 .reward-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--ink); padding: 0.15rem 0; }

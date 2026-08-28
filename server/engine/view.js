@@ -100,7 +100,7 @@ function getPlayerView(player) {
   const questView = { dailyQuests: dailyQuestsView, chest: chestView, achievements: achievementsView, titles: player.titles || [], currentTitle: player.currentTitle || null };
 
   return {
-    username: player.username, name: player.name, race: player.race, raceStage: player.raceStage,
+    username: player.username, name: player.name, avatar: player.avatar || '', race: player.race, raceStage: player.raceStage,
     level: player.level, exp: player.exp, expNeeded: expToNext(player.level),
     job: player.job, jobPath: player.jobPath, godhood: player.godhood, faith: player.faith,
     stage, attributes: player.attributes, attrPoints: player.attrPoints, skillPoints: player.skillPoints,

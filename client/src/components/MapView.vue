@@ -41,11 +41,11 @@
             <span class="side-tab-label">世界 BOSS</span>
           </div>
           <div class="side-tab-item" @click="$emit('goRank')">
-            <span class="side-tab-icon">🏆</span>
+            <IconBase name="trophy" :size="20" class="side-tab-icon" />
             <span class="side-tab-label">排行榜</span>
           </div>
           <div class="side-tab-item" @click="$emit('goPvP')">
-            <span class="side-tab-icon">⚔️</span>
+            <IconBase name="crossedSwords" :size="20" class="side-tab-icon" />
             <span class="side-tab-label">竞技场</span>
           </div>
         </div>
@@ -92,7 +92,7 @@ const emit = defineEmits(['select', 'strategy-change', 'goBoss', 'goRank', 'goPv
 // 页面状态：'select' 第一页 / 'battle' 第二页
 const page = ref('select');
 const dropsPopup = ref({ visible: false, items: [] });
-const sideOpen = ref(false);
+const sideOpen = ref(false); // 与 CharacterView 一致：默认收起，箭头常显
 
 // 当前选中的区域对象（基于 player.currentArea 反查）
 const currentArea = computed(() => {
@@ -233,15 +233,18 @@ function goBackToSelect() {
 .page-enter-from { opacity: 0; transform: translateX(-18px); }
 .page-leave-to { opacity: 0; transform: translateX(18px); }
 
-/* ============ 右侧侧栏（两页通用） ============ */
-.side-panel { position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 50; }
-.side-toggle { width: 24px; height: 60px; background: var(--bg2); border: 1px solid var(--rule); border-right: none; border-radius: 6px 0 0 6px; cursor: pointer; color: var(--muted); font-size: 0.8rem; }
-.side-toggle:hover { background: rgba(var(--violet-rgb),0.1); }
-.side-tabs { background: var(--bg2); border: 1px solid var(--rule); border-right: none; border-radius: 6px 0 0 6px; padding: 0.4rem 0; display: flex; flex-direction: column; gap: 0.3rem; min-width: 90px; }
-.side-tab-item { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.5rem 0.3rem; cursor: pointer; border-radius: 4px; transition: background 0.15s; }
-.side-tab-item:hover { background: rgba(var(--violet-rgb),0.1); }
-.side-tab-icon { font-size: 1.2rem; color: var(--accent2); }
-.side-tab-label { font-size: 0.7rem; color: var(--muted); }
+/* ============ 右侧侧栏（两页通用，与角色页统一样式） ============ */
+.side-panel { position: fixed; right: 0; top: 50%; transform: translateY(-50%); display: flex; align-items: center; z-index: 50; transition: right 0.3s var(--ease-out); }
+.side-panel:not(.expanded) { right: 0; }
+.side-panel.expanded { right: 0; }
+.side-toggle { width: 24px; height: 48px; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0a0b14; border: none; border-radius: 6px 0 0 6px; cursor: pointer; font-size: 1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.side-toggle:hover { filter: brightness(1.1); }
+.side-arrow { display: block; }
+.side-tabs { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.5rem; background: linear-gradient(135deg, rgba(var(--panel2-rgb), 0.95), rgba(var(--panel-rgb), 0.95)); border: 1px solid rgba(var(--violet-rgb), 0.2); border-radius: 8px 0 0 8px; min-width: 80px; }
+.side-tab-item { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; padding: 0.4rem 0.3rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; position: relative; }
+.side-tab-item:hover { background: rgba(var(--gold-rgb), 0.1); }
+.side-tab-icon { font-size: 1.1rem; color: var(--accent2); }
+.side-tab-label { font-size: 0.72rem; color: var(--muted); }
 
 .side-slide-enter-active, .side-slide-leave-active { transition: all 0.2s ease; overflow: hidden; }
 .side-slide-enter-from, .side-slide-leave-to { transform: translateX(100%); opacity: 0; }

@@ -37,10 +37,12 @@
                 <span v-if="item.username === currentUser" class="self-tag"><IconBase name="flag" :size="13" /></span>
                 <span v-if="item.godhood === 'god'" class="god-tag god">神灵</span>
                 <span v-else-if="item.godhood === 'demigod'" class="god-tag demi">半神</span>
+                <!-- v1.02：佩戴的称号（v1.02 由后端在 list[i] 里直接返回 titleName / titleColor，无须前端再解析） -->
+                <span v-if="item.titleName" class="title-tag" :style="{ color: item.titleColor || '#d4af5e', borderColor: item.titleColor || '#d4af5e' }">{{ item.titleName }}</span>
               </div>
               <div class="player-sub">
                 <span class="player-race">{{ item.race }}</span>
-                <span v-if="item.job !== '无'" class="player-job">{{ item.job }}</span>
+                <span v-if="item.job && item.job !== '无'" class="player-job">{{ item.job }}</span>
                 <span class="player-level">Lv.{{ item.level }}</span>
               </div>
             </div>
@@ -67,7 +69,11 @@
       <div class="my-rank-title">我的排名</div>
       <div class="my-rank-row">
         <span class="my-rank-num">#{{ myRank.rank }}</span>
-        <span class="my-rank-name">{{ myRank.name }}</span>
+        <span class="my-rank-name">
+          {{ myRank.name }}
+          <!-- v1.02：自身排名旁也显示佩戴称号 -->
+          <span v-if="myRank.titleName" class="title-tag" :style="{ color: myRank.titleColor || '#d4af5e', borderColor: myRank.titleColor || '#d4af5e' }">{{ myRank.titleName }}</span>
+        </span>
         <span class="my-rank-value">{{ formatValue(myRank) }}</span>
         <span v-if="myRank.rank > 100" class="my-rank-outside">（100名外）</span>
       </div>
@@ -179,12 +185,20 @@ defineExpose({ refresh: fetchBoard })
 .rank-1 .rank-num { color: var(--accent); }
 
 .col-player { flex: 1; min-width: 0; }
-.player-main { display: flex; align-items: center; gap: 0.3rem; }
+.player-main { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
 .player-name { font-size: 0.82rem; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .self-tag { font-size: 0.6rem; color: var(--accent2); background: var(--lb-self-tag-bg); padding: 0.05rem 0.3rem; border-radius: 3px; font-weight: 600; }
 .god-tag { font-size: 0.6rem; font-weight: 700; padding: 0.05rem 0.3rem; border-radius: 3px; }
 .god-tag.god { color: var(--lb-god-gold); background: var(--lb-god-gold-bg); }
 .god-tag.demi { color: var(--lb-god-demi); background: var(--lb-god-demi-bg); }
+/* v1.02：佩戴称号标签（金/银/铜三色边框 + 半透明背景） */
+.title-tag {
+  font-size: 0.62rem; font-weight: 700; padding: 1px 6px;
+  border: 1px solid; border-radius: 3px;
+  background: rgba(212,175,94,0.08);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
 .player-sub { display: flex; gap: 0.3rem; font-size: 0.62rem; color: var(--dim); margin-top: 0.1rem; }
 .player-race { color: var(--accent2); }
 .player-level { color: var(--muted); }
@@ -204,9 +218,9 @@ defineExpose({ refresh: fetchBoard })
 
 .my-rank-card { padding: 0.6rem 0.8rem; border-color: var(--accent2); background: var(--lb-rank-bg); }
 .my-rank-title { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.2rem; }
-.my-rank-row { display: flex; align-items: center; gap: 0.5rem; }
+.my-rank-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .my-rank-num { font-size: 0.9rem; font-weight: 800; color: var(--accent); font-family: monospace; }
-.my-rank-name { flex: 1; font-size: 0.82rem; font-weight: 600; }
+.my-rank-name { flex: 1; font-size: 0.82rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.3rem; }
 .my-rank-value { font-size: 0.82rem; font-weight: 700; color: var(--accent); }
 .my-rank-outside { font-size: 0.62rem; color: var(--dim); }
 </style>

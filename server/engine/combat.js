@@ -233,8 +233,87 @@ function simulateBattle(player, monster) {
   };
 }
 
+// 模拟世界 BOSS 战斗（精简版，固定回合数，到回合上限或 Boss 死为止）
+//   player：玩家对象
+//   boss：BOSS 对象（含 hp/maxHp/atk/def/agi/skillChance）
+//   maxRounds：最大回合数（默认 5）
+// 返回：{ rounds, totalDamage, result: 'win' | 'timeout' }
+function simulateBossBattle(player, boss, maxRounds = 5) {
+  const combat = getCombatStats(player);
+  const mHp = boss.maxHp || boss.hp;
+  const mAtk = boss.atk;
+  const mDef = boss.def;
+  const mAgi = boss.agi;
+
+  let pHp = combat.hp;
+  let mCurHp = mHp;
+  const effAgi = combat.agi;
+  const playerFirst = effAgi >= mAgi;
+
+  const rounds = [];
+  let totalDamage = 0;
+  let result = 'timeout';
+
+  for (let round = 1; round <= maxRounds; round++) {
+    if (mCurHp <= 0 || pHp <= 0) break;
+    const actions = [];
+    const curMActions = getActionCount(mAgi, effAgi);
+    const curPActions = getActionCount(effAgi, mAgi);
+
+    const queue = [];
+    const maxLen = Math.max(curPActions, curMActions);
+    for (let i = 0; i < maxLen; i++) {
+      if (playerFirst) {
+        if (i < curPActions) queue.push('player');
+        if (i < curMActions) queue.push('monster');
+      } else {
+        if (i < curMActions) queue.push('monster');
+        if (i < curPActions) queue.push('player');
+      }
+    }
+    for (const actor of queue) {
+      if (pHp <= 0 || mCurHp <= 0) break;
+      if (actor === 'player') {
+        // 玩家攻击 BOSS
+        const r = calcDamage(combat.atk, mDef, 1, combat.dmgBonus, 0, combat.ignoreDef, combat.crit, combat.critDmg);
+        mCurHp = Math.max(0, mCurHp - r.value);
+        totalDamage += r.value;
+        if (combat.lifesteal > 0) pHp = Math.min(combat.maxHp, pHp + Math.floor(r.value * combat.lifesteal));
+        actions.push({ actor: 'player', skill: '普通攻击', damage: r.value, crit: r.isCrit, targetHp: mCurHp, targetMaxHp: mHp });
+      } else {
+        // BOSS 攻击玩家
+        if (getRand()() < (combat.dodge || 0)) {
+          actions.push({ actor: 'player', skill: '闪避!', dodge: true, targetHp: pHp, targetMaxHp: combat.maxHp });
+        } else {
+          // BOSS 技能触发（按 boss.skillChance 概率放大）
+          let mult = 1, name = '普通攻击';
+          if (boss.skillChance && getRand()() < boss.skillChance) {
+            mult = 1.5;
+            name = 'BOSS 怒击';
+          }
+          const r = calcDamage(mAtk, combat.def, mult, 0, combat.defBonus, 0, 0, 0);
+          pHp = Math.max(0, pHp - r.value);
+          actions.push({ actor: 'monster', skill: name, damage: r.value, targetHp: pHp, targetMaxHp: combat.maxHp });
+        }
+      }
+    }
+    rounds.push({
+      round,
+      actions,
+      pHp: Math.max(0, pHp),
+      mHp: Math.max(0, mCurHp),
+      pActions: curPActions,
+      mActions: curMActions,
+    });
+    if (mCurHp <= 0) { result = 'win'; break; }
+    if (pHp <= 0) { result = 'lose'; break; }
+  }
+  return { rounds, totalDamage, result };
+}
+
 module.exports = {
   calcDamage,
   getActionCount,
   simulateBattle,
+  simulateBossBattle,
 };

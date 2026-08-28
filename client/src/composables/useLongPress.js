@@ -118,16 +118,31 @@ export function useLongPress(onTick, options = {}) {
     const onDown = (e) => {
       // 阻止移动端浏览器误判 pinch 缩放
       if (e && e.cancelable) e.preventDefault?.()
+      // 仅当目标元素真的支持 pointer capture 才调用（HTMLButtonElement 没有这方法，安全跳过）
       if (e && e.pointerId !== undefined && e.target && e.target.setPointerCapture) {
         try { e.target.setPointerCapture(e.pointerId) } catch (_) {}
       }
       start(key)
     }
     const onUp = () => stop(key)
+    // 关键：pointerleave 不再等同于 pointerup。
+    // 原因：在循环按钮组（属性 +/− 一行一个按钮）里，按住 + 时手稍微一动或
+    // 浏览器重排就会触发 pointerleave，导致 350ms 阶段 2 永远进不去、长按完全失效。
+    // 改为「leave 才 stop」必须满足两个条件：① 真的离开元素（relatedTarget 不在元素内）
+    //              ② 没有正在 pointer capture（capture 后 pointerleave 不可靠，但
+    //                 HTMLButtonElement 不支持 capture，所以这里 relatedTarget 就够用）
+    // 兜底：pointercancel（系统打断，如来电、弹窗）仍走 stop。
+    const onLeave = (e) => {
+      const el = e?.currentTarget
+      const rt = e?.relatedTarget
+      if (el && rt && el.contains(rt)) return  // 移到子元素，不算离开
+      onUp()
+    }
     return {
       onPointerdown: onDown,
       onPointerup: onUp,
-      onPointerleave: onUp,
+      // pointerleave：仅在真正移出按钮时停止（防止循环按钮组中途打断长按）
+      onPointerleave: onLeave,
       onPointercancel: onUp,
       onTouchstart: (e) => { if (e && e.cancelable) e.preventDefault?.(); onDown(e) },
       onTouchend: (e) => { if (e && e.cancelable) e.preventDefault?.(); onUp(e) },

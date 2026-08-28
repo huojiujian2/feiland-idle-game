@@ -34,7 +34,7 @@ const realRecalcMaxStats = (p) => {
 player.setRecalcMaxStatsHandler(realRecalcMaxStats);
 items.setRecalcMaxStatsHandler(realRecalcMaxStats);
 progression.setRecalcMaxStatsHandler(realRecalcMaxStats);
-worldboss.setRecalcMaxStatsHandler(realRecalcMaxStats);
+// 世界 BOSS 不再需要 recalcMaxStats 接口（已移除旧 setRecalcMaxStatsHandler 调用）
 idle.setRecalcMaxStatsHandler(realRecalcMaxStats);
 
 // player 模块依赖 daily 的 updateDailyProgress
@@ -64,10 +64,6 @@ function setStore(store) {
   // 启动期把已存档的自创装备同步注册回装备模板表
   genesis.rehydrateFromMeta(store.getMeta());
 }
-pvp.setBotCharacterDeps({
-  createCharacter: player.createCharacter,
-  recalcMaxStats: realRecalcMaxStats,
-});
 
 // ====== 统一导出（与原 engine.js 保持兼容） ======
 module.exports = {
@@ -150,6 +146,7 @@ module.exports = {
   calcDamage: combat.calcDamage,
   getActionCount: combat.getActionCount,
   simulateBattle: combat.simulateBattle,
+  simulateBossBattle: combat.simulateBossBattle,
   calculateIdle: idle.calculateIdle,
 
   // 属性
@@ -194,10 +191,12 @@ module.exports = {
   // 世界 BOSS
   spawnWorldBoss: worldboss.spawnWorldBoss,
   getActiveBoss: worldboss.getActiveBoss,
+  getBossExpiresAt: worldboss.getBossExpiresAt,
   attackWorldBoss: worldboss.attackWorldBoss,
   grantWorldBossParticipation: worldboss.grantWorldBossParticipation,
   settleWorldBossRewards: worldboss.settleWorldBossRewards,
   getBossRanking: worldboss.getBossRanking,
+  getStrongestPlayer: worldboss.getStrongestPlayer,
 
   // 授予（player 模块，外部偶尔需要）
   grantGold: player.grantGold,

@@ -57,6 +57,18 @@ function registerPlayerRoutes(app, store) {
     res.json({ success: true, data: { allocated: result.allocated, job: result.job, player: getPlayerView(r.player) } });
   });
 
+  // v1.02：自定义头像（点击头像弹菜单选择，5 个预设 emoji）
+  app.post('/api/player/:username/avatar', (req, res) => {
+    const r = loadPlayer(store, req.params.username);
+    if (r.error) return fail(res, r.error);
+    const avatar = (req.body && typeof req.body.avatar === 'string') ? req.body.avatar : '';
+    // 简单安全校验：限制长度 <= 8（emoji 多字节）+ 必须是字符串
+    if (avatar.length > 8) return fail(res, '头像内容过长');
+    r.player.avatar = avatar;
+    savePlayer(store, r.player);
+    ok(res, { avatar: r.player.avatar });
+  });
+
   // 属性预设
   app.post('/api/player/:username/attr-presets', (req, res) => {
     const r = loadPlayer(store, req.params.username);

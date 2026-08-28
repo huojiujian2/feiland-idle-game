@@ -5,6 +5,9 @@
         <div class="section-header">
           <span><IconBase name="sword" :size="14" class="section-icon" />装备 ({{ filteredEquips.length }})</span>
           <div class="section-actions">
+            <button class="btn btn-sm sort-btn" @click="doSort" title="按类别+最高属性整理">
+              <IconBase name="sparkle" :size="12" /> 整理
+            </button>
             <button class="btn btn-sm bulk-merge-btn" :disabled="mergeableGroups.length === 0" @click="openBulkMerge">
               <IconBase name="sparkle" :size="12" /> 一键合成
               <span v-if="mergeableGroups.length > 0" class="bulk-merge-badge">{{ mergeableGroups.length }}</span>
@@ -143,7 +146,8 @@
           <div class="modal-section-title">批量使用</div>
           <div class="qty-controls">
             <button class="qty-btn" @click="changeUseQty(itemDetail.name, -1, itemDetail.count)">−</button>
-            <span class="qty-val">{{ useQty[itemDetail.name] || 1 }}</span>
+            <input class="use-qty-input" type="number" min="1" :max="itemDetail.count"
+              :value="useQty[itemDetail.name] || 1" @input="onUseQtyInput(itemDetail, $event)" />
             <button class="qty-btn" @click="changeUseQty(itemDetail.name, 1, itemDetail.count)">+</button>
             <button class="btn btn-sm quick-btn" @click="setUseQty(itemDetail.name, 10, itemDetail.count)">×10</button>
             <button class="btn btn-sm quick-btn" v-if="itemDetail.count > 1" @click="setUseQty(itemDetail.name, itemDetail.count, itemDetail.count)">全部</button>
@@ -230,7 +234,7 @@ import api from '../api.js'
 import { toast, modalConfirm } from '../ui-bridge.js'
 
 const props = defineProps(['player', 'qualityColors', 'materialPrices'])
-const emit = defineEmits(['use', 'sellMaterial', 'sellEquip', 'sellEquipsByLevel', 'equip', 'enchant', 'refresh'])
+const emit = defineEmits(['use', 'sellMaterial', 'sellEquip', 'sellEquipsByLevel', 'equip', 'enchant', 'refresh', 'sort'])
 
 const detailItem = ref(null)
 const itemDetail = ref(null)
@@ -466,7 +470,13 @@ function changeUseQty(name, delta, max) {
   const next = Math.max(1, Math.min(max, cur + delta))
   useQty.value = { ...useQty.value, [name]: next }
 }
-function setUseQty(name, n, max) { useQty.value = { ...useQty.value, [name]: Math.min(n, max) } }
+function setUseQty(name, n, max) { useQty.value = { ...useQty.value, [name]: Math.max(1, Math.min(n, max)) } }
+function onUseQtyInput(item, event) {
+  const raw = Number.parseInt(event.target.value, 10)
+  const next = Number.isFinite(raw) ? Math.max(1, Math.min(item.count, raw)) : 1
+  useQty.value = { ...useQty.value, [item.name]: next }
+  event.target.value = String(next)
+}
 
 function showEquipDetail(item) { detailItem.value = item }
 function showItemDetail(item) { itemDetail.value = item }
@@ -475,6 +485,29 @@ function showItemDetail(item) { itemDetail.value = item }
 const EQUIP_SELL_PRICES_LOCAL = { normal: 20, fine: 80, epic: 300, legend: 1500, mythic: 5000 }
 
 function openBulkSell() { bulkSellVisible.value = true }
+
+// v1.02：背包整理——按装备类别（武器→护甲→饰品）+ 类别内按最高属性降序
+//   不动 equips 源数据，只重排顺序；用于玩家在 back-end 同步前先看到整理结果
+function maxStat(item) {
+  if (!item || !item.stats) return 0
+  let max = 0
+  for (const v of Object.values(item.stats)) {
+    if (typeof v === 'number' && v > max) max = v
+  }
+  return max
+}
+const SLOT_ORDER = { weapon: 0, armor: 1, accessory: 2 }
+function doSort() {
+  const arr = props.player.equips || []
+  const sorted = [...arr].sort((a, b) => {
+    const sa = SLOT_ORDER[a.slot] ?? 99
+    const sb = SLOT_ORDER[b.slot] ?? 99
+    if (sa !== sb) return sa - sb
+    return maxStat(b) - maxStat(a)
+  })
+  // 发出排序事件让 App.vue 同步后端（v1.02 当前仅前端排序，等后端 confirm 再持久化）
+  emit('sort', sorted)
+}
 
 const bulkSellPreview = computed(() => {
   const all = props.player.equips || []
@@ -629,7 +662,10 @@ function handleEnchant(recipeId) {
 .qty-controls { display: flex; align-items: center; gap: 0.15rem; }
 .qty-btn { width: 24px; height: 24px; border-radius: 4px; border: 1px solid var(--rule); background: rgba(var(--panel-rgb),0.6); color: var(--muted); font-size: 0.85rem; cursor: pointer; line-height: 1; font-family: inherit; transition: all 0.15s; }
 .qty-btn:hover { border-color: var(--accent2); color: var(--accent2); }
-.qty-val { font-size: 0.78rem; font-weight: 600; color: var(--accent); min-width: 20px; text-align: center; }
+.use-qty-input { width: 3.2rem; min-width: 0; height: 24px; box-sizing: border-box; padding: 0.1rem 0.15rem; text-align: center; color: var(--accent); background: var(--bg); border: 1px solid var(--accent2); border-radius: 4px; font-family: monospace; font-size: 0.78rem; font-weight: 600; overflow: hidden; text-overflow: clip; }
+.use-qty-input:focus { outline: 2px solid rgba(var(--accent2-rgb), 0.35); outline-offset: 1px; }
+.use-qty-input::-webkit-inner-spin-button, .use-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.use-qty-input { -moz-appearance: textfield; }
 .quick-btn { font-size: 0.62rem !important; padding: 0.1rem 0.35rem !important; color: var(--accent2) !important; border-color: rgba(var(--violet-rgb),0.2) !important; }
 
 /* 装备详情弹窗 */
@@ -660,6 +696,8 @@ function handleEnchant(recipeId) {
 .bulk-sell-btn { padding: 0.2rem 0.6rem; font-size: 0.7rem; color: var(--accent2); border-color: rgba(var(--violet-rgb),0.2); }
 .section-actions { display: flex; gap: 0.3rem; align-items: center; }
 .bulk-merge-btn { padding: 0.2rem 0.55rem; font-size: 0.7rem; color: #d4af5e; border-color: rgba(var(--gold-rgb),0.3); display: inline-flex; align-items: center; gap: 0.25rem; }
+.sort-btn { padding: 0.2rem 0.55rem; font-size: 0.7rem; color: var(--accent2); border-color: rgba(var(--violet-rgb),0.3); display: inline-flex; align-items: center; gap: 0.25rem; }
+.sort-btn:hover { border-color: var(--accent2); background: rgba(var(--violet-rgb),0.1); }
 .bulk-merge-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .bulk-merge-badge { background: rgba(var(--gold-rgb),0.25); color: #d4af5e; padding: 0 5px; border-radius: 8px; font-size: 0.62rem; font-weight: 700; }
 .bulk-merge-list { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.4rem 0; max-height: 50vh; overflow-y: auto; }

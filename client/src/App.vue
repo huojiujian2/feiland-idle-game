@@ -18,6 +18,7 @@
             @allocate="handleAllocate"
             @applyPresetRatio="handleApplyPresetRatio"
             @savePreset="handleSavePreset"
+            @applyPreset="handleApplyPreset"
             @deletePreset="handleDeletePresetBySlot"
             @equip="handleEquip" @unequip="handleUnequip" @enchant="handleEnchant"
             @chooseJob="handleChooseJob"
@@ -32,6 +33,7 @@
             @use="handleUseItem" @sellMaterial="handleSellMaterial"
             @sellEquip="handleSellEquip" @sellEquipsByLevel="handleSellEquipsByLevel"
             @equip="handleEquip" @enchant="handleEnchant"
+            @sort="handleInventorySort"
             @refresh="player = $event" />
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
             @select="handleAreaChange" @strategy-change="handleStrategyChange"
@@ -359,7 +361,11 @@ function handleTutorialSkip() { updateTutorial(6); }
 // ====== 业务事件 ======
 async function handleAllocate(allocation) {
   const r = await api.allocateAttributes(currentUser, allocation);
-  if (r.success) player.value = r.data; else toast.error(r.message);
+  if (r.success) {
+    player.value = r.data;
+  } else {
+    toast.error(r.message);
+  }
 }
 // v0.8+：按 4 维比例加点（4 个固定方案槽）
 async function handleApplyPresetRatio(ratio) {
@@ -395,15 +401,34 @@ async function handleSavePreset(payload) {
     toast.error(r.message || '保存失败');
   }
 }
-// v0.8+：删除方案（按 slot 索引）
-async function handleDeletePresetBySlot(payload) {
-  const slot = Number(payload?.slot);
-  if (Number.isNaN(slot)) return;
-  const slotName = ['方案一', '方案二', '方案三'][slot] || '方案';
-  const r = await api.applyPresetBySlot(currentUser, slot);
+// v1.02：应用预设（按 presetId 优先，回退 idx）
+async function handleApplyPreset(payload) {
+  const idx = Number(payload?.idx ?? payload);
+  const presetId = payload?.presetId;
+  const target = presetId || idx; // 没有 presetId 时回退到 slot（后端 applyAttrPreset 需要 id）
+  if (!target) {
+    toast.error('未选择预设');
+    return;
+  }
+  const r = await api.applyAttrPreset(currentUser, target);
   if (r.success) {
     player.value = r.data;
-    toast.success(`已抹去 ${slotName}`);
+    const slotName = ['方案一', '方案二', '方案三'][idx] || '方案';
+    const a = r.allocated || {};
+    toast.success(`已应用 ${slotName}：攻+${a.atk || 0} 防+${a.def || 0} 体+${a.hp || 0} 敏+${a.agi || 0}`);
+  } else {
+    toast.error(r.message || '应用预设失败');
+  }
+}
+// v0.8+：删除方案（按 slot 索引）
+async function handleDeletePresetBySlot(payload) {
+  const slot = Number(payload?.slot ?? payload);
+  if (Number.isNaN(slot)) return;
+  const slotName = ['方案一', '方案二', '方案三'][slot] || '方案';
+  const r = await api.deleteAttrPresetBySlot(currentUser, slot);
+  if (r.success) {
+    player.value = r.data;
+    toast.success(`已删除 ${slotName}`);
   } else {
     toast.error(r.message || '删除失败');
   }
@@ -419,6 +444,14 @@ async function handleUnequip(slot) {
 async function handleEnchant(itemUid, recipeId) {
   const r = await api.enchant(currentUser, itemUid, recipeId);
   if (r.success) player.value = r.data; else toast.error(r.message);
+}
+// v1.02：背包整理——前端排序（按装备类别 + 最高属性），仅本地即时反馈
+//   后端目前无 sortInventory 路由（v1.02 不增后端改动），仅前端乐观更新
+function handleInventorySort(sortedEquips) {
+  if (player.value && Array.isArray(sortedEquips)) {
+    player.value.equips = sortedEquips;
+    toast.success('背包已按类别+属性整理');
+  }
 }
 async function handleChooseJob(jobPath) {
   const r = await api.chooseJob(currentUser, jobPath);

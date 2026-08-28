@@ -1,4 +1,4 @@
-// API 请求封装 v0.3
+// API 请求封装
 const BASE = '/api'
 
 async function request(url, options = {}) {
@@ -37,6 +37,10 @@ export default {
   applyPresetRatio(username, ratio) { return request(`/player/${username}/attr-presets/apply-by-ratio`, { method: 'POST', body: JSON.stringify({ ratio }) }) },
 
   // 属性预设（v0.8+：payload 可能是 string 也可能是 {name, slot, attributes, delta} 对象）
+  // v1.02：更新玩家头像 emoji
+  setAvatar(username, avatar) {
+    return request(`/player/${username}/avatar`, { method: 'POST', body: JSON.stringify({ avatar: avatar || '' }) })
+  },
   saveAttrPreset(username, payload) {
     let body;
     if (typeof payload === 'string') {
@@ -48,10 +52,15 @@ export default {
       method: 'POST', body: JSON.stringify(body)
     })
   },
-  applyPresetBySlot(username, slot) { return request(`/player/${username}/attr-presets/delete-by-slot`, { method: 'POST', body: JSON.stringify({ slot }) }) },
+  // 应用预设：按 presetId（后端保存返回的 id 字段）
   applyAttrPreset(username, presetId) {
     return request(`/player/${username}/attr-presets/${presetId}/apply`, { method: 'POST' })
   },
+  // 按 slot 索引删除预设（CharacterView 只有 slot 0/1/2 索引）
+  deleteAttrPresetBySlot(username, slot) {
+    return request(`/player/${username}/attr-presets/delete-by-slot`, { method: 'POST', body: JSON.stringify({ slot }) })
+  },
+  // 按 presetId 删除预设（备用）
   deleteAttrPreset(username, presetId) {
     return request(`/player/${username}/attr-presets/${presetId}`, { method: 'DELETE' })
   },
@@ -107,7 +116,7 @@ export default {
 
   // 排行榜
   getLeaderboard(type, username) {
-    const q = username ? `?type=${type}&username=${encodeURIComponent(username)}` : `?type=${type}`
+    const q = username ? `?type=${type}&username=${encodeURIComponent(username)}` : `?type=${type}`;
     return request(`/leaderboard${q}`)
   },
   reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) },
@@ -131,11 +140,18 @@ export default {
       body: JSON.stringify({ itemUid })
     })
   },
-  // 世界 BOSS
-  getWorldBoss() { return request('/worldboss/active') },
+  // 世界 BOSS（v2.9 重构：按全服最强 10 倍、每日 1 次、5 回合战报、伤害前三 24h 称号）
+  getWorldBoss(username) {
+    const q = username ? `?username=${encodeURIComponent(username)}` : '';
+    return request(`/worldboss/active${q}`);
+  },
   attackWorldBoss(username) {
     return request(`/player/${username}/worldboss/attack`, { method: 'POST' })
   },
+
+  // 称号系统（v2.9 新增）
+  getTitles(username) { return request(`/player/${username}/titles`) },
+  equipTitle(username, key) { return request(`/player/${username}/titles/equip`, { method: 'POST', body: JSON.stringify({ key }) }) },
 
   // 创世之书（二转解锁）
   getGenesis(username) { return request(`/player/${username}/genesis`) },
@@ -174,11 +190,11 @@ export default {
     })
   },
   getArenaSeason(username) {
-    const q = username ? `?username=${encodeURIComponent(username)}` : ''
+    const q = username ? `?username=${encodeURIComponent(username)}` : '';
     return request(`/arena/season${q}`)
   },
   getArenaRewards(period, username) {
-    const q = username ? `?username=${encodeURIComponent(username)}` : ''
+    const q = username ? `?username=${encodeURIComponent(username)}` : '';
     return request(`/arena/rewards/${period}${q}`)
   },
   // settleArena 已废弃：竞技场奖励改为自动结算，前端不再调用

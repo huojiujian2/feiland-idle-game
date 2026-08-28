@@ -95,11 +95,12 @@ function unequipItem(player, slot) {
 function useConsumable(player, itemId, count = 1) {
   const shopItem = SHOP_ITEMS.find(s => s.id === itemId);
   if (!shopItem) return { success: false, message: '物品不存在' };
+  const safeCount = Math.max(1, Math.floor(Number(count) || 1));
   const invItem = player.inventory.find(i => i.name === shopItem.name);
-  if (!invItem || invItem.count < count) return { success: false, message: '数量不足' };
-  invItem.count -= count;
+  if (!invItem || invItem.count < safeCount) return { success: false, message: '数量不足' };
+  invItem.count -= safeCount;
   if (invItem.count <= 0) player.inventory = player.inventory.filter(i => i !== invItem);
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < safeCount; i++) {
     if (itemId === 'exp_scroll') player.exp += 500;
     else if (itemId === 'exp_scroll_great') player.exp += 3000;
   }
@@ -110,29 +111,33 @@ function useConsumable(player, itemId, count = 1) {
 function buyItem(player, itemId, count = 1) {
   player = migratePlayer(player);
   refreshDailyIfNeeded(player);
+  const requestedCount = Number.isFinite(Number(count)) ? Math.floor(Number(count)) : 1;
+  const safeCount = Math.max(1, requestedCount);
   const matItem = SHOP_MATERIALS.find(s => s.id === itemId);
   if (matItem) {
     if (player.level < matItem.requiredLevel) return { success: false, message: `需要 Lv.${matItem.requiredLevel} 解锁【${matItem.sourceMap}】后购买` };
-    const totalCost = matItem.price * count;
-    if (player.gold < totalCost) return { success: false, message: '金币不足' };
+    const actualCount = Math.min(safeCount, Math.floor(player.gold / matItem.price));
+    if (actualCount < 1) return { success: false, message: '金币不足' };
+    const totalCost = matItem.price * actualCount;
     player.gold -= totalCost;
     const existing = player.inventory.find(i => i.name === matItem.name && (i.type === 'material' || !i.type));
-    if (existing) existing.count += count;
-    else player.inventory.push({ name: matItem.name, count, type: 'material' });
+    if (existing) existing.count += actualCount;
+    else player.inventory.push({ name: matItem.name, count: actualCount, type: 'material' });
     updateDailyProgress(player, 'buy1', 1);
     return { success: true };
   }
   const shopItem = SHOP_ITEMS.find(s => s.id === itemId);
   if (!shopItem) return { success: false, message: '物品不存在' };
-  const totalCost = shopItem.price * count;
-  if (player.gold < totalCost) return { success: false, message: '金币不足' };
+  const actualCount = Math.min(safeCount, Math.floor(player.gold / shopItem.price));
+  if (actualCount < 1) return { success: false, message: '金币不足' };
+  const totalCost = shopItem.price * actualCount;
   player.gold -= totalCost;
   if (shopItem.type === 'consumable') {
     const existing = player.inventory.find(i => i.name === shopItem.name);
-    if (existing) existing.count += count;
-    else player.inventory.push({ name: shopItem.name, count, type: 'consumable', itemId });
+    if (existing) existing.count += actualCount;
+    else player.inventory.push({ name: shopItem.name, count: actualCount, type: 'consumable', itemId });
   } else if (shopItem.type === 'equip') {
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < actualCount; i++) {
       const item = createEquipItem(itemId, genUid());
       if (item) {
         player.equips.push(item);
