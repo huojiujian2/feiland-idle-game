@@ -7,11 +7,19 @@ const { simulateBossBattle } = require('./combat');
 // v3.0：BOSS 战斗回合数（从 5 提到 8，让玩家有更多输出时间）
 const BOSS_BATTLE_ROUNDS = 8;
 
-// 每日 0 点的本地时区时间戳（用于判定 boss 是否过期）
-function getTodayMidnight() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+// v3.4：北京日期 key（UTC+8，不依赖运行机器时区）
+// 修复：此前用 new Date().toISOString().slice(0,10)（UTC 日）判定"每日一次"和"跨日重生"，
+//   与 BOSS 重生时刻（北京 0 点）相差 8 小时，导致 UTC 翻日（北京 8 点）时：
+//   ① 玩家当日可再打一次；② BOSS 被额外重生一次。统一走北京日 + getNow() 时间 seam。
+function getBossDayKey(ts = getNow()) {
+  return new Date(ts + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// v3.4：北京当日 0 点的绝对时间戳（UTC+8，不依赖运行机器时区；走 getNow() seam 可测试）
+function getTodayMidnight(ts = getNow()) {
+  const bj = new Date(ts + 8 * 3600 * 1000);
+  const dayStartBj = Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), bj.getUTCDate());
+  return dayStartBj - 8 * 3600 * 1000;
 }
 
 // v3.0：取全服按等级排序的前 50% 玩家（ceil 取整）
@@ -95,7 +103,7 @@ function spawnWorldBoss(store) {
   // 3. boss.hp = 前 50% 玩家总伤害 × 1.05（5% 余量），最低 1 万（防止全服空数据时为 0）
   const targetHp = Math.max(10000, Math.floor(topHalfTotal * 1.05));
 
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = getBossDayKey();
   meta.worldBoss = {
     id: tpl.id,
     name: tpl.name,
@@ -130,7 +138,7 @@ function ensureBossFresh(store) {
   const boss = meta.worldBoss;
   const now = getNow();
   const todayMidnight = getTodayMidnight();
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = getBossDayKey();
 
   // 跨日或已超过 expiresAt：强制结算当前 boss（无论是否死亡）然后重生
   if (boss && (boss.spawnDayKey !== todayKey || now >= (boss.expiresAt || 0))) {
@@ -169,8 +177,8 @@ function attackWorldBoss(store, username) {
   const player = store.getPlayer(username);
   if (!player) return { success: false, message: '玩家不存在' };
 
-  // 每日 1 次：按 spawnDayKey 判定（同一天内只能打 1 次）
-  const todayKey = new Date().toISOString().slice(0, 10);
+  // 每日 1 次：按北京日判定（同一天内只能打 1 次）
+  const todayKey = getBossDayKey();
   if (player.lastBossAttackDay === todayKey) {
     return { success: false, message: '今日挑战次数已用完，请等待次日 BOSS 重生' };
   }
@@ -331,5 +339,7 @@ module.exports = {
   // v3.0：暴露新函数供测试 / 调试使用
   getTopHalfByLevel, getMedianPlayerByLevel,
   estimateTopHalfTotalDamage, buildBossStats,
+  // v3.4：北京日 key（路由层 challengedToday 判定用，与引擎同源）
+  getBossDayKey,
   BOSS_BATTLE_ROUNDS,
 };

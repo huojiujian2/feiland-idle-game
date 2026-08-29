@@ -1,5 +1,5 @@
 // ====== 世界 BOSS 路由（v2.9） ======
-const { getActiveBoss, attackWorldBoss, spawnWorldBoss, getBossRanking, getPlayerView, getBossExpiresAt } = require('../engine');
+const { getActiveBoss, attackWorldBoss, spawnWorldBoss, getBossRanking, getPlayerView, getBossExpiresAt, getBossDayKey } = require('../engine');
 const { ok, fail, loadPlayer, savePlayer } = require('./_helpers');
 
 function registerWorldBossRoutes(app, store) {
@@ -9,7 +9,8 @@ function registerWorldBossRoutes(app, store) {
     const ranking = getBossRanking(store, 10);
     const username = req.query.username || '';
     const player = username ? store.getPlayer(username) : null;
-    const todayKey = new Date().toISOString().slice(0, 10);
+    // v3.4：北京日判定（与引擎 attackWorldBoss 同源，修复 UTC 日期导致的按钮状态错乱）
+    const todayKey = getBossDayKey();
     const challengedToday = !!(player && player.lastBossAttackDay === todayKey);
     res.json({
       success: true,

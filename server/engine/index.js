@@ -202,6 +202,7 @@ module.exports = {
   grantWorldBossParticipation: worldboss.grantWorldBossParticipation,
   settleWorldBossRewards: worldboss.settleWorldBossRewards,
   getBossRanking: worldboss.getBossRanking,
+  getBossDayKey: worldboss.getBossDayKey,
   // v3.0：保留 getStrongestPlayer 兼容旧调用方（实际已不再使用）
   getStrongestPlayer: worldboss.getStrongestPlayer,
   // v3.0：暴露新函数供测试 / 调试
