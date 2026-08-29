@@ -46,11 +46,11 @@ function pickEventOutcomes(eventTpl, baseMs) {
     const success = getRand()() < successChance;
     const tpl = ch.template || {};
     let goldDelta = 0, expDelta = 0, lossRate = 0, bossChanceDelta = tpl.bossChanceDelta || 0, material = null, message = '';
-    // 成本类（固定扣费）
+    // 成本类（固定扣费，材料仅成功时获得）
     if (typeof tpl.costGold === 'number') {
       goldDelta = -Math.abs(tpl.costGold);
-      if (tpl.material) material = { ...tpl.material };
-      message = success ? `交易成功，获得 ${material.name}×${material.count}` : `交易完成`;
+      if (success && tpl.material) material = { ...tpl.material };
+      message = success ? `交易成功，获得 ${material?.name || ''}×${material?.count || 0}` : `交易完成，未获材料`;
     } else if (tpl.goldRange) {
       if (success) {
         const [a,b] = tpl.goldRange;
@@ -61,7 +61,7 @@ function pickEventOutcomes(eventTpl, baseMs) {
       } else {
         if (tpl.failGoldRange) { const [a,b]=tpl.failGoldRange; goldDelta = randInt(a,b); } // 已为负
         else if (tpl.lossRateRange) { const [a,b]=tpl.lossRateRange; lossRate = a + getRand()()*(b-a); }
-        else { goldDelta = randInt(-30, -10); }
+        else { goldDelta = 0; lossRate = 0; }
         message = '行动受挫';
       }
     } else {
@@ -157,6 +157,7 @@ function getExpeditionStatus(player) {
   if (!exp) return { expedition: null, remainingMs: 0, status: null };
   const remainingMs = Math.max(0, exp.endAt - getNow());
   const status = getNow() >= exp.endAt ? 'ready' : 'ongoing';
+  if (exp.status !== status) exp.status = status;
   return { expedition: exp, remainingMs, status };
 }
 
@@ -170,9 +171,13 @@ function dispatchExpedition(player, areaId, durationKey) {
   const now = getNow();
   const snapshot = buildSnapshot(player);
   const id = genUid();
-  // 事件抽样 1-2 个
+  // 事件抽样 1-2 个（Fisher-Yates 无偏洗牌，单次 getRand/交换）
   const pool = area.eventPool || [];
-  const shuffled = [...pool].sort(() => getRand()() - 0.5);
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(getRand()() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   const count = areaId === 'verdant_border' ? 1 : (getRand()() < 0.5 ? 1 : 2);
   const pickedIds = shuffled.slice(0, Math.min(count, pool.length));
   const events = pickedIds.map(eid => {

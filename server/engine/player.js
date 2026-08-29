@@ -238,6 +238,15 @@ function migratePlayer(player) {
     }
   }
   if (!player.expeditionCodex || typeof player.expeditionCodex !== 'object' || Array.isArray(player.expeditionCodex)) player.expeditionCodex = {};
+  for (const _aid of ['verdant_border','ancient_ruins','abyss_rift','dragon_nest']) {
+    if (!player.expeditionCodex[_aid] || typeof player.expeditionCodex[_aid] !== 'object') player.expeditionCodex[_aid] = { dispatched: 0, claimed: 0, lastAt: 0, bossKills: 0 };
+    else {
+      if (!Number.isFinite(player.expeditionCodex[_aid].dispatched)) player.expeditionCodex[_aid].dispatched = 0;
+      if (!Number.isFinite(player.expeditionCodex[_aid].claimed)) player.expeditionCodex[_aid].claimed = 0;
+      if (!Number.isFinite(player.expeditionCodex[_aid].lastAt)) player.expeditionCodex[_aid].lastAt = 0;
+      if (!Number.isFinite(player.expeditionCodex[_aid].bossKills)) player.expeditionCodex[_aid].bossKills = 0;
+    }
+  }
   if (!player.achievements['first']) {
     player.achievements['first'] = { unlocked: true, claimed: false, unlockAt: player.createdAt || getNow() };
   }

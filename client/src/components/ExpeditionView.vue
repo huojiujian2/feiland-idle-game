@@ -246,7 +246,8 @@ const statusClass = computed(() => remainingMs.value <= 0 ? 'ready' : 'ongoing')
 const progressPct = computed(() => {
   if (!expedition.value) return 0;
   const total = expedition.value.endAt - expedition.value.startAt;
-  const elapsed = Date.now() - expedition.value.startAt;
+  const rem = remainingMs.value;
+  const elapsed = total - rem;
   const pct = Math.max(0, Math.min(100, (elapsed / total) * 100));
   return Math.round(pct);
 });
@@ -288,6 +289,7 @@ async function loadExpedition() {
     codex.value = data.codex || {};
     reports.value = data.reports || {};
     remainingMs.value = data.remainingMs ?? (expedition.value ? Math.max(0, expedition.value.endAt - Date.now()) : 0);
+    // 同步本地基准，避免 Date.now 漂移：后续 ticker 以递减 remainingMs 为准，不再直接用 Date.now() 重算
     if (data.reports && Object.keys(data.reports).length) {
       const keys = Object.keys(data.reports).sort((a,b)=> (data.reports[b].claimedAt||0)-(data.reports[a].claimedAt||0));
       lastReport.value = data.reports[keys[0]];
@@ -332,9 +334,10 @@ async function claim() {
   const res = await api.claimExpedition(props.currentUser, expedition.value.id);
   loadingClaim.value = false;
   if (res.success) {
+    const isReplay = res.already || (res.data && res.data.already);
     const data = res.data || res;
     const rep = data.report || data;
-    if (data.already) toast.success('已领取（重放）');
+    if (isReplay) toast.success('已领取（重放）');
     else toast.success(`远征完成：+${rep.total.gold}金币 +${rep.total.exp}经验`);
     lastReport.value = rep;
     await loadExpedition();
@@ -345,9 +348,7 @@ async function claim() {
 
 function startTimers() {
   ticker = setInterval(() => {
-    if (expedition.value) {
-      remainingMs.value = Math.max(0, expedition.value.endAt - Date.now());
-    }
+    if (remainingMs.value > 0) remainingMs.value = Math.max(0, remainingMs.value - 1000);
   }, 1000);
   poller = setInterval(loadExpedition, 5000);
 }

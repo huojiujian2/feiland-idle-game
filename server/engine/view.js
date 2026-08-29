@@ -114,7 +114,7 @@ function getPlayerView(player) {
     laws: player.laws, lawBonus, availableLaws, ascensionInfo,
     raceInfo: { current: raceData, next: nextRace },
     enchantsBySlot,
-    combatStats: getCombatStats(player),
+    computedCombatStats: getCombatStats(player),
     logs: player.logs.slice(-20).reverse(), lastTick: player.lastTick,
     canChooseJob: player.level >= 11 && !player.jobPath,
     canEvolve: nextRace ? (player.level >= nextRace.reqLevel) : false,

@@ -84,7 +84,7 @@ function registerExpeditionRoutes(app, store) {
       return { status: 200, data: { report: r.report, settlementId: r.settlementId } };
     });
     if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
-    if (result.data && result.data.already) return res.json({ success: true, data: result.data, already: true });
+    if (result.data && result.data.already) return ok(res, { report: result.data.report }, { already: true });
     return ok(res, result.data);
   });
 }
