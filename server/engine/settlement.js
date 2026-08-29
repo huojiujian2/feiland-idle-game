@@ -1,5 +1,12 @@
 // ====== 结算校验：强类型 SettlementReward 白名单 ======
-// 用于所有奖励域的 reward 校验，替代弱类型 any
+// @file server/engine/settlement.js
+// @module settlement
+// @description 结算奖励强类型白名单校验（替代 any），服务所有奖励域的 assertSettlementReward
+//
+// 本文件结构：
+// 1. 工具函数 isPlainObject/isNonEmptyString/isNonNegativeNumber (L4-L6)
+// 2. assertSettlementReward 主校验 (L8-L77) - 按 type 白名单与精确组合校验
+// 3. 导出接口 (L79)
 function assertSettlementReward(type, reward) {
   const isPlainObject = (o) => o !== null && typeof o === 'object' && !Array.isArray(o);
   const isNonEmptyString = (s) => typeof s === 'string' && s.trim().length > 0;
@@ -30,30 +37,41 @@ function assertSettlementReward(type, reward) {
   for (const k of keys) {
     if (!allowed.includes(k)) return { valid:false, message:`type ${type} 不允许键 ${k}` };
   }
-  // 逐 type 必含校验
+  // 逐 type 精确组合校验（白名单组合，非至少一个）
   if (type === 'daily') {
-    const has = ['gold','exp','materials'].some(k => k in reward);
-    if (!has) return { valid:false, message:'daily 必须含 gold/exp/materials 之一' };
-    if ('gold' in reward && !isNonNegativeNumber(reward.gold)) return { valid:false, message:'gold 非法' };
-    if ('exp' in reward && !isNonNegativeNumber(reward.exp)) return { valid:false, message:'exp 非法' };
-    if ('materials' in reward) {
+    if (keys.length !== 1) return { valid:false, message:'daily 必须恰含其一 gold/exp/materials' };
+    const k = keys[0];
+    if (k === 'gold') {
+      if (!isNonNegativeNumber(reward.gold)) return { valid:false, message:'gold 非法' };
+    } else if (k === 'exp') {
+      if (!isNonNegativeNumber(reward.exp)) return { valid:false, message:'exp 非法' };
+    } else if (k === 'materials') {
       if (!Array.isArray(reward.materials) || reward.materials.length===0) return { valid:false, message:'materials 非空数组' };
       for (const m of reward.materials) {
         if (!isPlainObject(m) || !isNonEmptyString(m.name) || !isNonNegativeNumber(m.count) || m.count===0) return { valid:false, message:'materials 元素非法' };
       }
-    }
+    } else return { valid:false, message:'daily 键非法' };
   } else if (type === 'achievement') {
-    const has = ['gold','equips','affixId','reincPoints','title'].some(k => k in reward);
-    if (!has) return { valid:false, message:'achievement 必须含 gold/equips/affixId/reincPoints/title 之一' };
-    if ('gold' in reward && !isNonNegativeNumber(reward.gold)) return { valid:false, message:'gold 非法' };
-    if ('equips' in reward) {
+    // 精确组合白名单：4 种合法组合
+    const hasGold = 'gold' in reward;
+    const hasEquips = 'equips' in reward;
+    const hasAffix = 'affixId' in reward;
+    const hasReinc = 'reincPoints' in reward;
+    const hasTitle = 'title' in reward;
+    if (!hasTitle) return { valid:false, message:'achievement 必须含 title' };
+    if (!isNonEmptyString(reward.title)) return { valid:false, message:'title 非法' };
+    const combo1 = hasGold && !hasEquips && !hasAffix && !hasReinc && keys.length===2; // gold+title
+    const combo2 = hasGold && hasEquips && !hasAffix && !hasReinc && keys.length===3; // gold+equips+title
+    const combo3 = hasAffix && !hasGold && !hasEquips && !hasReinc && keys.length===2; // affixId+title
+    const combo4 = hasReinc && !hasGold && !hasEquips && !hasAffix && keys.length===2; // reincPoints+title
+    if (!(combo1 || combo2 || combo3 || combo4)) return { valid:false, message:'achievement 组合非法，仅允许 {gold,title}|{gold,equips,title}|{affixId,title}|{reincPoints,title}' };
+    if (hasGold && !isNonNegativeNumber(reward.gold)) return { valid:false, message:'gold 非法' };
+    if (hasEquips) {
       if (!Array.isArray(reward.equips) || reward.equips.length===0) return { valid:false, message:'equips 非空' };
       for (const e of reward.equips) if (!isPlainObject(e) || !isNonEmptyString(e.templateId)) return { valid:false, message:'equips 元素非法' };
     }
-    if ('affixId' in reward && !isNonEmptyString(reward.affixId)) return { valid:false, message:'affixId 非法' };
-    if ('reincPoints' in reward && (!Number.isInteger(reward.reincPoints) || reward.reincPoints<=0)) return { valid:false, message:'reincPoints 非法' };
-    if ('title' in reward && !isNonEmptyString(reward.title)) return { valid:false, message:'title 非法' };
-    // 实际成就组合白名单：至少符合其一组合，但已在 has 校验，额外允许 affixId+title 等组合
+    if (hasAffix && !isNonEmptyString(reward.affixId)) return { valid:false, message:'affixId 非法' };
+    if (hasReinc && (!Number.isInteger(reward.reincPoints) || reward.reincPoints<=0)) return { valid:false, message:'reincPoints 非法' };
   } else if (type === 'boss_participation' || type === 'boss_settle') {
     if (!isNonNegativeNumber(reward.gold) || !isNonNegativeNumber(reward.exp)) return { valid:false, message:'boss 需 gold/exp' };
     if ('titles' in reward) {
@@ -76,4 +94,47 @@ function assertSettlementReward(type, reward) {
   return { valid:true };
 }
 
-module.exports = { assertSettlementReward };
+function assertPvpChallengeResult(obj){
+  const isPlainObject = (o) => o !== null && typeof o === 'object' && !Array.isArray(o);
+  if (!isPlainObject(obj)) return { valid:false, message:'PvpChallengeResult 非对象' };
+  const { battle, isWin, isDraw, rewards, ratingChange, newRating, arenaCoins, targetName, targetLevel, targetJob, player } = obj;
+  if (!isPlainObject(battle) || !['win','lose','draw'].includes(battle.result)) return { valid:false, message:'battle.result 非法' };
+  if (!Array.isArray(battle.rounds)) return { valid:false, message:'battle.rounds 非数组' };
+  for(const r of battle.rounds){
+    if (!isPlainObject(r) || typeof r.round !== 'number') return { valid:false, message:'round 非法' };
+    if (!Array.isArray(r.actions)) return { valid:false, message:'actions 非数组' };
+    for(const a of r.actions){
+      if (!isPlainObject(a) || !['A','B'].includes(a.actor)) return { valid:false, message:'actor 非法' };
+      if (typeof a.skill !== 'string') return { valid:false, message:'skill 非法' };
+    }
+  }
+  if (typeof isWin !== 'boolean' || typeof isDraw !== 'boolean') return { valid:false, message:'isWin/isDraw 非法' };
+  if (!isPlainObject(rewards) || typeof rewards.gold !== 'number' || typeof rewards.exp !== 'number' || typeof rewards.coins !== 'number') return { valid:false, message:'rewards 非法' };
+  if (typeof ratingChange !== 'number' || typeof newRating !== 'number' || typeof arenaCoins !== 'number') return { valid:false, message:'rating 非法' };
+  if (typeof targetName !== 'string' || typeof targetLevel !== 'number' || typeof targetJob !== 'string') return { valid:false, message:'target 非法' };
+  if (!isPlainObject(player) || typeof player.username !== 'string' || typeof player.pvpStats !== 'object') return { valid:false, message:'player 非法' };
+  return { valid:true };
+}
+function assertCockResolveResult(obj){
+  const isPlainObject = (o) => o !== null && typeof o === 'object' && !Array.isArray(o);
+  if (!isPlainObject(obj)) return { valid:false, message:'CockResolveResult 非对象' };
+  const { win, champion, championId, report, pointsDelta, points, streak, played, todayLeft, interventionApplied, interventionDiscovered, luckMessage, newTitle, createdAt } = obj;
+  if (typeof win !== 'boolean' || typeof champion !== 'string' || typeof championId !== 'string') return { valid:false, message:'win/champion 非法' };
+  if (!Array.isArray(report)) return { valid:false, message:'report 非数组' };
+  if (typeof pointsDelta !== 'number' || typeof points !== 'number' || typeof streak !== 'number' || typeof played !== 'number' || typeof todayLeft !== 'number') return { valid:false, message:'points 非法' };
+  if (!Array.isArray(interventionApplied)) return { valid:false, message:'interventionApplied 非法' };
+  if (typeof interventionDiscovered !== 'boolean') return { valid:false, message:'interventionDiscovered 非法' };
+  if (luckMessage !== null && typeof luckMessage !== 'string') return { valid:false, message:'luckMessage 非法' };
+  if (newTitle !== null && typeof newTitle !== 'string') return { valid:false, message:'newTitle 非法' };
+  if (typeof createdAt !== 'number') return { valid:false, message:'createdAt 非法' };
+  return { valid:true };
+}
+function assertBossSettlementResult(obj){
+  const isPlainObject = (o) => o !== null && typeof o === 'object' && !Array.isArray(o);
+  if (!isPlainObject(obj)) return { valid:false, message:'BossSettlementResult 非对象' };
+  if (typeof obj.gold !== 'number' || typeof obj.exp !== 'number' || typeof obj.rank !== 'number' || typeof obj.tier !== 'string') return { valid:false, message:'BossSettlementResult 字段非法' };
+  if (obj.titles && (!Array.isArray(obj.titles) || obj.titles.some(t=>typeof t!=='string'))) return { valid:false, message:'titles 非法' };
+  return { valid:true };
+}
+
+module.exports = { assertSettlementReward, assertPvpChallengeResult, assertCockResolveResult, assertBossSettlementResult };

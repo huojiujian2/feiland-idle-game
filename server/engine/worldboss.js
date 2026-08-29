@@ -125,6 +125,7 @@ function spawnWorldBoss(store) {
     finalHitBy: null,
     dead: false,
     settled: false,
+    settlementIds: [],
     // v3.0：保留中位玩家参考信息（调试 + 前端展示用）
     buildMode: 'tpl70_median30',
     rounds: BOSS_BATTLE_ROUNDS,
@@ -203,14 +204,11 @@ function attackWorldBoss(store, username) {
     killed = true;
     rewards = settleWorldBossRewards(store, boss);
   } else {
-    // 即使没击杀，也给参与奖励
+    // 即使没击杀，也给参与奖励（事务内，仅内存变更，由外层 withTransaction 统一提交）
     grantWorldBossParticipation(player, boss);
   }
 
-  store.setMeta(meta);
-  store.setPlayer(username, player);
-  store.save();
-
+  // 移除引擎层直接持久化，交由路由层 withTransaction 统一提交（避免内外层保存不一致）
   return {
     success: true,
     battle,           // { rounds, totalDamage, result }
@@ -235,8 +233,25 @@ function grantWorldBossParticipation(player, boss) {
   // v3.2 参与奖翻倍
   const goldGain = Math.floor(baseGold * ratio * 2);
   const expGain = Math.floor(baseExp * ratio * 2);
+  if (goldGain <=0 && expGain <=0) return;
+  const dayKey = getBossDayKey();
+  const pid = `boss:participation:${dayKey}:${boss.id}:${player.username}`;
+  // 幂等：同一北京日内同一 Boss 已发过参与奖则不重发
+  if (Array.isArray(player.settlementLedger) && player.settlementLedger.some(e => e.id === pid)) return;
   player.gold = (player.gold || 0) + goldGain;
   player.exp = (player.exp || 0) + expGain;
+  const reward = { gold: goldGain, exp: expGain };
+  const v = assertSettlementReward('boss_participation', reward);
+  if (!v.valid) return;
+  if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
+  player.settlementLedger.push({
+    id: pid,
+    at: getNow(),
+    type: 'boss_participation',
+    reward,
+    source: `boss:participation:${dayKey}:${boss.id}`,
+  });
+  if (player.settlementLedger.length > 100) player.settlementLedger.splice(0, player.settlementLedger.length - 100);
 }
 
 // 结算 BOSS 奖励：参与奖 + 最后一击奖 + 伤害前三称号（24h 限时）+ 前三名等级进度奖 + 4-20 名取参与奖上限

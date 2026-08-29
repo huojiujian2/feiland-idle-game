@@ -10,6 +10,7 @@ const {
 const { PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, ARENA_EQUIPMENT, ARENA_TITLES } = require('../data');
 const { ok, fail } = require('./_helpers');
 const { isTestMode } = require('../engine/state');
+const { assertSettlementReward, assertPvpChallengeResult } = require('../engine/settlement');
 
 function nextDailyKey(key) {
   const d = new Date(key + 'T00:00:00');
@@ -232,10 +233,13 @@ function registerPvpRoutes(app, store) {
         player: getPlayerView(player),
       };
 
-      // settlement ledger
+      // settlement ledger with strong-type validation
       if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
       const reward = { gold, exp, coins: coinsEarned };
-      // assert already validated via calc, but we push
+      const vReward = assertSettlementReward('pvp_challenge', reward);
+      if (!vReward.valid) return { status: 500, message: '奖励校验失败:' + vReward.message };
+      const vFull = assertPvpChallengeResult(fullResult);
+      if (!vFull.valid) return { status: 500, message: '结果校验失败:' + vFull.message };
       player.settlementLedger.push({
         id: ledgerId,
         at: getNow(),
@@ -506,22 +510,14 @@ function registerPvpRoutes(app, store) {
       }
     }
 
-    // If targetKey still null (no cursor), we need to handle via settleDuePeriods inside transaction
+    // If targetKey still null (no cursor), delegate to settleDuePeriods without outer transaction (it handles per-period transactions internally)
     if (!targetKey) {
-      const result = store.withTransaction((data) => {
-        // delegate to settleDuePeriods which handles cursor init and multiple periods
-        // But settleDuePeriods expects to settle all due periods for all three periods, not just one.
-        // For manual path without periodKey, we can call settleArenaRewards for the computed nextKey after ensuring cursors.
-        // Instead, we can call settleDuePeriods and then return.
-        try {
-          settleDuePeriods(store);
-          return { status: 200, already: false };
-        } catch (e) {
-          return { status: 500, message: e.message };
-        }
-      });
-      if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
-      return res.json({ success: true, data: result });
+      try {
+        settleDuePeriods(store);
+        return res.json({ success: true, data: { already: false } });
+      } catch (e) {
+        return res.status(500).json({ success: false, message: e.message });
+      }
     }
 
     const rankingList = store.getAllPlayers()
