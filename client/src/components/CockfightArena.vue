@@ -286,7 +286,8 @@ onBeforeUnmount(() => { if (lineTimer) clearInterval(lineTimer); });
 </script>
 
 <style scoped>
-.cock-view { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.6rem 0.8rem; }
+/* v1.03：底部预留 fixed TabBar 高度（含 iOS 安全区 + 悬浮底栏检测值） */
+.cock-view { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.6rem 0.8rem; padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--browser-bar-h, 0px) + 0.75rem); }
 
 /* 头部 */
 .cock-header { display: flex; flex-direction: column; gap: 0.2rem; }

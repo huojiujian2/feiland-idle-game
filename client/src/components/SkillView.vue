@@ -240,7 +240,8 @@ function handleUnequip() {
 </script>
 
 <style scoped>
-.skill-view { display: flex; flex-direction: column; gap: 0.6rem; max-width: 560px; margin: 0 auto; }
+/* v1.03：底部预留 fixed TabBar 高度（含 iOS 安全区 + 悬浮底栏检测值） */
+.skill-view { display: flex; flex-direction: column; gap: 0.6rem; max-width: 560px; margin: 0 auto; padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--browser-bar-h, 0px) + 0.75rem); }
 
 .sub-tabs { display: flex; gap: 0.3rem; }
 .sub-tab { flex: 1; padding: 0.5rem; border: 1px solid rgba(var(--violet-rgb),0.1); border-radius: 8px; background: rgba(var(--panel-rgb),0.4); color: var(--muted); font-size: 0.85rem; cursor: pointer; transition: all var(--duration-normal) var(--ease-out); font-family: inherit; }

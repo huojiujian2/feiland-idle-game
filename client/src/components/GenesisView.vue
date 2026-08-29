@@ -676,6 +676,8 @@ function showOracle(text) {
 .genesis-screen {
   position: relative;
   min-height: 100%;
+  /* v1.03：底部预留 fixed TabBar 高度（含 iOS 安全区 + 悬浮底栏检测值） */
+  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--browser-bar-h, 0px) + 0.75rem);
 }
 .genesis-scroll {
   position: relative;

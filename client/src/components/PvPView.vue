@@ -192,5 +192,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.pvp-view { display: flex; flex-direction: column; gap: 0.5rem; max-width: 560px; margin: 0 auto; padding: 0.5rem 0.8rem; }
+/* v1.03：底部预留 fixed TabBar 高度（含 iOS 安全区 + 悬浮底栏检测值） */
+.pvp-view { display: flex; flex-direction: column; gap: 0.5rem; max-width: 560px; margin: 0 auto; padding: 0.5rem 0.8rem; padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--browser-bar-h, 0px) + 0.75rem); }
 </style>
