@@ -11,6 +11,7 @@ const {
   PVP_CURRENCY_KEY, SEASON_MONTHS,
 } = require('../data');
 const { getDailyKey, getWeeklyKey, getMonthlyKey } = require('./daily');
+const { assertSettlementReward } = require('./settlement');
 
 // ELO
 function calcPvpRating(myRating, enemyRating, isWin) {
@@ -415,57 +416,10 @@ function generateArenaBots(playerLevel, playerRating) {
   return bots;
 }
 
-// 赛季结算
-function settleArenaRewards(meta, period, rankingList) {
-  if (!period || !rankingList || rankingList.length === 0) return { rewarded: 0 };
-  const key = period === 'daily' ? getDailyKey()
-    : period === 'weekly' ? getWeeklyKey()
-    : getMonthlyKey();
-  if (!meta.arenaRewards) meta.arenaRewards = {};
-  if (!meta.arenaRewards[period]) meta.arenaRewards[period] = {};
-  if (meta.arenaRewards[period][key]) return { rewarded: 0, already: true, key };
-  const rewards = {};
-  let rewardedCount = 0;
-  for (let i = 0; i < rankingList.length && i < 100; i++) {
-    const p = rankingList[i];
-    const rank = i + 1;
-    const tier = getRankTier(period, rank);
-    if (!tier) continue;
-    rewards[p.username] = { tier: tier.tier, rank, coins: tier.coins };
-    rewardedCount++;
-  }
-  meta.arenaRewards[period][key] = rewards;
-  return { rewarded: rewardedCount, key, rewards };
-}
+// 赛季结算 - 新签名 store, period, rankingList, periodKey (periodKey 必传)
+const arena = require('./pvp-arena');
+const { settleArenaRewards, settleDuePeriods, maybeResetSeason, applySeasonResetToPlayers } = arena;
 
-function maybeResetSeason(meta) {
-  const currentSeason = getSeasonKey();
-  if (!meta.currentSeason) {
-    meta.currentSeason = currentSeason;
-    return { reset: false };
-  }
-  if (meta.currentSeason !== currentSeason) {
-    const old = meta.currentSeason;
-    meta.currentSeason = currentSeason;
-    meta.lastResetFrom = old;
-    meta.lastResetAt = getNow();
-    return { reset: true, from: old, to: currentSeason };
-  }
-  return { reset: false };
-}
-
-function applySeasonResetToPlayers(store) {
-  const players = store.getAllPlayers();
-  for (const p of players) {
-    if (!p.pvpStats) continue;
-    p.pvpStats.rating = 1000;
-    p.pvpStats.streak = 0;
-    p.pvpStats.lastPvpAt = 0;
-    if (PVP_CURRENCY_KEY in p) p[PVP_CURRENCY_KEY] = 0;
-  }
-}
-
-// 竞技商店
 function buyArenaItem(player, itemId) {
   // 永久称号商品：type = 'title'
   const titleItem = ARENA_TITLES.find(e => e.id === itemId);
@@ -551,7 +505,7 @@ module.exports = {
   getSeasonKey, getSeasonIndex, getSeasonDaysLeft,
   getRankTier,
   createBot, generateArenaBots, genBotId,
-  settleArenaRewards, maybeResetSeason, applySeasonResetToPlayers,
+  settleArenaRewards, settleDuePeriods, maybeResetSeason, applySeasonResetToPlayers,
   buyArenaItem,
   setBotCharacterDeps,
 };

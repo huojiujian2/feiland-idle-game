@@ -13,6 +13,7 @@ const {
 } = require('../data/genesis');
 const { EQUIP_TEMPLATES, registerCustomEquip, unregisterCustomEquip } = require('../data/equipment');
 const { AFFIX_TREE } = require('../data/affixes');
+const { getNow } = require('./state');
 const { genUid } = require('./utils');
 const { migratePlayer } = require('./player');
 
@@ -174,7 +175,7 @@ function birthMonster(player, draft, meta) {
     hp, atk, def, agi,
     exp: budget.exp, gold: budget.gold,
     drops: normalizedDrops,   // v2.1：保留 kind 标记
-    createdAt: Date.now(),
+    createdAt: getNow(),
   };
   w.monsters.push(monster);
 
@@ -197,7 +198,7 @@ function birthMonster(player, draft, meta) {
 
   player.gold -= cost;
   player.logs = player.logs || [];
-  player.logs.push({ time: Date.now(), type: 'genesis-monster', text: oracleText('monster', { name, area: area.name, omen: race.omen }) });
+  player.logs.push({ time: getNow(), type: 'genesis-monster', text: oracleText('monster', { name, area: area.name, omen: race.omen }) });
   return { success: true, monster, oracle: oracleText('monster', { name, area: area.name, omen: race.omen }) };
 }
 
@@ -280,7 +281,7 @@ function forgeEquip(player, draft, meta) {
     areaId: area.id,     // v2.1：记录装备投放地图，怪物创建时校验归属
     slot, quality: QUALITY, reqLevel: budget.refReqLevel || budget.reqLevel,
     stats: cleanStats, affix,
-    createdAt: Date.now(),
+    createdAt: getNow(),
   };
   w.equips.push(equip);
   // 同步注册进 EQUIP_TEMPLATES（让 createEquipItem/mergeEquipment/附魔/重铸自动支持）
@@ -291,7 +292,7 @@ function forgeEquip(player, draft, meta) {
   equip.worldState = 'pending';  // pending / committed（前端可显示状态）
   player.gold -= cost;
   player.logs = player.logs || [];
-  player.logs.push({ time: Date.now(), type: 'genesis-equip', text: oracleText('equip', { name }) });
+  player.logs.push({ time: getNow(), type: 'genesis-equip', text: oracleText('equip', { name }) });
   return { success: true, equip, oracle: oracleText('equip', { name }), budget };
 }
 
@@ -327,14 +328,14 @@ function deleteCustom(player, kind, id, meta) {
   // v2.8：抹除前把完整快照归档进全服混沌图鉴（meta.genesis.chaos）
   w.chaos[kind].push({
     ...JSON.parse(JSON.stringify(item)),
-    erasedAt: Date.now(),
+    erasedAt: getNow(),
     erasedBy: player.username || player.name,
     erasedReason: 'creator_delete',
   });
   list.splice(idx, 1);
   if (kind === 'equips') unregisterCustomEquip(id);
   player.logs = player.logs || [];
-  player.logs.push({ time: Date.now(), type: 'genesis-delete', text: oracleText('delete', { name: item.name }) });
+  player.logs.push({ time: getNow(), type: 'genesis-delete', text: oracleText('delete', { name: item.name }) });
   return { success: true, oracle: oracleText('delete', { name: item.name }) };
 }
 

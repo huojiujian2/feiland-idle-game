@@ -15,17 +15,17 @@ function registerCombatRoutes(app, store) {
   // 词条装备/卸下
   app.post('/api/player/:username/affix', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = equipAffix(r.player, req.body.affixId, req.body.slot);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     ok(res, getPlayerView(r.player));
   });
   app.post('/api/player/:username/affix/unequip', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = unequipAffix(r.player, req.body.affixId);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     ok(res, getPlayerView(r.player));
   });
@@ -36,17 +36,17 @@ function registerCombatRoutes(app, store) {
   // 装备穿戴/卸下
   app.post('/api/player/:username/equip', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = equipItem(r.player, req.body.itemUid);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     ok(res, getPlayerView(r.player));
   });
   app.post('/api/player/:username/unequip', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = unequipItem(r.player, req.body.slot);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     ok(res, getPlayerView(r.player));
   });
@@ -66,17 +66,17 @@ function registerCombatRoutes(app, store) {
   });
   app.post('/api/player/:username/buy', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = buyItem(r.player, req.body.itemId, req.body.count || 1);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     ok(res, getPlayerView(r.player));
   });
   app.post('/api/player/:username/use', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = useConsumable(r.player, req.body.itemId, req.body.count || 1);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     ok(res, getPlayerView(r.player));
   });
@@ -84,17 +84,17 @@ function registerCombatRoutes(app, store) {
   // 出售
   app.post('/api/player/:username/sell-material', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = sellMaterial(r.player, req.body.itemName, req.body.count || 1);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     ok(res, getPlayerView(r.player));
   });
   app.post('/api/player/:username/sell-equip', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = sellEquip(r.player, req.body.itemUid);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     ok(res, getPlayerView(r.player));
   });
@@ -102,12 +102,12 @@ function registerCombatRoutes(app, store) {
   // 按等级批量出售装备（maxLevel=null 视为全部）
   app.post('/api/player/:username/sell-equip-by-level', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const { maxLevel } = req.body || {};
     const lv = maxLevel == null ? null : Number(maxLevel);
-    if (lv != null && (Number.isNaN(lv) || lv < 0)) return fail(res, 'maxLevel 非法');
+    if (lv != null && (Number.isNaN(lv) || lv < 0)) return fail(res, 'maxLevel 非法', 400);
     const result = sellEquipsByLevel(r.player, lv);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     res.json({ success: true, data: getPlayerView(r.player), sold: result.sold, gold: result.gold, remaining: result.remaining });
   });
@@ -115,46 +115,46 @@ function registerCombatRoutes(app, store) {
   // 装备锻造：升级
   app.post('/api/player/:username/equipment/upgrade', (req, res) => {
     const { itemUid } = req.body || {};
-    if (!itemUid) return fail(res, '缺少 itemUid');
+    if (!itemUid) return fail(res, '缺少 itemUid', 400);
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = upgradeEquipment(r.player, itemUid);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
-    store.save();
+    store.safeSave();
     res.json({ success: true, data: getPlayerView(r.player), upgradeLevel: result.upgradeLevel, goldCost: result.goldCost });
   });
   app.post('/api/player/:username/equipment/merge', (req, res) => {
     const { itemUids } = req.body || {};
-    if (!Array.isArray(itemUids) || itemUids.length !== 3) return fail(res, '需要选择 3 件装备');
+    if (!Array.isArray(itemUids) || itemUids.length !== 3) return fail(res, '需要选择 3 件装备', 400);
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = mergeEquipment(r.player, itemUids);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
-    store.save();
+    store.safeSave();
     res.json({ success: true, data: getPlayerView(r.player), newItem: result.newItem });
   });
   app.post('/api/player/:username/equipment/reforge', (req, res) => {
     const { itemUid } = req.body || {};
-    if (!itemUid) return fail(res, '缺少 itemUid');
+    if (!itemUid) return fail(res, '缺少 itemUid', 400);
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = reforgeEquipment(r.player, itemUid);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
-    store.save();
+    store.safeSave();
     ok(res, getPlayerView(r.player));
   });
 
   // v1.02：背包排序持久化（前端"整理"按钮触发）
   app.post('/api/player/:username/inventory/sort', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const result = sortInventory(r.player);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
-    store.save();
+    store.safeSave();
     ok(res, getPlayerView(r.player));
   });
 }

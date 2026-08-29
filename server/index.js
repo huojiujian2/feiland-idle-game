@@ -18,6 +18,8 @@ app.use(express.json());
 store.load();
 engine.maybeResetWeeklyBossKills(store);
 engine.setStore(store);   // 把 store.getMeta 注入 idle/genesis（创世系统需要）
+// 启动补偿：按周期各自包裹 withTransaction，失败不推进游标（见 engine.settleDuePeriods）
+try { engine.settleDuePeriods(store); } catch (e) { console.error('启动补偿失败:', e.message); }
 console.log(`已加载 ${store.getAllPlayers().length} 个角色`);
 
 // 注册所有路由
@@ -30,67 +32,44 @@ app.use('/api', (req, res) => {
 
 // ====== 定时任务（仅主进程，避免测试挂起） ======
 if (require.main === module) {
-  // 每 5 秒为所有玩家结算挂机收益
+  // 每 5 秒为所有玩家结算挂机收益 — safeSave 不抛错
   setInterval(() => {
     engine.maybeResetWeeklyBossKills(store);
     const players = store.getAllPlayers();
     for (const player of players) engine.calculateIdle(player);
-    if (players.length > 0) store.save();
+    if (players.length > 0) store.safeSave();
   }, 5000);
 
   // 周重置兜底
   setInterval(() => engine.maybeResetWeeklyBossKills(store), 60 * 1000);
 
-  // 每 30 秒持久化
-  setInterval(() => store.save(), 30000);
+  // 每 30 秒持久化 — safeSave
+  setInterval(() => store.safeSave(), 30000);
 
-  // ====== 竞技场周期结算（每分钟检查一次日/周/月边界） ======
-  let lastDailyKey = engine.getDailyKey();
-  let lastWeeklyKey = engine.getWeeklyKey();
-  let lastMonthlyKey = engine.getMonthlyKey();
-  let lastSeasonKey = engine.getSeasonKey();
-
+  // ====== 竞技场周期结算（每分钟检查一次日/周/月边界 + 赛季） ======
   function tryAutoSettle() {
-    const meta = store.getMeta();
-    const curSeason = engine.getSeasonKey();
-    if (curSeason !== lastSeasonKey) {
+    // 赛季重置 — 事务化
+    const seasonResult = store.withTransaction((data) => {
+      const meta = data.meta;
+      const curSeason = engine.getSeasonKey();
+      if (!meta.currentSeason) meta.currentSeason = curSeason;
       const resetInfo = engine.maybeResetSeason(meta);
       if (resetInfo.reset) {
         engine.applySeasonResetToPlayers(store);
         console.log(`[赛季重置] ${resetInfo.from} → ${resetInfo.to}`);
       }
-      lastSeasonKey = curSeason;
-      store.setMeta(meta);
-      store.save();
+      return { status: 200 };
+    });
+    if (seasonResult.status !== 200) {
+      console.error('赛季重置保存失败:', seasonResult.message);
+      return;
     }
-
-    const settlePeriod = (period, label, keyFn, lastKey) => {
-      const cur = keyFn();
-      if (cur === lastKey) return lastKey;
-      const ranking = store.getAllPlayers()
-        .filter(p => p.level)
-        .map(p => ({ username: p.username, rating: (p.pvpStats && p.pvpStats.rating) || 1000 }))
-        .sort((a, b) => b.rating - a.rating);
-      const r = engine.settleArenaRewards(meta, period, ranking);
-      if (r.rewarded > 0) {
-        for (const [uname, info] of Object.entries(r.rewards)) {
-          const p = store.getPlayer(uname);
-          if (!p) continue;
-          p[engine.PVP_CURRENCY_KEY || 'arenaCoins'] = (p[engine.PVP_CURRENCY_KEY || 'arenaCoins'] || 0) + info.coins;
-          p.logs = p.logs || [];
-          p.logs.push({ time: engine.getNow(), type: 'arena-reward', text: `【${label}】${info.tier}级 (第 ${info.rank} 名) +${info.coins} 竞技币` });
-          store.setPlayer(uname, p);
-        }
-        console.log(`[竞技场${label}] ${r.rewarded} 人获奖金 (${cur})`);
-      }
-      store.setMeta(meta);
-      store.save();
-      return cur;
-    };
-
-    lastDailyKey = settlePeriod('daily', '日结', engine.getDailyKey, lastDailyKey);
-    lastWeeklyKey = settlePeriod('weekly', '周结', engine.getWeeklyKey, lastWeeklyKey);
-    lastMonthlyKey = settlePeriod('monthly', '月结', engine.getMonthlyKey, lastMonthlyKey);
+    // 竞技场日/周/月 — 委托 engine.settleDuePeriods（内部按周期各自 withTransaction，失败不推进）
+    try {
+      engine.settleDuePeriods(store);
+    } catch (e) {
+      console.error('竞技场结算失败:', e.message);
+    }
   }
   setInterval(tryAutoSettle, 60 * 1000);
 

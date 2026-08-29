@@ -2,6 +2,50 @@
 
 > 📖 主入口：[../README.md](../README.md)
 
+## v1.04 · 2026-08-30
+
+### 🛡 P0 稳定性底座（事务 · 结算 · 缝合加固）
+
+#### 存档与事务
+- **全状态事务**：`server/store.js` 新增 `snapshot / restore / withTransaction / safeSave / getLastSaveError / cancelSaveTimer`，`snapshot → fn → save → 成功清错/清 timer / 失败回滚`，非 2xx 回滚并 `cancelSaveTimer`，异常转 500；`save()` 本体捕获 `lastSaveError` 并 throw 供事务感知，`markDirty` 与 5s/30s 定时器均调 `safeSave` 且 `finally { saveTimer=null }` 可重调度
+- **原子写与回退**：原子写 `db.json.tmp → rename`，双保险 `.bak`，主备均损坏重置为空；`arenaRewards` 按 30/12/12 保留上限由 store 层清理；`GET /player`、`GET /worldboss/active`、`GET /cockfight`、`GET /titles`、`GET /arena/season` 均走事务，失败返 500
+- **调用面收敛**：`server/routes/combat.js:124,135`、`strategy.js:25`、`genesis.js:29,43`、`pvp.js:250`、`daily.js:253`、`idle.js` 等所有直接 `store.save()` 改为 `safeSave()`（非结算）或 `withTransaction`（结算），全仓 `rg "store.save("` 仅剩 `store.js` 内部
+
+#### 统一奖励唯一结算（强类型审计）
+- **载体**：`player.settlementLedger: Array<SettlementLedgerEntry>` ≤100，`meta.arenaRewards[period][periodKey]` 全局分类账（空排名也占位），`meta.arenaSkipped[period][periodKey]: {at,source}` 独立跳过记录（无 source 字段混用）
+- **强类型**：新增 `server/engine/settlement.js` 导出 `assertSettlementReward(type, reward)`，按 `daily/chest/achievement/boss_participation/boss_settle/arena_*/pvp_challenge/cock_round/cock_exchange` 精确白名单校验（`cock_exchange` 缺 `cost` 必拒，宝箱仅 `null`，成就组合白名单等）
+- **幂等键**：
+  - 日常/宝箱/成就：`daily:${today}:${id}` / `chest:${today}` / `ach:${id}` 凭 `claimed + ledger` 200 `already:true`
+  - 世界 Boss 参与：`boss:participation:${bossDayKey}:${id}:${u}` 同北京日内二次 409；排名结算：`boss:settle:${spawnDayKey}:${id}` + 子 `rank`，`boss.settled` + `settlementIds` 必写
+  - 竞技场挑战：`pvp:challenge:${requestId}` 客户端 `genUid()` 生成、页面 `pendingRequestId` 持有至成功、重试复用，服务端四态判别（ledger 命中且 `fullResult` 完整 200 重放 / 命中但 `fullResult` 缺失 500 / ledger 未命中但 `pvpRecords` 命中 200 重放 / 二者皆无走 NEW 校验），绑定 `username/target/isBot` 跨主体复用 409
+  - 灵鸡对局：`cock:round:${today}:${createdAt}`，`enter` 返 `createdAt` 重复 enter 返原 200 不覆盖，`resolve` 先查重放（优先 `ledger.fullResult` 次选 `history.fullResult`）命中缺失 500
+  - 灵鸡兑换：`cock:exchange:${key}` 已拥有 409
+
+#### 竞技场周期语义
+- **游标**：`meta.arenaCursors:{daily,weekly,monthly}` 持久化最后已结算周期，`nextKey = nextPeriodKey(cursors[period])` 且 `< curKey` 时在 `withTransaction` 内结算并推进，失败不推进
+- **启动补偿**：若游标缺失初始化为两周期前（昨天/上周/上月可补），循环 `while(nextKey < curKey)` 依次补结算（每日最多 7 次/每周 4 次/每月 2 次），超界区间为每个被跳过 `periodKey` 在事务内写 `arenaRewards[period][periodKey]={}` + `arenaSkipped[period][periodKey]={at,source:'skip:gap'}` 并推进
+- **手工结算**：`POST /api/arena/settle` 仅 `x-admin-token` 或 `isTestMode()` 放行否则 403，`periodKey` 必须为已结束周期（weekly 需周一、monthly 需 YYYY-MM）否则 400，不传则结算 `nextKey`，仅当 `periodKey===nextKey` 才推进游标
+- **查询**：`GET /arena/rewards/:period?periodKey=&username=` 支持任意历史 `periodKey`，超出保留窗口先查 `ledger/arenaSkipped` 否则 404
+
+#### 称号与时间缝
+- **结构**：`player.titles: Record<string,true>`、`titleExpiry: Record<string,number>`、`currentTitle: string|null`，`createCharacter` 默认补齐，`migratePlayer` 数组→对象迁移并过滤非法 key/非法 expiry 值（非有限数或 ≤0 删除），非法 `currentTitle` 置 null
+- **来源**：`ALL_TITLES = JOB_TITLES(20)+WORLD_BOSS_TITLES(3)+ARENA_SHOP_TITLES(2)+COCKFIGHT_DISPLAY_TITLES(6)+ACHIEVEMENT_TITLES(11)` 共 42，`isValidTitleKey` 统一校验
+- **缝**：所有过期判定与日常/周/月/赛季/BOSS 日键均走 `getNow()` seam，替换 `Date.now()`→`getNow()`，`GET /titles` 先迁移再清过期并矫正 `currentTitle` 后事务保存；`POST /titles/equip` 支持 `key===null` 卸下 200，非法 404，未解锁/已过期 409
+- **前端**：`WorldBossView.vue` 移除客户端 UTC 判定改为仅 `attackedToday` 服务端值；`attack` 响应兼容 `res.data.battle` 与顶层 `res.battle`；倒计时仅用服务端 `remainingMs` 递减
+
+#### 前端适配（本期新增）
+- `client/src/api.js:173,195,220`：`challenge(username,target,isBot,requestId)` 必传 `requestId`，`resolveCockRound(username,bet,intervention,createdAt)` 必传 `createdAt`，`enterCockArena` 解析 `createdAt`；全部仍走 `request` 封装
+- `CockfightArena.vue`：持有 `pendingCreatedAt`，`enter` 存 `res.data.createdAt || res.createdAt`，`resolve` 透传；兼容 `already:true` 重放
+- `PvPView.vue`：持有 `pendingRequestId`（`Math.random+Date.now` 生成），`challenge` 复用至成功，网络失败保持同一 ID
+- `App.vue:225,301`：`GET /player` 解包 `data:{player,offlineSummary}` 兼容 `res.data.player||res.data` 与 `res.offlineSummary`，`prevLevel` 基于 `p.level`，离线弹窗兼容双层
+- `TitleModal.vue:112`：`equip(null)` 卸下透传 `null` 200
+
+#### 测试与构建
+- 新增 `server/store.test.js`、`server/engine/settlement.test.js`、`server/routes-settlement.test.js`、`server/timer-settlement.test.js`、`server/restart-consistency.test.js`、`server/schema.test.js`，覆盖原子写/损坏回退/事务回滚/`assertSettlementReward`/幂等/`arenaSkipped`/时区/重启一致性
+- `npm run build`（vite）通过，`npm test` 全量通过
+
+---
+
 ## v1.03 · 2026-08-29
 
 ### 🆕 新增功能

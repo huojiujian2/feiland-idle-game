@@ -76,6 +76,10 @@ const myStreak = ref(0);
 const myBestStreak = ref(0);
 const arenaCoins = ref(0);
 const cdRemaining = ref(0);
+const pendingRequestId = ref(null);
+function genRequestId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
 
 function switchTab(t) {
   tab.value = t;
@@ -148,23 +152,33 @@ async function loadSeason() {
 async function doChallenge(opp) {
   if (cdRemaining.value > 0) return toast.warn(`冷却中，还需 ${Math.ceil(cdRemaining.value / 1000)}s`);
   if (!await modalConfirm(`挑战 ${opp.name}？`)) return;
+  // idempotency: hold pendingRequestId until success, retry reuses same id
+  const reqId = pendingRequestId.value || (pendingRequestId.value = genRequestId());
   try {
-    const res = await api.challenge(props.currentUser, opp.username, !!opp.isBot);
+    const res = await api.challenge(props.currentUser, opp.username, !!opp.isBot, reqId);
     if (res.success) {
-      battleResult.value = res.data;
+      pendingRequestId.value = null;
+      const payload = res.data || res;
+      battleResult.value = payload;
       // 更新玩家数据
-      if (res.data.player) props.player && Object.assign(props.player, res.data.player);
-      myRating.value = res.data.newRating || myRating.value;
-      arenaCoins.value = res.data.arenaCoins || arenaCoins.value;
+      if (payload.player) props.player && Object.assign(props.player, payload.player);
+      myRating.value = payload.newRating || myRating.value;
+      arenaCoins.value = payload.arenaCoins || arenaCoins.value;
       cdRemaining.value = 60000; // 1 分钟冷却（与后端 PVP_CD_MS 同步简化）
       // 刷新数据
       loadOpponents();
-      props.player && (props.player.arenaCoins = res.data.arenaCoins);
-      props.player && (props.player.pvpStats = res.data.player?.pvpStats);
+      props.player && (props.player.arenaCoins = payload.arenaCoins);
+      props.player && (props.player.pvpStats = payload.player?.pvpStats);
     } else {
+      // network/server error message — keep pendingRequestId for retry if network-ish
+      // only clear on business 409 etc? Keep for retry on network failure; clear on explicit business reject?
+      // spec says retry should reuse same pendingRequestId until success, so keep it unless success
       toast.error(res.message || '挑战失败');
     }
-  } catch (e) { toast.error('挑战出错：' + (e.message || '网络错误')); }
+  } catch (e) {
+    // network exception — keep pendingRequestId for next retry
+    toast.error('挑战出错：' + (e.message || '网络错误'));
+  }
 }
 
 async function doBuy(item) {

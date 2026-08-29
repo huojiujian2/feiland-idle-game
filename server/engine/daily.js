@@ -5,6 +5,7 @@ const {
   DAILY_QUESTS, DAILY_CHEST, ACHIEVEMENTS,
   INITIAL_MATERIAL_POOL, AFFIX_TREE, JOB_TREE, expToNext, createEquipItem,
 } = require('../data');
+const { assertSettlementReward } = require('./settlement');
 
 // 周期键
 function getTodayKey() {
@@ -103,16 +104,40 @@ function claimDaily(player, questId) {
   if (!dq.done) return { success: false, status: 409, message: '未完成' };
   if (dq.claimed) return { success: true, status: 200, message: '已领取', already: true };
   const tpl = DAILY_QUESTS.find(q => q.id === questId);
-  if (tpl.reward.gold) _grantGold(player, tpl.reward.gold);
-  if (tpl.reward.exp) _grantExpWithLevelUp(player, tpl.reward.exp);
-  if (tpl.reward.materialPool) {
-    const mat = tpl.reward.materialPool[Math.floor(getRand()() * tpl.reward.materialPool.length)] || INITIAL_MATERIAL_POOL[0];
-    const c = tpl.reward.count || 1;
+  let reward = null;
+  let chosenMat = null;
+  let chosenCount = 0;
+  if (tpl.reward.gold) {
+    reward = { gold: tpl.reward.gold };
+  } else if (tpl.reward.exp) {
+    reward = { exp: tpl.reward.exp };
+  } else if (tpl.reward.materialPool) {
+    chosenMat = tpl.reward.materialPool[Math.floor(getRand()() * tpl.reward.materialPool.length)] || INITIAL_MATERIAL_POOL[0];
+    chosenCount = tpl.reward.count || 1;
+    reward = { materials: [{ name: chosenMat, count: chosenCount }] };
+  } else if (tpl.reward.materials) {
+    reward = { materials: tpl.reward.materials };
+  } else {
+    reward = { gold: tpl.reward.gold || 0 };
+  }
+  const v = assertSettlementReward('daily', reward);
+  if (!v.valid) return { success: false, status: 500, message: v.message };
+  if (reward.gold) _grantGold(player, reward.gold);
+  if (reward.exp) _grantExpWithLevelUp(player, reward.exp);
+  if (reward.materials) {
+    const mat = chosenMat || reward.materials[0].name;
+    const c = chosenCount || reward.materials[0].count;
     const ex = player.inventory.find(i => i.name === mat);
     if (ex) ex.count += c;
     else player.inventory.push({ name: mat, count: c, type: 'material' });
   }
   dq.claimed = true;
+  if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
+  const entry = { id: `daily:${getTodayKey()}:${questId}`, at: getNow(), type: 'daily', reward, source: `/api/player/:username/quest/daily/${questId}/claim` };
+  const vv = assertSettlementReward(entry.type, entry.reward);
+  if (!vv.valid) return { success: false, status: 500, message: vv.message };
+  player.settlementLedger.push(entry);
+  if (player.settlementLedger.length > 100) player.settlementLedger.splice(0, player.settlementLedger.length - 100);
   return { success: true, status: 200 };
 }
 
@@ -121,7 +146,14 @@ function claimChest(player) {
   if (player.dailyChestClaimed) return { success: true, status: 200, already: true };
   const claimedCount = (player.dailyQuests || []).filter(q => q.claimed).length;
   if (claimedCount < DAILY_CHEST.need) return { success: false, status: 409, message: '需完成5项已领取' };
+  const reward = null;
+  const v = assertSettlementReward('chest', reward);
+  if (!v.valid) return { success: false, status: 500, message: v.message };
   player.dailyChestClaimed = true;
+  if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
+  const entry = { id: `chest:${getTodayKey()}`, at: getNow(), type: 'chest', reward, source: `/api/player/:username/quest/chest/claim` };
+  player.settlementLedger.push(entry);
+  if (player.settlementLedger.length > 100) player.settlementLedger.splice(0, player.settlementLedger.length - 100);
   return { success: true, status: 200 };
 }
 
@@ -132,42 +164,58 @@ function claimAchievement(player, achId) {
   const rec = (player.achievements || {})[achId];
   if (!rec || !rec.unlocked) return { success: false, status: 409, message: '未达成' };
   if (rec.claimed) return { success: true, status: 200, already: true };
-  if (ach.reward.gold) _grantGold(player, ach.reward.gold);
+  let titleToGrant = ach.title;
+  if (achId === 'ascend') {
+    titleToGrant = player.godhood === 'god' ? '神灵' : '半神';
+  }
+  const reward = {};
+  let chosenEquipTpl = null;
+  let chosenAff = null;
+  if (ach.reward.gold) reward.gold = ach.reward.gold;
   if (ach.reward.equipPool) {
-    const tpl = ach.reward.equipPool[Math.floor(getRand()() * ach.reward.equipPool.length)];
-    const item = createEquipItem(tpl, genUid());
-    if (item) {
-      // v1.02 持久化：任务奖励的装备也按排序插入
-      addEquipToSortedPositionLocal(player, item);
-      ensureQuestStats(player);
-      if (!player.questStats.seenEquipTemplates.includes(tpl)) player.questStats.seenEquipTemplates.push(tpl);
-    }
+    chosenEquipTpl = ach.reward.equipPool[Math.floor(getRand()() * ach.reward.equipPool.length)];
+    reward.equips = [{ templateId: chosenEquipTpl }];
   }
   if (ach.reward.affixLevel) {
     const pool = AFFIX_TREE[ach.reward.affixLevel] || [];
     if (pool.length) {
-      const aff = pool[Math.floor(getRand()() * pool.length)];
-      player.inventory.push({ name: aff.name, count: 1, type: 'affix', affixId: aff.id });
-      ensureQuestStats(player);
-      if (!player.questStats.affixSeen.includes(aff.id)) player.questStats.affixSeen.push(aff.id);
-      player.logs.push({ time: getNow(), type: 'achievement', text: `获得大师词条：${aff.name}` });
+      chosenAff = pool[Math.floor(getRand()() * pool.length)];
+      reward.affixId = chosenAff.id;
     }
+  }
+  if (ach.reward.reincPoints) reward.reincPoints = ach.reward.reincPoints;
+  if (titleToGrant) reward.title = titleToGrant;
+  const v = assertSettlementReward('achievement', reward);
+  if (!v.valid) return { success: false, status: 500, message: v.message };
+  if (ach.reward.gold) _grantGold(player, ach.reward.gold);
+  if (chosenEquipTpl) {
+    const item = createEquipItem(chosenEquipTpl, genUid());
+    if (item) {
+      addEquipToSortedPositionLocal(player, item);
+      ensureQuestStats(player);
+      if (!player.questStats.seenEquipTemplates.includes(chosenEquipTpl)) player.questStats.seenEquipTemplates.push(chosenEquipTpl);
+    }
+  }
+  if (chosenAff) {
+    player.inventory.push({ name: chosenAff.name, count: 1, type: 'affix', affixId: chosenAff.id });
+    ensureQuestStats(player);
+    if (!player.questStats.affixSeen.includes(chosenAff.id)) player.questStats.affixSeen.push(chosenAff.id);
+    player.logs.push({ time: getNow(), type: 'achievement', text: `获得大师词条：${chosenAff.name}` });
   }
   if (ach.reward.reincPoints) {
     player.reincPoints = (player.reincPoints || 0) + ach.reward.reincPoints;
   }
   rec.claimed = true;
-  let titleToGrant = ach.title;
-  if (achId === 'ascend') {
-    titleToGrant = player.godhood === 'god' ? '神灵' : '半神';
-  }
   if (titleToGrant) {
-    // v1.03：titles 统一对象结构（key → true）
     if (!player.titles || typeof player.titles !== 'object' || Array.isArray(player.titles)) player.titles = {};
     if (!player.titles[titleToGrant]) player.titles[titleToGrant] = true;
     if (!player.currentTitle) player.currentTitle = titleToGrant;
     rec.grantedTitle = titleToGrant;
   }
+  if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
+  const entry = { id: `ach:${achId}`, at: getNow(), type: 'achievement', reward, source: `/api/player/:username/quest/achievement/${achId}/claim` };
+  player.settlementLedger.push(entry);
+  if (player.settlementLedger.length > 100) player.settlementLedger.splice(0, player.settlementLedger.length - 100);
   return { success: true, status: 200 };
 }
 
@@ -234,7 +282,7 @@ function getAvailableAffixLevels(player) {
   return [1];
 }
 
-// 周重置（外部需 store）
+// 周重置（外部需 store，调用方负责持久化 via withTransaction/safeSave）
 function maybeResetWeeklyBossKills(store) {
   const meta = store.getMeta();
   const cur = getCurrentWeekKey();
@@ -244,13 +292,11 @@ function maybeResetWeeklyBossKills(store) {
     return false;
   }
   if (meta.bossWeek !== cur) {
-    let changed = false;
     for (const p of store.getAllPlayers()) {
-      if ((p.bossKills || 0) !== 0) { p.bossKills = 0; changed = true; }
+      if ((p.bossKills || 0) !== 0) p.bossKills = 0;
     }
     meta.bossWeek = cur;
     store.setMeta(meta);
-    if (changed) store.save();
     console.log(`BOSS榜周重置: ${cur}`);
     return true;
   }

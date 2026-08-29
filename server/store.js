@@ -1,54 +1,109 @@
 // 数据存储层 - 账号+角色数据
 const fs = require('fs');
 const path = require('path');
+let _getNow = () => Date.now();
+try { _getNow = require('./engine/state').getNow; } catch (_) {}
 
 let DB_PATH = process.env.DB_PATH || path.join(__dirname, 'db.json');
-let data = { accounts: {}, players: {} };
+let data = { accounts: {}, players: {}, meta: {} };
 let saveTimer = null;
 let _disableSave = false;
+let _lastSaveError = null;
 function __setDisableSave(v){ _disableSave = v; if(v && saveTimer){ clearTimeout(saveTimer); saveTimer=null; } }
 function __setDbPath(p){ DB_PATH = p; }
-function __resetStore(){ data = { accounts: {}, players: {}, meta: {} }; if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } }
+function __resetStore(){ data = { accounts: {}, players: {}, meta: {} }; _lastSaveError = null; if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } }
+function isPlainObject(o){ return o !== null && typeof o === 'object' && !Array.isArray(o); }
+function snapshot(){ return JSON.stringify(data); }
+function restore(s){ try { data = JSON.parse(s); } catch(e){ data = { accounts:{}, players:{}, meta:{} }; } }
+function getLastSaveError(){ return _lastSaveError; }
+function clearLastSaveError(){ _lastSaveError = null; }
+function cancelSaveTimer(){ if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } }
 
+function isValidRoot(d){
+  if (!isPlainObject(d)) return false;
+  if (!isPlainObject(d.accounts)) return false;
+  if (!isPlainObject(d.players)) return false;
+  if (!isPlainObject(d.meta)) return false;
+  return true;
+}
 function load() {
+  let loaded = false;
   try {
     if (fs.existsSync(DB_PATH)) {
-      data = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+      const raw = fs.readFileSync(DB_PATH, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (!isValidRoot(parsed)) throw new Error('逻辑损坏: 根对象非法');
+      data = parsed;
+      loaded = true;
     }
   } catch (e) {
-    // 主存档损坏（多为写盘中途断电/崩溃导致的截断 JSON），尝试从备份恢复
     console.error('主存档损坏:', e.message);
     const bakPath = DB_PATH + '.bak';
     if (fs.existsSync(bakPath)) {
       try {
-        data = JSON.parse(fs.readFileSync(bakPath, 'utf-8'));
+        const rawBak = fs.readFileSync(bakPath, 'utf-8');
+        const parsedBak = JSON.parse(rawBak);
+        if (!isValidRoot(parsedBak)) throw new Error('备份逻辑损坏');
+        data = parsedBak;
         console.error('已从备份恢复:', bakPath);
+        loaded = true;
       } catch (e2) {
         console.error('备份也损坏，使用空数据启动:', e2.message);
+        data = { accounts:{}, players:{}, meta:{} };
       }
     } else {
       console.error('无可用备份，使用空数据启动');
+      data = { accounts:{}, players:{}, meta:{} };
     }
   }
-  if (!data.accounts) data.accounts = {};
-  if (!data.players) data.players = {};
-  if (!data.meta) data.meta = {};
-  // bossWeek 初始化由 engine 负责周一边界，此处仅保证存在
+  if (!isPlainObject(data.accounts)) data.accounts = {};
+  if (!isPlainObject(data.players)) data.players = {};
+  if (!isPlainObject(data.meta)) data.meta = {};
   if (!data.meta.bossWeek) data.meta.bossWeek = null;
-  // 迁移旧数据：如果有 players 但没有 accounts，把旧 player 当作 account
+  if (!data.meta.arenaRewards) data.meta.arenaRewards = { daily:{}, weekly:{}, monthly:{} };
+  if (!data.meta.arenaCursors) data.meta.arenaCursors = null;
+  if (!data.meta.arenaSkipped) data.meta.arenaSkipped = { daily:{}, weekly:{}, monthly:{} };
   const playerKeys = Object.keys(data.players);
   if (playerKeys.length > 0 && Object.keys(data.accounts).length === 0) {
     for (const key of playerKeys) {
-      data.accounts[key] = { username: key, password: '', hasCharacter: true, createdAt: Date.now() };
+      data.accounts[key] = { username: key, password: '', hasCharacter: true, createdAt: _getNow() };
     }
   }
+  // 修剪 arenaRewards 保留上限 30/12/12（防止无限增长）
+  try { trimArenaRewards(); } catch(_){}
   console.log(`已加载 ${Object.keys(data.accounts).length} 个账号, ${Object.keys(data.players).length} 个角色`);
+}
+function trimArenaRewards(){
+  const ar = data.meta && data.meta.arenaRewards;
+  if (!isPlainObject(ar)) return;
+  const limits = { daily:30, weekly:12, monthly:12 };
+  for (const period of ['daily','weekly','monthly']){
+    const map = ar[period];
+    if (!isPlainObject(map)) continue;
+    const keys = Object.keys(map).sort();
+    const limit = limits[period];
+    if (keys.length > limit){
+      for(let i=0;i<keys.length-limit;i++) delete map[keys[i]];
+    }
+  }
+  const sk = data.meta.arenaSkipped;
+  if (isPlainObject(sk)){
+    for(const period of ['daily','weekly','monthly']){
+      const m = sk[period];
+      if (!isPlainObject(m)) continue;
+      const keys = Object.keys(m).sort();
+      const limit = limits[period];
+      if (keys.length > limit){
+        for(let i=0;i<keys.length-limit;i++) delete m[keys[i]];
+      }
+    }
+  }
 }
 
 function markDirty() {
   if (_disableSave) return;
   if (!saveTimer) {
-    saveTimer = setTimeout(() => { save(); saveTimer = null; }, 5000);
+    saveTimer = setTimeout(() => { safeSave(); }, 5000);
   }
 }
 
@@ -57,18 +112,39 @@ function save() {
   if (_disableSave) return;
   const tmpPath = DB_PATH + '.tmp';
   try {
-    // 原子写：先写临时文件，成功后整体改名替换，杜绝写盘中途崩溃产生截断 JSON
+    trimArenaRewards();
     fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
-    // 每小时滚动一次 .bak 备份（主档损坏时最多损失 1 小时进度）
-    const nowMs = Date.now();
+    const nowMs = _getNow();
     if (fs.existsSync(DB_PATH) && nowMs - _lastBakAt > 60 * 60 * 1000) {
       fs.copyFileSync(DB_PATH, DB_PATH + '.bak');
       _lastBakAt = nowMs;
     }
     fs.renameSync(tmpPath, DB_PATH);
+    clearLastSaveError();
   } catch (e) {
+    _lastSaveError = { at: _getNow(), message: e.message, path: DB_PATH };
     console.error('保存数据失败:', e.message);
     try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+    throw e;
+  }
+}
+function safeSave(){
+  try { save(); } catch(e){ /* lastSaveError 已记录 */ } finally { saveTimer = null; }
+}
+function withTransaction(fn){
+  const snap = snapshot();
+  let ret;
+  try { ret = fn(data); } catch(e){ restore(snap); cancelSaveTimer(); return { status:500, message: e.message || '事务异常' }; }
+  if (!ret || typeof ret.status !== 'number') ret = { status:500, message:'事务返回非法' };
+  if (ret.status >=200 && ret.status <300){
+    try { save(); } catch(e){ restore(snap); cancelSaveTimer(); return { status:500, message:'保存失败请重试' }; }
+    clearLastSaveError();
+    cancelSaveTimer();
+    return ret;
+  } else {
+    restore(snap);
+    cancelSaveTimer();
+    return ret;
   }
 }
 
@@ -85,4 +161,4 @@ function getAllPlayers() { return Object.values(data.players); }
 function getMeta() { return data.meta; }
 function setMeta(meta) { data.meta = meta; markDirty(); }
 
-module.exports = { load, save, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, getMeta, setMeta, __setDisableSave, __setDbPath, __resetStore };
+module.exports = { load, save, safeSave, withTransaction, snapshot, restore, getLastSaveError, clearLastSaveError, cancelSaveTimer, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, getMeta, setMeta, __setDisableSave, __setDbPath, __resetStore, __getRawData: () => data };

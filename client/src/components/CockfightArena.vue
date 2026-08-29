@@ -190,6 +190,7 @@ const intervention = ref(null);
 const reportLines = ref([]);
 const visibleLines = ref([]);
 const lastResult = ref(null);
+const pendingCreatedAt = ref(null);
 let lineTimer = null;
 
 function chickenName(id) {
@@ -215,14 +216,21 @@ async function enterArena() {
   try {
     const res = await api.enterCockArena(props.currentUser);
     if (res.success) {
-      chickens.value = res.data.chickens || [];
+      const payload = res.data || res;
+      chickens.value = payload.chickens || [];
+      // store createdAt for idempotent resolve — handle both res.data.createdAt and res.createdAt
+      pendingCreatedAt.value = payload.createdAt || res.createdAt || (res.data && res.data.createdAt) || null;
+      // also tolerate nested data.data for compat
+      if (!pendingCreatedAt.value && res.data && res.data.data) {
+        pendingCreatedAt.value = res.data.data.createdAt || null;
+      }
       betNo.value = null;
       intervention.value = null;
       reportLines.value = [];
       visibleLines.value = [];
       lastResult.value = null;
       phase.value = 'betting';
-      status.value.todayLeft = res.data.todayLeft;
+      status.value.todayLeft = payload.todayLeft ?? status.value.todayLeft;
     } else {
       toast.error(res.message || '进入斗场失败');
     }
@@ -235,13 +243,14 @@ async function fight() {
   if (loading.value || !betNo.value) return;
   loading.value = true;
   try {
-    const res = await api.resolveCockRound(props.currentUser, betNo.value, intervention.value);
+    const createdAt = pendingCreatedAt.value;
+    const res = await api.resolveCockRound(props.currentUser, betNo.value, intervention.value, createdAt);
     if (!res.success) {
       toast.error(res.message || '结算失败');
       phase.value = 'idle';
       return;
     }
-    const d = res.data;
+    const d = res.data || res;
     lastResult.value = d;
     reportLines.value = d.report || [];
     visibleLines.value = [];

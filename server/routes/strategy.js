@@ -9,12 +9,12 @@ const { fail } = require('./_helpers');
 function registerStrategyRoute(app, store) {
   app.post('/api/player/:username/strategy', (req, res) => {
     const player = store.getPlayer(req.params.username);
-    if (!player) return fail(res, '角色不存在');
-    const { strategy } = req.body;
+    if (!player) return fail(res, '角色不存在', 404);
+    const { strategy } = req.body || {};
 
     // A — 无副作用校验
     if (typeof strategy !== 'string' || !Object.hasOwn(STRATEGIES, strategy)) {
-      return fail(res, '策略不存在');
+      return fail(res, '策略不存在', 400);
     }
     const effStrategy = (typeof player.strategy === 'string' && Object.hasOwn(STRATEGIES, player.strategy)) ? player.strategy : 'balanced';
     const effChangedAt = Number.isFinite(player.strategyChangedAt) ? player.strategyChangedAt : 0;
@@ -22,12 +22,12 @@ function registerStrategyRoute(app, store) {
       const beforeS = player.strategy, beforeC = player.strategyChangedAt;
       migratePlayer(player);
       const migrated = (beforeS !== player.strategy) || (beforeC !== player.strategyChangedAt);
-      if (migrated) { store.setPlayer(player.username, player); store.save(); }
+      if (migrated) { store.setPlayer(player.username, player); store.safeSave(); }
       return res.json({ success: true, data: getPlayerView(player) });
     }
     if (effChangedAt !== 0 && getNow() - effChangedAt < STRATEGY_CD_MS) {
       const remain = Math.ceil((STRATEGY_CD_MS - (getNow() - effChangedAt)) / 1000);
-      return fail(res, `策略切换冷却中，剩余${remain}s`);
+      return fail(res, `策略切换冷却中，剩余${remain}s`, 409);
     }
     migratePlayer(player);
 
@@ -41,7 +41,7 @@ function registerStrategyRoute(app, store) {
         player.lastTick = getNow();
         store.setPlayer(player.username, player);
       }
-      store.save();
+      store.safeSave();
       return res.json({ success: false, message: `需要 Lv.${STRATEGIES[strategy].reqLevel} 才能使用该策略`, data: getPlayerView(player) });
     }
 
@@ -58,7 +58,7 @@ function registerStrategyRoute(app, store) {
     });
     if (player.logs.length > 30) player.logs = player.logs.slice(-30);
     store.setPlayer(player.username, player);
-    store.save();
+    store.safeSave();
     res.json({ success: true, data: getPlayerView(player) });
   });
 }

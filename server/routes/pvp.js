@@ -4,17 +4,56 @@ const {
   getReadonlyPlayer, getPowerScore,
   getSeasonKey, getSeasonIndex, getSeasonDaysLeft,
   getRankTier, getDailyKey, getWeeklyKey, getMonthlyKey,
-  settleArenaRewards, maybeResetSeason, applySeasonResetToPlayers,
+  settleArenaRewards, settleDuePeriods, maybeResetSeason, applySeasonResetToPlayers,
   buyArenaItem, getPlayerView, getNow,
 } = require('../engine');
 const { PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, ARENA_EQUIPMENT, ARENA_TITLES } = require('../data');
-const { ok, fail, loadPlayer, savePlayer } = require('./_helpers');
+const { ok, fail } = require('./_helpers');
+const { isTestMode } = require('../engine/state');
+const { assertSettlementReward, assertPvpChallengeResult } = require('../engine/settlement');
+
+function nextDailyKey(key) {
+  const d = new Date(key + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const da = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function nextWeeklyKey(key) {
+  const d = new Date(key + 'T00:00:00');
+  d.setDate(d.getDate() + 7);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const da = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function nextMonthlyKey(key) {
+  const [y,m] = key.split('-').map(Number);
+  const d = new Date(y, m-1, 1);
+  d.setMonth(d.getMonth()+1);
+  const ny = d.getFullYear();
+  const nm = String(d.getMonth()+1).padStart(2,'0');
+  return `${ny}-${nm}`;
+}
+function getNextPeriodKey(key, period) {
+  if (period === 'daily') return nextDailyKey(key);
+  if (period === 'weekly') return nextWeeklyKey(key);
+  if (period === 'monthly') return nextMonthlyKey(key);
+  return key;
+}
+function getCurKeyForPeriod(period) {
+  if (period === 'daily') return getDailyKey();
+  if (period === 'weekly') return getWeeklyKey();
+  if (period === 'monthly') return getMonthlyKey();
+  return '';
+}
 
 function registerPvpRoutes(app, store) {
   // 获取对手列表
   app.get('/api/arena/opponents/:username', (req, res) => {
     const player = store.getPlayer(req.params.username);
-    if (!player) return fail(res, '角色不存在');
+    if (!player) return fail(res, '角色不存在', 404);
     const myLevel = player.level || 1;
     const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
     const bots = generateArenaBots(myLevel, myRating);
@@ -68,129 +107,184 @@ function registerPvpRoutes(app, store) {
 
   // 挑战
   app.post('/api/arena/challenge', (req, res) => {
-    const { username, targetUsername, isBot } = req.body;
-    if (!username || !targetUsername) return fail(res, '缺少参数');
-    if (username === targetUsername) return fail(res, '不能挑战自己');
+    const { username, targetUsername, isBot, requestId } = req.body || {};
+    if (!username || !targetUsername) return fail(res, '缺少参数', 400);
+    if (!requestId) return fail(res, '缺少参数', 400);
+    if (username === targetUsername) return fail(res, '不能挑战自己', 409);
+    const ledgerId = `pvp:challenge:${requestId}`;
+    // quick existence check for replay before heavy logic (also checked inside transaction for atomicity)
+    const playerPre = store.getPlayer(username);
+    if (!playerPre) return fail(res, '角色不存在', 404);
 
-    const player = store.getPlayer(username);
-    if (!player) return fail(res, '角色不存在');
-    const lastPvp = (player.pvpStats && player.pvpStats.lastPvpAt) || 0;
-    const cdRemaining = lastPvp ? Math.max(0, PVP_CD_MS - (getNow() - lastPvp)) : 0;
-    if (cdRemaining > 0) return fail(res, `冷却中，还需 ${Math.ceil(cdRemaining / 1000)} 秒`);
-
-    let target;
-    if (isBot) {
-      // 优先从对手列表缓存中找玩家实际选中的机器人（缓存 10 分钟内有效）
-      const metaForCache = store.getMeta();
-      const cached = metaForCache.arenaBots && metaForCache.arenaBots[username];
-      const cacheValid = cached && Array.isArray(cached.bots)
-        && (getNow() - cached.time) < 10 * 60 * 1000;
-      target = cacheValid
-        ? cached.bots.find(b => b.username === targetUsername) || null
-        : null;
-      if (!target) {
-        // 缓存过期或未命中：重新生成一次尝试匹配；仍找不到则要求刷新列表，绝不静默换成别的对手
-        const myLevel = player.level || 1;
-        const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
-        const rating = myRating + Math.floor(Math.random() * 200) - 50;
-        const freshBots = generateArenaBots(myLevel, Math.max(800, rating));
-        target = freshBots.find(b => b.username === targetUsername) || null;
-        if (!target) return fail(res, '对手已刷新，请重新打开竞技场获取对手列表');
+    const result = store.withTransaction((data) => {
+      const meta = data.meta;
+      const player = data.players[username];
+      if (!player) return { status: 404, message: '角色不存在' };
+      // 1) 重放检查：先查 ledger
+      if (Array.isArray(player.settlementLedger)) {
+        const found = player.settlementLedger.find(e => e.id === ledgerId);
+        if (found) {
+          // 绑定校验
+          const ctx = found.requestContext || {};
+          if (ctx.username !== username || ctx.targetUsername !== targetUsername || !!ctx.isBot !== !!isBot) {
+            return { status: 409, message: 'requestId 冲突' };
+          }
+          if (!found.fullResult) {
+            return { status: 500, message: '数据损坏' };
+          }
+          const v = assertPvpChallengeResult(found.fullResult);
+          if (!v.valid) return { status: 500, message: '数据损坏:' + v.message };
+          return { status: 200, data: found.fullResult, already: true };
+        }
       }
-    } else {
-      target = store.getPlayer(targetUsername);
-      if (!target) return fail(res, '对手不存在');
-    }
-
-    const levelDiff = Math.abs((player.level || 1) - (target.level || 1));
-    if (levelDiff > PVP_LEVEL_RANGE) return fail(res, `等级差超过 ${PVP_LEVEL_RANGE} 级无法挑战`);
-
-    const battle = simulatePvP(player, target);
-    const isWin = battle.result === 'win';
-    const isDraw = battle.result === 'draw';
-    const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
-    const enemyRating = (target.pvpStats && target.pvpStats.rating) || 1000;
-    // 严格 ELO 平局：score = 0.5（无积分变动）
-    const pvpScore = isWin ? 1 : (isDraw ? 0.5 : 0);
-    const expected = 1 / (1 + Math.pow(10, (enemyRating - myRating) / 400));
-    const K = 32;
-    const ratingChange = Math.round(K * (pvpScore - expected));
-
-    if (!player.pvpStats) player.pvpStats = {};
-    player.pvpStats.rating = myRating + ratingChange;
-    player.pvpStats.lastPvpAt = getNow();
-    if (isWin) {
-      player.pvpStats.wins = (player.pvpStats.wins || 0) + 1;
-      player.pvpStats.streak = (player.pvpStats.streak || 0) + 1;
-      if (player.pvpStats.streak > (player.pvpStats.bestStreak || 0)) {
-        player.pvpStats.bestStreak = player.pvpStats.streak;
+      // 1b) 查 pvpRecords
+      if (meta.pvpRecords && Array.isArray(meta.pvpRecords)) {
+        const rec = meta.pvpRecords.find(r => r.id === ledgerId);
+        if (rec) {
+          const ctx = rec.requestContext || {};
+          if (ctx.username !== username || ctx.targetUsername !== targetUsername || !!ctx.isBot !== !!isBot) {
+            return { status: 409, message: 'requestId 冲突' };
+          }
+          if (!rec.fullResult) {
+            return { status: 500, message: '数据损坏' };
+          }
+          const v2 = assertPvpChallengeResult(rec.fullResult);
+          if (!v2.valid) return { status: 500, message: '数据损坏:' + v2.message };
+          return { status: 200, data: rec.fullResult, already: true };
+        }
       }
-    } else if (isDraw) {
-      // 平局：不计入 win/loss，连胜中断但开新连胜不重置（保守做法：streak 保留）
-      player.pvpStats.draws = (player.pvpStats.draws || 0) + 1;
-    } else {
-      player.pvpStats.losses = (player.pvpStats.losses || 0) + 1;
-      player.pvpStats.streak = 0;
-    }
+      // 2) 自挑战已在外层校验，但内部也需再校验（防止并发）
+      if (username === targetUsername) return { status: 409, message: '不能挑战自己' };
+      const lastPvp = (player.pvpStats && player.pvpStats.lastPvpAt) || 0;
+      const cdRemaining = lastPvp ? Math.max(0, PVP_CD_MS - (getNow() - lastPvp)) : 0;
+      if (cdRemaining > 0) return { status: 409, message: `冷却中，还需 ${Math.ceil(cdRemaining / 1000)} 秒` };
 
-    const baseRewards = calcPvpRewards(player.level || 1, isWin, player.pvpStats.streak || 0);
-    // 平局也派少量奖励（比输多一点，比赢少一点），鼓励玩家不摆烂
-    let gold, exp, coinsEarned;
-    if (isDraw) {
-      gold = Math.max(8, Math.floor((player.level || 1) * 2));
-      exp = 5 + Math.floor((player.level || 1) * 1);
-      coinsEarned = 4;
-    } else {
-      gold = baseRewards.gold;
-      exp = baseRewards.exp;
-      coinsEarned = isWin
-        ? 10 + (player.level || 1) + Math.min(player.pvpStats.streak || 0, 5) * 5
-        : 2;
-    }
-    player.gold = (player.gold || 0) + gold;
-    player.exp = (player.exp || 0) + exp;
-    player[PVP_CURRENCY_KEY] = (player[PVP_CURRENCY_KEY] || 0) + coinsEarned;
+      let target;
+      if (isBot) {
+        const cached = meta.arenaBots && meta.arenaBots[username];
+        const cacheValid = cached && Array.isArray(cached.bots) && (getNow() - cached.time) < 10 * 60 * 1000;
+        target = cacheValid ? cached.bots.find(b => b.username === targetUsername) || null : null;
+        if (!target) {
+          const myLevel = player.level || 1;
+          const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
+          const rating = myRating + Math.floor(Math.random() * 200) - 50;
+          const freshBots = generateArenaBots(myLevel, Math.max(800, rating));
+          target = freshBots.find(b => b.username === targetUsername) || null;
+          if (!target) return { status: 409, message: '对手已刷新，请重新打开竞技场获取对手列表' };
+        }
+      } else {
+        target = data.players[targetUsername];
+        if (!target) return { status: 404, message: '对手不存在' };
+      }
 
-    const meta = store.getMeta();
-    if (!Array.isArray(meta.pvpRecords)) meta.pvpRecords = [];
-    meta.pvpRecords.unshift({
-      time: getNow(),
-      attacker: username, defender: targetUsername,
-      attackerName: player.name, defenderName: target.name || target.username,
-      result: battle.result, // win / lose / draw 都如实记录
-      ratingChange,
-      rewards: { gold, exp, coins: coinsEarned },
-      isBot: !!isBot,
-    });
-    if (meta.pvpRecords.length > 200) meta.pvpRecords = meta.pvpRecords.slice(0, 200);
-    store.setMeta(meta);
+      const levelDiff = Math.abs((player.level || 1) - (target.level || 1));
+      if (levelDiff > PVP_LEVEL_RANGE) return { status: 409, message: `等级差超过 ${PVP_LEVEL_RANGE} 级无法挑战` };
 
-    player.logs = player.logs || [];
-    player.logs.push({
-      time: getNow(),
-      type: 'pvp',
-      text: isWin
-        ? `竞技场胜利！击败了 ${target.name || target.username}，+${gold}金币 +${exp}经验 +${coinsEarned}竞技币`
-        : isDraw
-        ? `竞技场平局，与 ${target.name || target.username} 战至力竭，+${gold}金币 +${exp}经验 +${coinsEarned}竞技币`
-        : `竞技场失败...被 ${target.name || target.username} 击败，+${coinsEarned}竞技币`,
-    });
+      const battle = simulatePvP(player, target);
+      const isWin = battle.result === 'win';
+      const isDraw = battle.result === 'draw';
+      const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
+      const enemyRating = (target.pvpStats && target.pvpStats.rating) || 1000;
+      const pvpScore = isWin ? 1 : (isDraw ? 0.5 : 0);
+      const expected = 1 / (1 + Math.pow(10, (enemyRating - myRating) / 400));
+      const K = 32;
+      const ratingChange = Math.round(K * (pvpScore - expected));
 
-    store.setPlayer(player.username, player);
-    store.save();
-    res.json({
-      success: true,
-      data: {
-        battle, isWin, isDraw,
+      if (!player.pvpStats) player.pvpStats = {};
+      player.pvpStats.rating = myRating + ratingChange;
+      player.pvpStats.lastPvpAt = getNow();
+      if (isWin) {
+        player.pvpStats.wins = (player.pvpStats.wins || 0) + 1;
+        player.pvpStats.streak = (player.pvpStats.streak || 0) + 1;
+        if (player.pvpStats.streak > (player.pvpStats.bestStreak || 0)) {
+          player.pvpStats.bestStreak = player.pvpStats.streak;
+        }
+      } else if (isDraw) {
+        player.pvpStats.draws = (player.pvpStats.draws || 0) + 1;
+      } else {
+        player.pvpStats.losses = (player.pvpStats.losses || 0) + 1;
+        player.pvpStats.streak = 0;
+      }
+
+      const baseRewards = calcPvpRewards(player.level || 1, isWin, player.pvpStats.streak || 0);
+      let gold, exp, coinsEarned;
+      if (isDraw) {
+        gold = Math.max(8, Math.floor((player.level || 1) * 2));
+        exp = 5 + Math.floor((player.level || 1) * 1);
+        coinsEarned = 4;
+      } else {
+        gold = baseRewards.gold;
+        exp = baseRewards.exp;
+        coinsEarned = isWin ? 10 + (player.level || 1) + Math.min(player.pvpStats.streak || 0, 5) * 5 : 2;
+      }
+      player.gold = (player.gold || 0) + gold;
+      player.exp = (player.exp || 0) + exp;
+      player[PVP_CURRENCY_KEY] = (player[PVP_CURRENCY_KEY] || 0) + coinsEarned;
+
+      if (!Array.isArray(meta.pvpRecords)) meta.pvpRecords = [];
+
+      const fullResult = {
+        battle,
+        isWin,
+        isDraw,
         rewards: { gold, exp, coins: coinsEarned },
         ratingChange,
         newRating: player.pvpStats.rating,
         arenaCoins: player[PVP_CURRENCY_KEY] || 0,
         targetName: target.name || target.username,
         targetLevel: target.level,
+        targetJob: target.job || '无',
         player: getPlayerView(player),
-      }
+      };
+
+      // settlement ledger with strong-type validation
+      if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
+      const reward = { gold, exp, coins: coinsEarned };
+      const vReward = assertSettlementReward('pvp_challenge', reward);
+      if (!vReward.valid) return { status: 500, message: '奖励校验失败:' + vReward.message };
+      const vFull = assertPvpChallengeResult(fullResult);
+      if (!vFull.valid) return { status: 500, message: '结果校验失败:' + vFull.message };
+      player.settlementLedger.push({
+        id: ledgerId,
+        at: getNow(),
+        type: 'pvp_challenge',
+        reward,
+        source: `pvp:challenge:${requestId}`,
+        fullResult,
+        requestContext: { username, targetUsername, isBot: !!isBot },
+      });
+      if (player.settlementLedger.length > 100) player.settlementLedger.splice(0, player.settlementLedger.length - 100);
+
+      meta.pvpRecords.unshift({
+        id: ledgerId,
+        time: getNow(),
+        attacker: username, defender: targetUsername,
+        attackerName: player.name, defenderName: target.name || target.username,
+        result: battle.result,
+        ratingChange,
+        rewards: { gold, exp, coins: coinsEarned },
+        isBot: !!isBot,
+        fullResult,
+        requestContext: { username, targetUsername, isBot: !!isBot },
+      });
+      if (meta.pvpRecords.length > 200) meta.pvpRecords = meta.pvpRecords.slice(0, 200);
+
+      player.logs = player.logs || [];
+      player.logs.push({
+        time: getNow(),
+        type: 'pvp',
+        text: isWin ? `竞技场胜利！击败了 ${target.name || target.username}，+${gold}金币 +${exp}经验 +${coinsEarned}竞技币` : isDraw ? `竞技场平局，与 ${target.name || target.username} 战至力竭，+${gold}金币 +${exp}经验 +${coinsEarned}竞技币` : `竞技场失败...被 ${target.name || target.username} 击败，+${coinsEarned}竞技币`,
+      });
+      // meta and player already mutated in data, no need setPlayer/setMeta separately because data is reference
+      // But call setMeta/setPlayer to trigger markDirty? Not needed inside transaction because save will be done.
+      // However for consistency, ensure data.players and data.meta are updated (they already are)
+
+      return { status: 200, data: fullResult };
     });
+
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
+    if (result.already) return res.json({ success: true, data: result.data, already: true });
+    return res.json({ success: true, data: result.data });
   });
 
   // 排行榜
@@ -232,7 +326,6 @@ function registerPvpRoutes(app, store) {
       if (!grouped[item.reqLevel]) grouped[item.reqLevel] = [];
       grouped[item.reqLevel].push(item);
     }
-    // 永久称号商品：带 owned 标记（需传 ?username=）
     const username = req.query.username || '';
     const player = username ? store.getPlayer(username) : null;
     const ownedKeys = player ? Object.keys(player.titles || {}) : [];
@@ -240,46 +333,123 @@ function registerPvpRoutes(app, store) {
     res.json({ success: true, data: { items: ARENA_EQUIPMENT, grouped, titles } });
   });
   app.post('/api/arena/buy', (req, res) => {
-    const { username, itemId } = req.body;
-    if (!username || !itemId) return fail(res, '缺少参数');
-    const player = store.getPlayer(username);
-    if (!player) return fail(res, '角色不存在');
-    const result = buyArenaItem(player, itemId);
-    if (!result.success) return res.json(result);
-    store.setPlayer(username, player);
-    store.save();
-    res.json({ success: true, data: { item: result.item, arenaCoins: player[PVP_CURRENCY_KEY] || 0, player: getPlayerView(player) } });
-  });
-
-  // 赛季信息
-  app.get('/api/arena/season', (req, res) => {
-    const meta = store.getMeta();
-    const currentSeason = getSeasonKey();
-    if (!meta.currentSeason) meta.currentSeason = currentSeason;
-    const reset = maybeResetSeason(meta);
-    if (reset.reset) {
-      applySeasonResetToPlayers(store);
-      store.save();
-    }
-    res.json({
-      success: true,
-      data: {
-        currentSeason,
-        seasonIdx: getSeasonIndex(),
-        daysLeft: getSeasonDaysLeft(),
-        monthsPerSeason: 3,
-        arenaCoins: store.getPlayer(req.query.username || '')?.[PVP_CURRENCY_KEY] || 0,
-        lastResetFrom: meta.lastResetFrom || null,
-        lastResetAt: meta.lastResetAt || null,
-      }
+    const { username, itemId } = req.body || {};
+    if (!username || !itemId) return fail(res, '缺少参数', 400);
+    const existing = store.getPlayer(username);
+    if (!existing) return fail(res, '角色不存在', 404);
+    const result = store.withTransaction((data) => {
+      const player = data.players[username];
+      if (!player) return { status: 404, message: '角色不存在' };
+      const r = buyArenaItem(player, itemId);
+      if (!r.success) return { status: 400, message: r.message };
+      return { status: 200, data: { item: r.item, arenaCoins: player[PVP_CURRENCY_KEY] || 0, player: getPlayerView(player) } };
     });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
+    // Handle both {success:false} and message cases from buyArenaItem legacy (it returns {success:false,message})
+    // Our transaction already handles, but for compatibility, if result is 200 we return success
+    return res.json({ success: true, data: result.data });
   });
 
-  // 赛季奖励快照
+  // 赛季信息 — 事务化
+  app.get('/api/arena/season', (req, res) => {
+    const result = store.withTransaction((data) => {
+      const meta = data.meta;
+      const currentSeason = getSeasonKey();
+      if (!meta.currentSeason) meta.currentSeason = currentSeason;
+      const reset = maybeResetSeason(meta);
+      if (reset.reset) {
+        applySeasonResetToPlayers(store);
+      }
+      return {
+        status: 200,
+        data: {
+          currentSeason,
+          seasonIdx: getSeasonIndex(),
+          daysLeft: getSeasonDaysLeft(),
+          monthsPerSeason: 3,
+          arenaCoins: (data.players[req.query.username || ''] && data.players[req.query.username][PVP_CURRENCY_KEY]) || 0,
+          lastResetFrom: meta.lastResetFrom || null,
+          lastResetAt: meta.lastResetAt || null,
+        }
+      };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message || '保存失败请重试' });
+    return res.json({ success: true, data: result.data });
+  });
+
+  // 赛季奖励快照 — 支持 periodKey 查询
   app.get('/api/arena/rewards/:period', (req, res) => {
     const period = req.params.period;
-    if (!['daily', 'weekly', 'monthly'].includes(period)) return fail(res, '无效的奖励周期');
+    if (!['daily', 'weekly', 'monthly'].includes(period)) return fail(res, '无效的奖励周期', 400);
+    const periodKeyQuery = req.query.periodKey || req.query.period_key || '';
+    const usernameQ = req.query.username || '';
     const meta = store.getMeta();
+    const curKey = getCurKeyForPeriod(period);
+    let targetKey = periodKeyQuery ? String(periodKeyQuery) : curKey;
+    // 格式校验 if periodKey provided
+    if (periodKeyQuery) {
+      if (period === 'daily' && !/^\d{4}-\d{2}-\d{2}$/.test(targetKey)) return fail(res, 'periodKey 格式非法', 400);
+      if (period === 'weekly' && !/^\d{4}-\d{2}-\d{2}$/.test(targetKey)) return fail(res, 'periodKey 格式非法', 400);
+      if (period === 'monthly' && !/^\d{4}-\d{2}$/.test(targetKey)) return fail(res, 'periodKey 格式非法', 400);
+      if (period === 'weekly') {
+        const d = new Date(targetKey + 'T00:00:00');
+        if (d.getDay() !== 1) return fail(res, 'periodKey 必须为周一', 400);
+      }
+    }
+    // 保留窗口校验
+    const limits = { daily: 30, weekly: 12, monthly: 12 };
+    // For simplicity, if targetKey not in arenaRewards and not in arenaSkipped and is too old, return 400/404
+    // Compute age by comparing sorted keys count? We'll approximate by checking if targetKey < oldest retained key when over limit
+    // But we can just check existence in ledger/skipped if beyond 30 etc.
+    // If targetKey is far past and not found, we return 404超出保留窗口
+    // Determine if beyond retention by checking if number of stored keys exceeds limit and targetKey is older than smallest stored
+    const storedMap = (meta.arenaRewards && meta.arenaRewards[period]) || {};
+    const skippedMap = (meta.arenaSkipped && meta.arenaSkipped[period]) || {};
+    const has = storedMap[targetKey] !== undefined || skippedMap[targetKey] !== undefined;
+    // Also check ledger for any player that has this periodKey settled (fallback)
+    let inLedger = false;
+    if (!has && usernameQ) {
+      const p = store.getPlayer(usernameQ);
+      if (p && Array.isArray(p.settlementLedger)) {
+        const ledgerIdPrefix = `arena:${period}:${targetKey}:`;
+        inLedger = p.settlementLedger.some(e => e.id && e.id.startsWith(ledgerIdPrefix));
+      }
+    } else if (!has) {
+      // check any player's ledger? Could be expensive, but for retention we may check all players quickly
+      // If not has and targetKey is older than curKey minus limit*period, we treat as out of window
+    }
+    // Simple out-of-window heuristic: if targetKey < curKey and distance exceeds limit, and not found, return 404
+    if (!has && !inLedger && targetKey !== curKey) {
+      // estimate oldest allowed
+      let oldestAllowed = curKey;
+      // For daily, subtract limit days
+      try {
+        if (period === 'daily') {
+          const d = new Date(curKey + 'T00:00:00');
+          d.setDate(d.getDate() - limits.daily);
+          const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const da = String(d.getDate()).padStart(2,'0');
+          oldestAllowed = `${y}-${m}-${da}`;
+        } else if (period === 'weekly') {
+          const d = new Date(curKey + 'T00:00:00');
+          d.setDate(d.getDate() - limits.weekly*7);
+          const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const da = String(d.getDate()).padStart(2,'0');
+          // adjust to Monday
+          const day = d.getDay(); const diff = day===0?-6:1-day; d.setDate(d.getDate()+diff);
+          const yy = d.getFullYear(); const mm = String(d.getMonth()+1).padStart(2,'0'); const dd = String(d.getDate()).padStart(2,'0');
+          oldestAllowed = `${yy}-${mm}-${dd}`;
+        } else if (period === 'monthly') {
+          const [y,m] = curKey.split('-').map(Number);
+          const d = new Date(y, m-1, 1);
+          d.setMonth(d.getMonth() - limits.monthly);
+          oldestAllowed = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        }
+        if (targetKey < oldestAllowed) {
+          return res.status(404).json({ success: false, message: '超出保留窗口' });
+        }
+      } catch(_) {}
+    }
+
+    // Build ranking for display (current ranking)
     const rankingList = store.getAllPlayers()
       .filter(p => p.level)
       .map(p => {
@@ -294,17 +464,15 @@ function registerPvpRoutes(app, store) {
       const tier = getRankTier(period, rank);
       if (tier) rewardMap[top100[i].username] = { rank, tier: tier.tier, coins: tier.coins };
     }
-    const periodKey = period === 'daily' ? getDailyKey()
-      : period === 'weekly' ? getWeeklyKey()
-      : getMonthlyKey();
-    const settled = (meta.arenaRewards && meta.arenaRewards[period] && meta.arenaRewards[period][periodKey]) || null;
-    res.json({
+    const settled = (meta.arenaRewards && meta.arenaRewards[period] && meta.arenaRewards[period][targetKey]) || null;
+    const skipped = (meta.arenaSkipped && meta.arenaSkipped[period] && meta.arenaSkipped[period][targetKey]) || null;
+    return res.json({
       success: true,
       data: {
-        period, periodKey,
+        period, periodKey: targetKey,
         ranking: top100,
-        myReward: req.query.username ? rewardMap[req.query.username] : null,
-        rewardMap, settled: !!settled, settledRewards: settled,
+        myReward: usernameQ ? rewardMap[usernameQ] : null,
+        rewardMap, settled: !!settled, settledRewards: settled, skipped: !!skipped,
         rules: {
           S: '1 名 · 1/2-3/4-10/11-20/21-50/51-100',
           tiers: { S: '1', A: '2-3', B: '4-10', C: '11-20', D: '21-50', E: '51-100' },
@@ -313,11 +481,64 @@ function registerPvpRoutes(app, store) {
     });
   });
 
-  // 手动结算
+  // 手动结算 — 鉴权 + periodKey 校验 + 事务
   app.post('/api/arena/settle', (req, res) => {
-    const { period } = req.body;
-    if (!['daily', 'weekly', 'monthly'].includes(period)) return fail(res, '无效的奖励周期');
-    const meta = store.getMeta();
+    const adminToken = req.headers['x-admin-token'];
+    const isTest = isTestMode();
+    const expected = process.env.ADMIN_TOKEN;
+    if (!(isTest || (expected && adminToken === expected))) return fail(res, '无权限', 403);
+    const { period, periodKey } = req.body || {};
+    if (!['daily', 'weekly', 'monthly'].includes(period)) return fail(res, '无效的奖励周期', 400);
+    const curKey = getCurKeyForPeriod(period);
+    let targetKey = periodKey ? String(periodKey) : null;
+    if (targetKey) {
+      if (period === 'daily' && !/^\d{4}-\d{2}-\d{2}$/.test(targetKey)) return fail(res, 'periodKey 格式非法', 400);
+      if (period === 'weekly' && !/^\d{4}-\d{2}-\d{2}$/.test(targetKey)) return fail(res, 'periodKey 格式非法', 400);
+      if (period === 'monthly' && !/^\d{4}-\d{2}$/.test(targetKey)) return fail(res, 'periodKey 格式非法', 400);
+      if (period === 'weekly') {
+        const d = new Date(targetKey + 'T00:00:00');
+        if (d.getDay() !== 1) return fail(res, 'periodKey 必须为周一', 400);
+      }
+      if (!(targetKey < curKey)) return fail(res, 'periodKey 必须为已结束周期', 400);
+    } else {
+      // 若不传，取 nextKey（仅结算选定周期，不调用全量 settleDuePeriods）
+      const metaPre = store.getMeta();
+      // 确保游标已初始化（统一先初始化 cursor，避免空对象解引用 500）
+      if (!metaPre.arenaCursors || typeof metaPre.arenaCursors !== 'object' || Array.isArray(metaPre.arenaCursors)) {
+        // 初始化为两周期前已结算周期，使 nextKey=昨天/上周/上月 < curKey
+        const { getDailyKey, getWeeklyKey, getMonthlyKey } = require('../engine/daily');
+        const { getNow } = require('../engine/state');
+        const now = getNow();
+        const twoDaysAgo = new Date(now - 2*86400000); twoDaysAgo.setHours(0,0,0,0);
+        const dailyKey = `${twoDaysAgo.getFullYear()}-${String(twoDaysAgo.getMonth()+1).padStart(2,'0')}-${String(twoDaysAgo.getDate()).padStart(2,'0')}`;
+        const twoWeeksAgo = new Date(now - 14*86400000); twoWeeksAgo.setHours(0,0,0,0);
+        const day = twoWeeksAgo.getDay(); const diffToMonday = day === 0 ? -6 : 1 - day;
+        const monday = new Date(twoWeeksAgo); monday.setDate(twoWeeksAgo.getDate() + diffToMonday);
+        const weeklyKey = `${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`;
+        const twoMonthsAgo = new Date(now); twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+        const monthlyKey = `${twoMonthsAgo.getFullYear()}-${String(twoMonthsAgo.getMonth()+1).padStart(2,'0')}`;
+        if (!metaPre.arenaCursors || typeof metaPre.arenaCursors !== 'object') metaPre.arenaCursors = {};
+        if (!metaPre.arenaCursors.daily) metaPre.arenaCursors.daily = dailyKey;
+        if (!metaPre.arenaCursors.weekly) metaPre.arenaCursors.weekly = weeklyKey;
+        if (!metaPre.arenaCursors.monthly) metaPre.arenaCursors.monthly = monthlyKey;
+        store.setMeta(metaPre);
+      }
+      if (!metaPre.arenaCursors[period]) {
+        // 若该周期仍缺失，初始化为两周期前
+        const { getDailyKey, getWeeklyKey, getMonthlyKey } = require('../engine/daily');
+        const { getNow } = require('../engine/state');
+        const now = getNow();
+        let initKey;
+        if (period === 'daily') { const d=new Date(now-2*86400000); d.setHours(0,0,0,0); initKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+        else if (period === 'weekly') { const d=new Date(now-14*86400000); d.setHours(0,0,0,0); const day=d.getDay(); const diff=day===0?-6:1-day; const m=new Date(d); m.setDate(d.getDate()+diff); initKey=`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}-${String(m.getDate()).padStart(2,'0')}`; }
+        else { const d=new Date(now); d.setMonth(d.getMonth()-2); initKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+        metaPre.arenaCursors[period]=initKey;
+        store.setMeta(metaPre);
+      }
+      targetKey = getNextPeriodKey(metaPre.arenaCursors[period], period);
+      if (!(targetKey < curKey)) return fail(res, '暂无可结算周期', 400);
+    }
+
     const rankingList = store.getAllPlayers()
       .filter(p => p.level)
       .map(p => {
@@ -325,25 +546,60 @@ function registerPvpRoutes(app, store) {
         return { username: rp.username, rating: (rp.pvpStats && rp.pvpStats.rating) || 1000 };
       })
       .sort((a, b) => b.rating - a.rating);
-    const result = settleArenaRewards(meta, period, rankingList);
+
+    const result = store.withTransaction((data) => {
+      const meta = data.meta;
+      if (!meta.arenaRewards) meta.arenaRewards = { daily:{}, weekly:{}, monthly:{} };
+      if (!meta.arenaSkipped) meta.arenaSkipped = { daily:{}, weekly:{}, monthly:{} };
+      for (const pp of ['daily','weekly','monthly']) {
+        if (!meta.arenaRewards[pp]) meta.arenaRewards[pp] = {};
+        if (!meta.arenaSkipped[pp]) meta.arenaSkipped[pp] = {};
+      }
+      if (meta.arenaSkipped[period][targetKey] || meta.arenaRewards[period][targetKey]) {
+        return { status: 200, already: true, key: targetKey };
+      }
+      // Ensure cursors exists (统一先初始化 cursor，避免空对象解引用 500)
+      if (!meta.arenaCursors || typeof meta.arenaCursors !== 'object' || Array.isArray(meta.arenaCursors)) meta.arenaCursors = {};
+      if (!meta.arenaCursors[period]) {
+        // initialize to previous of targetKey so nextKey = targetKey
+        let prev;
+        if (period === 'daily') {
+          const d = new Date(targetKey + 'T00:00:00');
+          d.setDate(d.getDate() - 1);
+          const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const da = String(d.getDate()).padStart(2,'0');
+          prev = `${y}-${m}-${da}`;
+        } else if (period === 'weekly') {
+          const d = new Date(targetKey + 'T00:00:00');
+          d.setDate(d.getDate() - 7);
+          const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const da = String(d.getDate()).padStart(2,'0');
+          prev = `${y}-${m}-${da}`;
+        } else {
+          const [y,m] = targetKey.split('-').map(Number);
+          const d = new Date(y, m-1, 1);
+          d.setMonth(d.getMonth()-1);
+          prev = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        }
+        meta.arenaCursors[period] = prev;
+      }
+      const curCursor = meta.arenaCursors[period];
+      const expectedNext = getNextPeriodKey(curCursor, period);
+      try {
+        const r = settleArenaRewards(store, period, rankingList, targetKey);
+        // 仅当 targetKey === expectedNext 才推进 cursor
+        if (targetKey === expectedNext) {
+          meta.arenaCursors[period] = targetKey;
+        }
+        // Return credited count
+        let credited = Object.keys(r.rewards || {}).length;
+        return { status: 200, key: targetKey, rewarded: r.rewarded, rewards: r.rewards, creditedCount: credited };
+      } catch (e) {
+        return { status: 500, message: e.message };
+      }
+    });
+
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
     if (result.already) return res.json({ success: true, data: { already: true, key: result.key } });
-    let credited = 0;
-    for (const [uname, info] of Object.entries(result.rewards)) {
-      const p = store.getPlayer(uname);
-      if (!p) continue;
-      p[PVP_CURRENCY_KEY] = (p[PVP_CURRENCY_KEY] || 0) + info.coins;
-      p.logs = p.logs || [];
-      p.logs.push({
-        time: getNow(),
-        type: 'arena-reward',
-        text: `【${period === 'daily' ? '日结' : period === 'weekly' ? '周结' : '月结'}奖励】${info.tier} 级 (第 ${info.rank} 名) +${info.coins} 竞技币`,
-      });
-      store.setPlayer(uname, p);
-      credited++;
-    }
-    store.setMeta(meta);
-    store.save();
-    res.json({ success: true, data: { ...result, creditedCount: credited } });
+    return res.json({ success: true, data: result });
   });
 }
 

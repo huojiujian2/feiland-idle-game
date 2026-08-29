@@ -10,7 +10,7 @@ function registerGenesisRoutes(app, store) {
   // 拉取创世之书的目录（种族/词缀/限额 + 自己已创造的所有项）
   app.get('/api/player/:username/genesis', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const meta = store.getMeta();
     const data = listGenesis(r.player, meta);
     return ok(res, { ...data, unlocked: isGenesisUnlocked(r.player) });
@@ -19,43 +19,43 @@ function registerGenesisRoutes(app, store) {
   // 降生：捏怪物
   app.post('/api/player/:username/genesis/monster', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const meta = store.getMeta();
     const draft = req.body || {};
     const result = birthMonster(r.player, draft, meta);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     store.setMeta(meta);
-    store.save();
+    store.safeSave();
     return ok(res, { monster: result.monster, oracle: result.oracle, player: getPlayerView(r.player) });
   });
 
   // 锻造：造装备
   app.post('/api/player/:username/genesis/equip', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const meta = store.getMeta();
     const draft = req.body || {};
     const result = forgeEquip(r.player, draft, meta);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     store.setMeta(meta);
-    store.save();
+    store.safeSave();
     return ok(res, { equip: result.equip, oracle: result.oracle, player: getPlayerView(r.player) });
   });
 
   // 抹去：删除自创项
   app.post('/api/player/:username/genesis/delete', (req, res) => {
     const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    if (r.error) return fail(res, r.error, 404);
     const meta = store.getMeta();
     const { kind, id } = req.body || {};
-    if (kind !== 'monsters' && kind !== 'equips') return fail(res, 'kind 必须为 monsters 或 equips');
+    if (kind !== 'monsters' && kind !== 'equips') return fail(res, 'kind 必须为 monsters 或 equips', 400);
     const result = deleteGenesis(r.player, kind, id, meta);
-    if (!result.success) return fail(res, result.message);
+    if (!result.success) return fail(res, result.message, 400);
     savePlayer(store, r.player);
     store.setMeta(meta);
-    store.save();
+    store.safeSave();
     return ok(res, { oracle: result.oracle, player: getPlayerView(r.player) });
   });
 

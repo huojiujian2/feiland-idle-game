@@ -4,6 +4,7 @@
 const { getRand, getNow } = require('./state');
 const { getTodayKey } = require('./daily');
 const { CHICKENS, COCKFIGHT_RULES, COCKFIGHT_TITLES } = require('../data/cockfight');
+const { assertSettlementReward } = require('./settlement');
 
 const R = COCKFIGHT_RULES;
 
@@ -128,11 +129,28 @@ function simulateLineup(lineupIds, mods) {
 
 // ---------- 流程 ----------
 
+function getDayKeyForTs(ts) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${da}`;
+}
+
 // 进入斗场：检查次数，生成 6 只（激将法禁赛鸡不出现）
 function enterCockArena(player) {
   const s = ensureState(player);
   if (s.usedToday >= R.DAILY_LIMIT) {
     return { success: false, message: `今日参赛次数已用完（${R.DAILY_LIMIT}/${R.DAILY_LIMIT}）` };
+  }
+  const now = getNow();
+  if (s.current && typeof s.current.createdAt === 'number' && now - s.current.createdAt < 30 * 60 * 1000) {
+    const chickens = s.current.lineup.map((id, i) => {
+      const c = CHICKENS.find(x => x.id === id);
+      return { no: i + 1, id: c.id, name: c.name, clues: [...c.clues] };
+    });
+    return { success: true, chickens, createdAt: s.current.createdAt, todayLeft: Math.max(0, R.DAILY_LIMIT - s.usedToday) };
   }
   const pool = CHICKENS.filter(c => c.id !== s.banNext);
   s.banNext = null;   // 替换标记一次性
@@ -150,14 +168,64 @@ function enterCockArena(player) {
     const c = CHICKENS.find(x => x.id === id);
     return { no: i + 1, id: c.id, name: c.name, clues: [...c.clues] };
   });
-  return { success: true, chickens, todayLeft: Math.max(0, R.DAILY_LIMIT - s.usedToday) };
+  return { success: true, chickens, createdAt: s.current.createdAt, todayLeft: Math.max(0, R.DAILY_LIMIT - s.usedToday) };
 }
 
 // 结算一局：押注 + 干预 + 擂台赛 + 积分
-function resolveCockRound(player, bet, intervention) {
+function resolveCockRound(player, bet, intervention, createdAt) {
   const s = ensureState(player);
-  if (!s.current) return { success: false, message: '请先进入斗场' };
-  if (s.usedToday >= R.DAILY_LIMIT) return { success: false, message: '今日参赛次数已用完' };
+  // 统一 createdAt 处理：若传了 createdAt 则走幂等逻辑
+  let effectiveCreatedAt = createdAt;
+  if (effectiveCreatedAt !== undefined && effectiveCreatedAt !== null) {
+    effectiveCreatedAt = Number(effectiveCreatedAt);
+    if (!Number.isFinite(effectiveCreatedAt)) {
+      return { success: false, message: 'createdAt 非法' };
+    }
+    const dayKeyForCreated = getDayKeyForTs(effectiveCreatedAt);
+    const ledgerId = `cock:round:${dayKeyForCreated}:${effectiveCreatedAt}`;
+    const altLedgerId = `cock:round:${getTodayKey()}:${effectiveCreatedAt}`;
+    // 优先查 ledger
+    if (Array.isArray(player.settlementLedger)) {
+      let found = player.settlementLedger.find(e => e.id === ledgerId || e.id === altLedgerId);
+      if (!found) {
+        found = player.settlementLedger.find(e => e.type === 'cock_round' && e.fullResult && e.fullResult.createdAt === effectiveCreatedAt);
+      }
+      if (!found) {
+        // also check any id ending with :${effectiveCreatedAt}
+        found = player.settlementLedger.find(e => typeof e.id === 'string' && e.id.endsWith(`:${effectiveCreatedAt}`) && e.type === 'cock_round');
+      }
+      if (found) {
+        if (!found.fullResult) {
+          return { success: false, status: 500, message: '数据损坏' };
+        }
+        return { success: true, already: true, ...found.fullResult };
+      }
+    }
+    // 查 history
+    if (Array.isArray(s.history)) {
+      const hFound = s.history.find(h => h.createdAt === effectiveCreatedAt || (h.fullResult && h.fullResult.createdAt === effectiveCreatedAt));
+      if (hFound) {
+        if (!hFound.fullResult) {
+          return { success: false, status: 500, message: '数据损坏' };
+        }
+        return { success: true, already: true, ...hFound.fullResult };
+      }
+    }
+    // 未命中幂等，走正常校验
+    if (!s.current) return { success: false, message: '请先进入斗场' };
+    if (s.current.createdAt !== effectiveCreatedAt) {
+      return { success: false, message: '对局已过期或 createdAt 不匹配' };
+    }
+    if (s.usedToday >= R.DAILY_LIMIT) return { success: false, message: '今日参赛次数已用完' };
+  } else {
+    if (!s.current) return { success: false, message: '请先进入斗场' };
+    if (s.usedToday >= R.DAILY_LIMIT) return { success: false, message: '今日参赛次数已用完' };
+    effectiveCreatedAt = s.current.createdAt;
+    // 对旧调用（无 createdAt）也做一次基于当前 createdAt 的幂等检查，防止重复调用（虽然旧测试不依赖）
+    // 检查 history 中是否已有相同 createdAt 的记录（说明已结算过但 current 已被清空前的重复调用不会走到这里，因为 current 已 null，上面的 already 检查已通过）
+    // 对于旧路径，幂等已在上面 s.current 为 null 时返回失败，所以这里不需额外处理
+  }
+
   const betNo = Math.floor(Number(bet));
   if (!(betNo >= 1 && betNo <= 6)) return { success: false, message: '押注编号必须为 1~6' };
   if (intervention && !['feed', 'caltrops', 'provoke'].includes(intervention)) {
@@ -228,24 +296,11 @@ function resolveCockRound(player, bet, intervention) {
     }
   }
 
-  // 记录（保留最近 20 条）
-  s.history.push({
-    time: getNow(),
-    bet: betNo,
-    betName: CHICKENS.find(c => c.id === myId).name,
-    champion: sim.championName,
-    win,
-    pointsDelta,
-    played: s.played,
-  });
-  if (s.history.length > 20) s.history.splice(0, s.history.length - 20);
-
-  s.current = null;
-
-  return {
-    success: true,
+  const currentCreatedAt = effectiveCreatedAt;
+  const fullResult = {
     win,
     champion: sim.championName,
+    championId: sim.championId,
     report: sim.lines,
     pointsDelta,
     points: s.points,
@@ -256,6 +311,63 @@ function resolveCockRound(player, bet, intervention) {
     interventionDiscovered: discovered,
     luckMessage,
     newTitle,
+    createdAt: currentCreatedAt,
+  };
+
+  // 记录（保留最近 20 条）含 fullResult
+  s.history.push({
+    time: getNow(),
+    bet: betNo,
+    betName: CHICKENS.find(c => c.id === myId).name,
+    champion: sim.championName,
+    championId: sim.championId,
+    win,
+    pointsDelta,
+    played: s.played,
+    createdAt: currentCreatedAt,
+    fullResult,
+  });
+  if (s.history.length > 20) s.history.splice(0, s.history.length - 20);
+
+  // settlement ledger
+  const dayKeyForLedger = getDayKeyForTs(currentCreatedAt);
+  const ledgerId = `cock:round:${dayKeyForLedger}:${currentCreatedAt}`;
+  const reward = { pointsDelta, points: s.points };
+  if (newTitle) reward.title = newTitle;
+  const v = assertSettlementReward('cock_round', reward);
+  if (v.valid) {
+    if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
+    if (!player.settlementLedger.some(e => e.id === ledgerId)) {
+      player.settlementLedger.push({
+        id: ledgerId,
+        at: getNow(),
+        type: 'cock_round',
+        reward,
+        source: `cock:round:${dayKeyForLedger}:${currentCreatedAt}`,
+        fullResult,
+      });
+      if (player.settlementLedger.length > 100) player.settlementLedger.splice(0, player.settlementLedger.length - 100);
+    }
+  }
+
+  s.current = null;
+
+  return {
+    success: true,
+    win,
+    champion: sim.championName,
+    championId: sim.championId,
+    report: sim.lines,
+    pointsDelta,
+    points: s.points,
+    streak: s.streak,
+    played: s.played,
+    todayLeft: Math.max(0, R.DAILY_LIMIT - s.usedToday),
+    interventionApplied: applied,
+    interventionDiscovered: discovered,
+    luckMessage,
+    newTitle,
+    createdAt: currentCreatedAt,
   };
 }
 
@@ -270,6 +382,23 @@ function exchangeCockfightTitle(player, titleKey) {
   if (s.points < t.cost) return { success: false, message: `积分不足（需要 ${t.cost}，当前 ${s.points}）` };
   s.points -= t.cost;
   player.titles[titleKey] = true;
+  // settlement ledger for exchange
+  const reward = { title: t.name, cost: t.cost, points: s.points };
+  const v = assertSettlementReward('cock_exchange', reward);
+  if (v.valid) {
+    if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
+    const ledgerId = `cock:exchange:${titleKey}`;
+    if (!player.settlementLedger.some(e => e.id === ledgerId)) {
+      player.settlementLedger.push({
+        id: ledgerId,
+        at: getNow(),
+        type: 'cock_exchange',
+        reward,
+        source: `cock:exchange:${titleKey}`,
+      });
+      if (player.settlementLedger.length > 100) player.settlementLedger.splice(0, player.settlementLedger.length - 100);
+    }
+  }
   return { success: true, title: t.name, points: s.points };
 }
 

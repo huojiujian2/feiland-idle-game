@@ -1,50 +1,106 @@
 // ====== 灵鸡斗场路由（完全独立玩法） ======
 // GET  /api/player/:username/cockfight                          → 状态视图（积分/胜场/连胜/参与进度/商店/记录）
 // POST /api/player/:username/cockfight/enter                     → 进入斗场，生成 6 只灵鸡
-// POST /api/player/:username/cockfight/resolve { bet, intervention } → 押注+干预+擂台赛+结算
+// POST /api/player/:username/cockfight/resolve { bet, intervention, createdAt } → 押注+干预+擂台赛+结算
 // POST /api/player/:username/cockfight/exchange { titleKey }     → 积分兑换称号
-const { ok, fail, loadPlayer, savePlayer } = require('./_helpers');
+const { ok, fail } = require('./_helpers');
 const engine = require('../engine');
 
 function registerCockfightRoutes(app, store) {
-  // 状态视图
+  // 状态视图 — 事务化（跨日重置）
   app.get('/api/player/:username/cockfight', (req, res) => {
-    const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
-    return ok(res, engine.getCockfightStatus(r.player));
+    const username = req.params.username;
+    if (!username) return fail(res, '缺少参数', 400);
+    const existing = store.getPlayer(username);
+    if (!existing) return fail(res, '角色不存在', 404);
+    const result = store.withTransaction((data) => {
+      const player = data.players[username];
+      if (!player) return { status: 404, message: '角色不存在' };
+      const status = engine.getCockfightStatus(player);
+      return { status: 200, data: status };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message || '保存失败请重试' });
+    return ok(res, result.data);
   });
 
   // 进入斗场
   app.post('/api/player/:username/cockfight/enter', (req, res) => {
-    const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
-    const out = engine.enterCockArena(r.player);
-    if (!out.success) return fail(res, out.message);
-    savePlayer(store, r.player);
-    return ok(res, out);
+    const username = req.params.username;
+    if (!username) return fail(res, '缺少参数', 400);
+    const existing = store.getPlayer(username);
+    if (!existing) return fail(res, '角色不存在', 404);
+    const result = store.withTransaction((data) => {
+      const player = data.players[username];
+      if (!player) return { status: 404, message: '角色不存在' };
+      const out = engine.enterCockArena(player);
+      if (!out.success) {
+        const msg = out.message || '失败';
+        let status = 400;
+        if (msg.includes('已用完') || msg.includes('次数')) status = 409;
+        return { status, message: msg };
+      }
+      return { status: 200, data: out };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
+    return ok(res, result.data);
   });
 
-  // 结算一局（押注 + 干预 + 擂台赛 + 积分）
+  // 结算一局（押注 + 干预 + 擂台赛 + 积分）— 需 createdAt
   app.post('/api/player/:username/cockfight/resolve', (req, res) => {
-    const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
-    const { bet, intervention } = req.body || {};
-    const out = engine.resolveCockRound(r.player, bet, intervention || null);
-    if (!out.success) return fail(res, out.message);
-    savePlayer(store, r.player);
-    return ok(res, out);
+    const username = req.params.username;
+    if (!username) return fail(res, '缺少参数', 400);
+    const existing = store.getPlayer(username);
+    if (!existing) return fail(res, '角色不存在', 404);
+    const { bet, intervention, createdAt } = req.body || {};
+    if (bet === undefined || bet === null) return fail(res, '缺少参数', 400);
+    if (createdAt === undefined || createdAt === null) return fail(res, '缺少参数', 400);
+    const createdNum = Number(createdAt);
+    if (!Number.isFinite(createdNum)) return fail(res, 'createdAt 非法', 400);
+    const result = store.withTransaction((data) => {
+      const player = data.players[username];
+      if (!player) return { status: 404, message: '角色不存在' };
+      const out = engine.resolveCockRound(player, bet, intervention || null, createdNum);
+      if (!out.success) {
+        const msg = out.message || '失败';
+        let status = out.status || 400;
+        if (out.status === 500) status = 500;
+        else if (msg.includes('请先进入') || msg.includes('过期') || msg.includes('不匹配') || msg.includes('已用完') || msg.includes('次数')) status = 409;
+        else if (msg.includes('createdAt 非法') || msg.includes('押注编号') || msg.includes('未知干预')) status = 400;
+        else if (msg.includes('数据损坏')) status = 500;
+        return { status, message: msg };
+      }
+      if (out.already) return { status: 200, data: out, already: true };
+      return { status: 200, data: out };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
+    if (result.already) return res.json({ success: true, data: result.data, already: true });
+    return ok(res, result.data);
   });
 
   // 积分兑换称号
   app.post('/api/player/:username/cockfight/exchange', (req, res) => {
-    const r = loadPlayer(store, req.params.username);
-    if (r.error) return fail(res, r.error);
+    const username = req.params.username;
+    if (!username) return fail(res, '缺少参数', 400);
+    const existing = store.getPlayer(username);
+    if (!existing) return fail(res, '角色不存在', 404);
     const { titleKey } = req.body || {};
-    if (!titleKey) return fail(res, '请选择称号');
-    const out = engine.exchangeCockfightTitle(r.player, titleKey);
-    if (!out.success) return fail(res, out.message);
-    savePlayer(store, r.player);
-    return ok(res, out);
+    if (!titleKey) return fail(res, '请选择称号', 400);
+    const result = store.withTransaction((data) => {
+      const player = data.players[username];
+      if (!player) return { status: 404, message: '角色不存在' };
+      const out = engine.exchangeCockfightTitle(player, titleKey);
+      if (!out.success) {
+        const msg = out.message || '失败';
+        let status = 400;
+        if (msg.includes('不存在')) status = 404;
+        else if (msg.includes('已拥有') || msg.includes('不足')) status = 409;
+        else if (msg.includes('无法兑换')) status = 400;
+        return { status, message: msg };
+      }
+      return { status: 200, data: out };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
+    return ok(res, result.data);
   });
 }
 

@@ -170,8 +170,8 @@ export default {
   // 灵鸡斗场（完全独立玩法：不消耗主游戏资源，唯一产出斗鸡积分换外观称号）
   getCockfight(username) { return request(`/player/${username}/cockfight`) },
   enterCockArena(username) { return request(`/player/${username}/cockfight/enter`, { method: 'POST' }) },
-  resolveCockRound(username, bet, intervention) {
-    return request(`/player/${username}/cockfight/resolve`, { method: 'POST', body: JSON.stringify({ bet, intervention }) })
+  resolveCockRound(username, bet, intervention, createdAt) {
+    return request(`/player/${username}/cockfight/resolve`, { method: 'POST', body: JSON.stringify({ bet, intervention, createdAt }) })
   },
   exchangeCockfightTitle(username, titleKey) {
     return request(`/player/${username}/cockfight/exchange`, { method: 'POST', body: JSON.stringify({ titleKey }) })
@@ -198,10 +198,10 @@ export default {
 
   // 竞技场
   getOpponents(username) { return request(`/arena/opponents/${username}`) },
-  challenge(username, targetUsername, isBot) {
+  challenge(username, targetUsername, isBot, requestId) {
     return request('/arena/challenge', {
       method: 'POST',
-      body: JSON.stringify({ username, targetUsername, isBot })
+      body: JSON.stringify({ username, targetUsername, isBot, requestId })
     })
   },
   getArenaRanking() { return request('/arena/ranking') },

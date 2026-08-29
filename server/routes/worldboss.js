@@ -1,59 +1,98 @@
 // ====== 世界 BOSS 路由（v2.9） ======
 const { getActiveBoss, attackWorldBoss, spawnWorldBoss, getBossRanking, getPlayerView, getBossExpiresAt, getBossDayKey } = require('../engine');
-const { ok, fail, loadPlayer, savePlayer } = require('./_helpers');
+const { getNow } = require('../engine/state');
+const { ok, fail } = require('./_helpers');
 
 function registerWorldBossRoutes(app, store) {
-  // 获取当前活跃 BOSS + 排行榜 + 过期时间 + 当前玩家今日是否已挑战
+  // 获取当前活跃 BOSS + 排行榜 + 过期时间 + 当前玩家今日是否已挑战 — 事务化
   app.get('/api/worldboss/active', (req, res) => {
-    const boss = getActiveBoss(store);
-    const ranking = getBossRanking(store, 10);
     const username = req.query.username || '';
-    const player = username ? store.getPlayer(username) : null;
-    // v3.4：北京日判定（与引擎 attackWorldBoss 同源，修复 UTC 日期导致的按钮状态错乱）
-    const todayKey = getBossDayKey();
-    const challengedToday = !!(player && player.lastBossAttackDay === todayKey);
-    res.json({
-      success: true,
-      data: {
-        boss,
-        ranking,
-        expiresAt: getBossExpiresAt(store),
-        challengedToday,
-        remainingMs: boss ? Math.max(0, (boss.expiresAt || 0) - Date.now()) : 0,
-      }
+    const result = store.withTransaction((data) => {
+      const boss = getActiveBoss(store);
+      const ranking = getBossRanking(store, 10);
+      const player = username ? data.players[username] : null;
+      const todayKey = getBossDayKey();
+      const challengedToday = !!(player && player.lastBossAttackDay === todayKey);
+      const remainingMs = boss ? Math.max(0, (boss.expiresAt || 0) - getNow()) : 0;
+      return {
+        status: 200,
+        data: {
+          boss,
+          ranking,
+          expiresAt: getBossExpiresAt(store),
+          challengedToday,
+          remainingMs,
+        }
+      };
     });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message || '保存失败请重试' });
+    return res.json({ success: true, data: result.data });
   });
 
-  // 玩家挑战 BOSS：一次挑战 = 一次 5 回合战斗；每日 1 次
+  // 玩家挑战 BOSS：一次挑战 = 一次 8 回合战斗；每日 1 次 — 事务化
   app.post('/api/player/:username/worldboss/attack', (req, res) => {
     const username = req.params.username;
-    const r = loadPlayer(store, username);
-    if (r.error) return fail(res, r.error);
-    const result = attackWorldBoss(store, username);
-    if (!result.success) return fail(res, result.message);
-    const updated = store.getPlayer(username);
-    res.json({
+    if (!username) return fail(res, '缺少参数', 400);
+    const existing = store.getPlayer(username);
+    if (!existing) return fail(res, '角色不存在', 404);
+    const result = store.withTransaction((data) => {
+      const player = data.players[username];
+      if (!player) return { status: 404, message: '角色不存在' };
+      const out = attackWorldBoss(store, username);
+      if (!out.success) {
+        const msg = out.message || '失败';
+        let status = 400;
+        if (msg.includes('今日挑战次数已用完') || msg.includes('今日已挑战')) status = 409;
+        else if (msg.includes('玩家不存在') || msg.includes('角色不存在')) status = 404;
+        else if (msg.includes('没有可攻击')) status = 404;
+        else if (msg.includes('今日')) status = 409;
+        return { status, message: msg };
+      }
+      const updated = data.players[username];
+      const playerView = updated ? getPlayerView(updated) : null;
+      const payload = {
+        battle: out.battle,
+        bossHp: out.bossHp,
+        bossMaxHp: out.bossMaxHp,
+        myDamage: out.myDamage,
+        killed: out.killed,
+        finalHit: out.finalHit,
+        rewards: out.rewards,
+        expiresAt: out.expiresAt,
+        remainingMs: out.remainingMs,
+        player: playerView,
+      };
+      return { status: 200, data: payload };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
+    const d = result.data;
+    // 统一返回 {success, data:{battle,...}} 且保留顶层兼容
+    return res.json({
       success: true,
-      // 战斗报告
-      battle: result.battle,
-      bossHp: result.bossHp, bossMaxHp: result.bossMaxHp,
-      myDamage: result.myDamage,
-      killed: result.killed, finalHit: result.finalHit,
-      rewards: result.rewards,
-      expiresAt: result.expiresAt,
-      remainingMs: result.remainingMs,
-      player: updated ? getPlayerView(updated) : null,
+      data: d,
+      battle: d.battle,
+      bossHp: d.bossHp,
+      bossMaxHp: d.bossMaxHp,
+      myDamage: d.myDamage,
+      killed: d.killed,
+      finalHit: d.finalHit,
+      rewards: d.rewards,
+      expiresAt: d.expiresAt,
+      remainingMs: d.remainingMs,
+      player: d.player,
     });
   });
 
   // 调试：强制刷新（不变更日期，但会清掉当前 boss 重新按最新玩家生成）
   app.post('/api/worldboss/spawn', (req, res) => {
-    const meta = store.getMeta();
-    meta.worldBoss = null;
-    store.setMeta(meta);
-    const boss = spawnWorldBoss(store);
-    store.save();
-    res.json({ success: true, data: boss });
+    const result = store.withTransaction((data) => {
+      const meta = data.meta;
+      meta.worldBoss = null;
+      const boss = spawnWorldBoss(store);
+      return { status: 200, data: boss };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message || '保存失败请重试' });
+    return res.json({ success: true, data: result.data });
   });
 }
 

@@ -161,7 +161,7 @@ let cdTimer = null
 
 const hpPercent = computed(() => boss.value ? Math.max(0, (boss.value.hp / boss.value.maxHp) * 100) : 0)
 const myRank = computed(() => ranking.value.find(r => r.username === props.currentUser) || null)
-const challengedToday = computed(() => attackedToday.value || (props.player && props.player.lastBossAttackDay === new Date().toISOString().slice(0,10)))
+const challengedToday = computed(() => attackedToday.value)
 
 // 倒计时 "HH:MM:SS"
 const remainingLabel = computed(() => {
@@ -192,18 +192,25 @@ async function doAttack() {
   try {
     const res = await api.attackWorldBoss(props.currentUser)
     if (res.success) {
-      lastBattle.value = res.battle
-      titleWinners.value = res.rewards?.titleWinners || []
-      allTitles.value = res.rewards?.allTitles || {}
-      remainingMs.value = res.remainingMs || 0
+      const data = res.data || res
+      lastBattle.value = data.battle || res.battle || null
+      const rewards = data.rewards || res.rewards || {}
+      titleWinners.value = rewards?.titleWinners || res.rewards?.titleWinners || []
+      allTitles.value = rewards?.allTitles || res.rewards?.allTitles || {}
+      remainingMs.value = data.remainingMs ?? res.remainingMs ?? 0
+      // also sync expiresAt from server data if available
+      expiresAt.value = data.expiresAt ?? res.expiresAt ?? expiresAt.value
       attackedToday.value = true
-      toast.success(res.killed ? '🎉 你击杀了世界 BOSS！' : `造成 ${res.myDamage.toLocaleString()} 伤害`)
+      const killed = data.killed ?? res.killed
+      const myDamage = data.myDamage ?? res.myDamage
+      toast.success(killed ? '🎉 你击杀了世界 BOSS！' : `造成 ${(myDamage ?? 0).toLocaleString()} 伤害`)
       // 把服务端返回的 player 数据回传给父组件（血量等已被 boss 扣血）
-      if (res.player && props.player) {
-        Object.assign(props.player, res.player)
+      const playerView = data.player || res.player
+      if (playerView && props.player) {
+        Object.assign(props.player, playerView)
       }
       // 击杀后 4 秒拉新
-      if (res.killed) setTimeout(refresh, 4000)
+      if (killed) setTimeout(refresh, 4000)
       else refresh()
     } else {
       toast.error(res.message)
@@ -221,10 +228,8 @@ onMounted(() => {
   api.getTitles(props.currentUser).then(r => { if (r.success) allTitles.value = r.data.all || {} }).catch(() => {})
   pollTimer = setInterval(refresh, 10000)
   cdTimer = setInterval(() => {
-    if (remainingMs.value > 0) remainingMs.value -= 1000
-    else if (expiresAt.value) {
-      const now = Date.now()
-      remainingMs.value = Math.max(0, expiresAt.value - now)
+    if (remainingMs.value > 0) {
+      remainingMs.value = Math.max(0, remainingMs.value - 1000)
       if (remainingMs.value === 0) refresh()
     }
   }, 1000)
