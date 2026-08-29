@@ -44,26 +44,17 @@ function getRankTier(period, rankNum) {
 }
 
 // 赛季结算 - 新签名 store, period, rankingList, periodKey (periodKey 必传)
-function settleArenaRewards(storeOrMeta, period, rankingList, periodKey) {
+function settleArenaRewards(store, period, rankingList, periodKey) {
+  if (!store || typeof store.getMeta !== 'function' || typeof store.getPlayer !== 'function') {
+    throw new Error('store 必传且需 getMeta/getPlayer');
+  }
   if (!periodKey || typeof periodKey !== 'string') {
     throw new Error('periodKey 必传且为字符串');
   }
   if (!['daily','weekly','monthly'].includes(period)) {
     throw new Error('无效 period');
   }
-  let store = null;
-  let meta = null;
-  if (storeOrMeta && typeof storeOrMeta.getMeta === 'function') {
-    store = storeOrMeta;
-    meta = store.getMeta();
-  } else {
-    meta = storeOrMeta;
-    store = storeOrMeta && storeOrMeta._storeRef ? storeOrMeta._storeRef : null;
-  }
-  if (!meta) {
-    if (store && store.getMeta) meta = store.getMeta();
-    else meta = storeOrMeta;
-  }
+  const meta = store.getMeta();
   if (!meta.arenaRewards) meta.arenaRewards = {};
   if (!meta.arenaRewards[period]) meta.arenaRewards[period] = {};
   if (!meta.arenaSkipped) meta.arenaSkipped = { daily:{}, weekly:{}, monthly:{} };

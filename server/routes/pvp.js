@@ -132,6 +132,8 @@ function registerPvpRoutes(app, store) {
           if (!found.fullResult) {
             return { status: 500, message: '数据损坏' };
           }
+          const v = assertPvpChallengeResult(found.fullResult);
+          if (!v.valid) return { status: 500, message: '数据损坏:' + v.message };
           return { status: 200, data: found.fullResult, already: true };
         }
       }
@@ -146,6 +148,8 @@ function registerPvpRoutes(app, store) {
           if (!rec.fullResult) {
             return { status: 500, message: '数据损坏' };
           }
+          const v2 = assertPvpChallengeResult(rec.fullResult);
+          if (!v2.valid) return { status: 500, message: '数据损坏:' + v2.message };
           return { status: 200, data: rec.fullResult, already: true };
         }
       }
@@ -497,27 +501,42 @@ function registerPvpRoutes(app, store) {
       }
       if (!(targetKey < curKey)) return fail(res, 'periodKey 必须为已结束周期', 400);
     } else {
-      // 若不传，取 nextKey
+      // 若不传，取 nextKey（仅结算选定周期，不调用全量 settleDuePeriods）
       const metaPre = store.getMeta();
-      // Ensure cursors initialized — replicate ensureArenaCursors logic via engine
-      // We will compute nextKey inside transaction, but for validation we need meta
-      if (!metaPre.arenaCursors || !metaPre.arenaCursors[period]) {
-        // initialize via engine's ensure (will be done in settleDuePeriods, but for manual we compute fallback)
-        targetKey = null; // delegate
-      } else {
-        targetKey = getNextPeriodKey(metaPre.arenaCursors[period], period);
-        if (!(targetKey < curKey)) return fail(res, '暂无可结算周期', 400);
+      // 确保游标已初始化（统一先初始化 cursor，避免空对象解引用 500）
+      if (!metaPre.arenaCursors || typeof metaPre.arenaCursors !== 'object' || Array.isArray(metaPre.arenaCursors)) {
+        // 初始化为两周期前已结算周期，使 nextKey=昨天/上周/上月 < curKey
+        const { getDailyKey, getWeeklyKey, getMonthlyKey } = require('../engine/daily');
+        const { getNow } = require('../engine/state');
+        const now = getNow();
+        const twoDaysAgo = new Date(now - 2*86400000); twoDaysAgo.setHours(0,0,0,0);
+        const dailyKey = `${twoDaysAgo.getFullYear()}-${String(twoDaysAgo.getMonth()+1).padStart(2,'0')}-${String(twoDaysAgo.getDate()).padStart(2,'0')}`;
+        const twoWeeksAgo = new Date(now - 14*86400000); twoWeeksAgo.setHours(0,0,0,0);
+        const day = twoWeeksAgo.getDay(); const diffToMonday = day === 0 ? -6 : 1 - day;
+        const monday = new Date(twoWeeksAgo); monday.setDate(twoWeeksAgo.getDate() + diffToMonday);
+        const weeklyKey = `${monday.getFullYear()}-${String(monday.getMonth()+1).padStart(2,'0')}-${String(monday.getDate()).padStart(2,'0')}`;
+        const twoMonthsAgo = new Date(now); twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+        const monthlyKey = `${twoMonthsAgo.getFullYear()}-${String(twoMonthsAgo.getMonth()+1).padStart(2,'0')}`;
+        if (!metaPre.arenaCursors || typeof metaPre.arenaCursors !== 'object') metaPre.arenaCursors = {};
+        if (!metaPre.arenaCursors.daily) metaPre.arenaCursors.daily = dailyKey;
+        if (!metaPre.arenaCursors.weekly) metaPre.arenaCursors.weekly = weeklyKey;
+        if (!metaPre.arenaCursors.monthly) metaPre.arenaCursors.monthly = monthlyKey;
+        store.setMeta(metaPre);
       }
-    }
-
-    // If targetKey still null (no cursor), delegate to settleDuePeriods without outer transaction (it handles per-period transactions internally)
-    if (!targetKey) {
-      try {
-        settleDuePeriods(store);
-        return res.json({ success: true, data: { already: false } });
-      } catch (e) {
-        return res.status(500).json({ success: false, message: e.message });
+      if (!metaPre.arenaCursors[period]) {
+        // 若该周期仍缺失，初始化为两周期前
+        const { getDailyKey, getWeeklyKey, getMonthlyKey } = require('../engine/daily');
+        const { getNow } = require('../engine/state');
+        const now = getNow();
+        let initKey;
+        if (period === 'daily') { const d=new Date(now-2*86400000); d.setHours(0,0,0,0); initKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+        else if (period === 'weekly') { const d=new Date(now-14*86400000); d.setHours(0,0,0,0); const day=d.getDay(); const diff=day===0?-6:1-day; const m=new Date(d); m.setDate(d.getDate()+diff); initKey=`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}-${String(m.getDate()).padStart(2,'0')}`; }
+        else { const d=new Date(now); d.setMonth(d.getMonth()-2); initKey=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+        metaPre.arenaCursors[period]=initKey;
+        store.setMeta(metaPre);
       }
+      targetKey = getNextPeriodKey(metaPre.arenaCursors[period], period);
+      if (!(targetKey < curKey)) return fail(res, '暂无可结算周期', 400);
     }
 
     const rankingList = store.getAllPlayers()
@@ -539,12 +558,10 @@ function registerPvpRoutes(app, store) {
       if (meta.arenaSkipped[period][targetKey] || meta.arenaRewards[period][targetKey]) {
         return { status: 200, already: true, key: targetKey };
       }
-      // Ensure cursors exists
-      if (!meta.arenaCursors || !meta.arenaCursors[period]) {
-        // initialize to two periods ago logic (engine will handle via settleDuePeriods, but we need fallback)
-        // For manual, we set cursor to previous key so nextKey = targetKey
-        // We'll compute cursor as previous of targetKey
-        // Simplify: set cursor to previous key of targetKey
+      // Ensure cursors exists (统一先初始化 cursor，避免空对象解引用 500)
+      if (!meta.arenaCursors || typeof meta.arenaCursors !== 'object' || Array.isArray(meta.arenaCursors)) meta.arenaCursors = {};
+      if (!meta.arenaCursors[period]) {
+        // initialize to previous of targetKey so nextKey = targetKey
         let prev;
         if (period === 'daily') {
           const d = new Date(targetKey + 'T00:00:00');

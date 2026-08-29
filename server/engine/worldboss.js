@@ -294,7 +294,6 @@ function settleWorldBossRewards(store, boss) {
     let ledgerExp = 0;
     const ledgerTitles = [];
     const childId = `boss:settle:${spawnDayKey}:${boss.id}:rank:${rank}`;
-    childIds.push(childId);
 
     // 1) 最后一击奖（v3.1：去掉材料，只剩金币/经验）
     if (r.username === boss.finalHitBy && boss.finalHitRewards) {
@@ -358,8 +357,9 @@ function settleWorldBossRewards(store, boss) {
         const tier = rank === 1 ? 'S' : rank === 2 ? 'A' : rank === 3 ? 'B' : rank <= 10 ? 'C' : rank <= 20 ? 'D' : 'E';
         const fullResult = { gold: ledgerGold, exp: ledgerExp, rank, tier };
         if (ledgerTitles.length > 0) fullResult.titles = [...ledgerTitles];
-        // dedup by id if already exists (guard idempotency)
+        // dedup by id if already exists (guard idempotency) - push childId only when ledger will be written (one-to-one)
         if (!p.settlementLedger.some(e => e.id === childId)) {
+          childIds.push(childId);
           p.settlementLedger.push({
             id: childId,
             at: getNow(),

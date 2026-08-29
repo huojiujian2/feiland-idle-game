@@ -96,23 +96,28 @@ function assertSettlementReward(type, reward) {
 
 function assertPvpChallengeResult(obj){
   const isPlainObject = (o) => o !== null && typeof o === 'object' && !Array.isArray(o);
+  const isNumber = (n) => typeof n === 'number' && Number.isFinite(n);
   if (!isPlainObject(obj)) return { valid:false, message:'PvpChallengeResult 非对象' };
   const { battle, isWin, isDraw, rewards, ratingChange, newRating, arenaCoins, targetName, targetLevel, targetJob, player } = obj;
   if (!isPlainObject(battle) || !['win','lose','draw'].includes(battle.result)) return { valid:false, message:'battle.result 非法' };
   if (!Array.isArray(battle.rounds)) return { valid:false, message:'battle.rounds 非数组' };
+  if (!isNumber(battle.myHp) || !isNumber(battle.myMaxHp) || !isNumber(battle.enemyHp) || !isNumber(battle.enemyMaxHp)) return { valid:false, message:'battle HP 非法' };
   for(const r of battle.rounds){
     if (!isPlainObject(r) || typeof r.round !== 'number') return { valid:false, message:'round 非法' };
+    if (!isNumber(r.hpA) || !isNumber(r.hpB)) return { valid:false, message:'round hpA/hpB 非法' };
     if (!Array.isArray(r.actions)) return { valid:false, message:'actions 非数组' };
     for(const a of r.actions){
       if (!isPlainObject(a) || !['A','B'].includes(a.actor)) return { valid:false, message:'actor 非法' };
       if (typeof a.skill !== 'string') return { valid:false, message:'skill 非法' };
+      if (!isNumber(a.hpA) || !isNumber(a.hpB)) return { valid:false, message:'action hpA/hpB 非法' };
     }
   }
   if (typeof isWin !== 'boolean' || typeof isDraw !== 'boolean') return { valid:false, message:'isWin/isDraw 非法' };
-  if (!isPlainObject(rewards) || typeof rewards.gold !== 'number' || typeof rewards.exp !== 'number' || typeof rewards.coins !== 'number') return { valid:false, message:'rewards 非法' };
-  if (typeof ratingChange !== 'number' || typeof newRating !== 'number' || typeof arenaCoins !== 'number') return { valid:false, message:'rating 非法' };
-  if (typeof targetName !== 'string' || typeof targetLevel !== 'number' || typeof targetJob !== 'string') return { valid:false, message:'target 非法' };
-  if (!isPlainObject(player) || typeof player.username !== 'string' || typeof player.pvpStats !== 'object') return { valid:false, message:'player 非法' };
+  if (!isPlainObject(rewards) || !isNumber(rewards.gold) || !isNumber(rewards.exp) || !isNumber(rewards.coins)) return { valid:false, message:'rewards 非法' };
+  if (!isNumber(ratingChange) || !isNumber(newRating) || !isNumber(arenaCoins)) return { valid:false, message:'rating 非法' };
+  if (typeof targetName !== 'string' || !isNumber(targetLevel) || typeof targetJob !== 'string') return { valid:false, message:'target 非法' };
+  if (!isPlainObject(player) || typeof player.username !== 'string' || typeof player.name !== 'string' || !isNumber(player.level) || !isNumber(player.rating) || !isPlainObject(player.pvpStats)) return { valid:false, message:'player 必填字段缺失' };
+  if (!isNumber(player.pvpStats.wins) || !isNumber(player.pvpStats.losses) || !isNumber(player.pvpStats.streak) || !isNumber(player.pvpStats.bestStreak)) return { valid:false, message:'player.pvpStats 非法' };
   return { valid:true };
 }
 function assertCockResolveResult(obj){
