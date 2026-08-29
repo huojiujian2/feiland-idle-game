@@ -284,6 +284,7 @@ module.exports = {
   chooseExpeditionEvent: expedition.chooseEventOption,
   claimExpedition: expedition.claimExpedition,
   getExpeditionStatus: expedition.getExpeditionStatus,
+  sanitizeExpedition: expedition.sanitizeExpedition,
   simulateExpeditionBossBattle: expedition.simulateExpeditionBossBattle,
   setStore,
 };

@@ -49,7 +49,7 @@
               >
                 <div class="choice-label">{{ ch.label }} <span class="risk" :class="ch.risk">{{ riskLabel(ch.risk) }}</span></div>
                 <div class="choice-hint">{{ ch.rewardHint }}</div>
-                <div v-if="ch.timeDelta" class="choice-time" :class="{ neg: ch.timeDelta < 0 }">{{ ch.timeDelta > 0 ? '+' : '' }}{{ formatDelta(ch.timeDelta) }}</div>
+                <div v-if="ch.timeDelta" class="choice-time" :class="{ neg: ch.timeDelta < 0 }">{{ formatDelta(ch.timeDelta) }}</div>
                 <div v-if="ev.chosenId === ch.id" class="chosen-tag">已选</div>
               </button>
             </div>
@@ -207,7 +207,7 @@ function formatMs(ms) {
 }
 function formatDelta(ms) {
   if (!ms) return '';
-  const sign = ms > 0 ? '+' : '';
+  const sign = ms > 0 ? '+' : '-';
   return sign + formatMs(Math.abs(ms));
 }
 function formatTime(ts) {

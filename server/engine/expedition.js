@@ -102,7 +102,7 @@ function simulateExpeditionBossBattle(snapshot, boss, maxRounds = 5) {
   const mDef = boss.def;
   const mAgi = boss.agi;
   const skillChance = boss.skillChance || 0.15;
-  let pHp = snapshot.maxHp; // 满血出战
+  let pHp = snapshot.hp; // 按派遣时快照血量出战，受伤派遣不再满血
   let mCurHp = mHp;
   const effAgi = snapshot.agi;
   const playerFirst = effAgi >= mAgi;
