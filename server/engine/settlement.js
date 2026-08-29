@@ -31,6 +31,7 @@ function assertSettlementReward(type, reward) {
     pvp_challenge: ['gold','exp','coins'],
     cock_round: ['pointsDelta','points','title'],
     cock_exchange: ['title','cost','points'],
+    expedition: ['gold','exp','materials','equips'],
   };
   const allowed = allowedByType[type];
   if (!allowed) return { valid:false, message:`未知 type ${type}` };
@@ -90,6 +91,18 @@ function assertSettlementReward(type, reward) {
     if (!isNonEmptyString(reward.title)) return { valid:false, message:'title 非法' };
     if (!isNonNegativeNumber(reward.cost) || reward.cost===0) return { valid:false, message:'cost 非法' };
     if (!isNonNegativeNumber(reward.points)) return { valid:false, message:'points 非法' };
+  } else if (type === 'expedition') {
+    if (!isNonNegativeNumber(reward.gold) || !isNonNegativeNumber(reward.exp)) return { valid:false, message:'expedition 需 gold/exp 非负' };
+    if ('materials' in reward) {
+      if (!Array.isArray(reward.materials)) return { valid:false, message:'materials 非数组' };
+      for (const m of reward.materials) {
+        if (!isPlainObject(m) || !isNonEmptyString(m.name) || !isNonNegativeNumber(m.count) || m.count===0) return { valid:false, message:'materials 元素非法' };
+      }
+    }
+    if ('equips' in reward) {
+      if (!Array.isArray(reward.equips)) return { valid:false, message:'equips 非数组' };
+      for (const e of reward.equips) if (!isPlainObject(e) || !isNonEmptyString(e.templateId)) return { valid:false, message:'equips 元素非法' };
+    }
   }
   return { valid:true };
 }

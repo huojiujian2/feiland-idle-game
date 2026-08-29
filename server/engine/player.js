@@ -70,6 +70,11 @@ function createCharacter(username, charName) {
     pvpStats: { wins: 0, losses: 0, rating: 1000, streak: 0, bestStreak: 0, lastPvpAt: 0 },
     attrPresets: [],
     settlementLedger: [],
+    // 远征（T-102）：单活单 + 历史/报告/图鉴
+    expedition: null,
+    expeditionHistory: [],
+    expeditionReports: {},
+    expeditionCodex: {},
     // 灵鸡斗场（完全独立玩法，不与主游戏资源交互）
     cockfight: { points: 0, wins: 0, streak: 0, played: 0, loseStreak: 0, dayKey: '', usedToday: 0, banNext: null, current: null, history: [] },
   };
@@ -198,6 +203,41 @@ function migratePlayer(player) {
   if (!Number.isFinite(player.pvpStats.streak)) player.pvpStats.streak = 0;
   if (!Number.isFinite(player.pvpStats.bestStreak)) player.pvpStats.bestStreak = 0;
   if (!Number.isFinite(player.pvpStats.lastPvpAt)) player.pvpStats.lastPvpAt = 0;
+  // T-102 远征字段迁移
+  if (!('expedition' in player) || (player.expedition !== null && typeof player.expedition !== 'object')) player.expedition = null;
+  if (player.expedition) {
+    if (!Number.isFinite(player.expedition.startAt)) player.expedition = null;
+    else {
+      if (!Number.isFinite(player.expedition.baseEndAt)) player.expedition.baseEndAt = player.expedition.startAt + 30*60*1000;
+      if (!Number.isFinite(player.expedition.endAt)) player.expedition.endAt = player.expedition.baseEndAt;
+      if (!Number.isFinite(player.expedition.appliedTimeDelta)) player.expedition.appliedTimeDelta = 0;
+      if (!Number.isFinite(player.expedition.baseGoldLossRate)) player.expedition.baseGoldLossRate = 0;
+      if (!Number.isFinite(player.expedition.baseGoldLossRoll)) player.expedition.baseGoldLossRoll = 0;
+      if (!Array.isArray(player.expedition.events)) player.expedition.events = [];
+      for (const ev of player.expedition.events) {
+        if (typeof ev.choiceChangeCount !== 'number') ev.choiceChangeCount = 0;
+        if (ev.chosenId !== null && typeof ev.chosenId !== 'string') ev.chosenId = null;
+        if (!Array.isArray(ev.choices)) ev.choices = [];
+        for (const ch of ev.choices) {
+          if (typeof ch.timeDelta !== 'number') ch.timeDelta = 0;
+          if (!ch.outcome || typeof ch.outcome !== 'object') ch.outcome = { success: true, goldDelta: 0, message: '' };
+          if (typeof ch.outcome.goldDelta !== 'number') ch.outcome.goldDelta = 0;
+        }
+      }
+      if (!player.expedition.boss || typeof player.expedition.boss !== 'object') player.expedition.boss = null;
+    }
+  }
+  if (!Array.isArray(player.expeditionHistory)) player.expeditionHistory = [];
+  else if (player.expeditionHistory.length > 20) player.expeditionHistory.splice(0, player.expeditionHistory.length - 20);
+  if (!player.expeditionReports || typeof player.expeditionReports !== 'object' || Array.isArray(player.expeditionReports)) player.expeditionReports = {};
+  else {
+    const keys = Object.keys(player.expeditionReports);
+    if (keys.length > 20) {
+      keys.sort((a,b)=> (player.expeditionReports[a].claimedAt||0) - (player.expeditionReports[b].claimedAt||0));
+      for (let i=0;i<keys.length-20;i++) delete player.expeditionReports[keys[i]];
+    }
+  }
+  if (!player.expeditionCodex || typeof player.expeditionCodex !== 'object' || Array.isArray(player.expeditionCodex)) player.expeditionCodex = {};
   if (!player.achievements['first']) {
     player.achievements['first'] = { unlocked: true, claimed: false, unlockAt: player.createdAt || getNow() };
   }

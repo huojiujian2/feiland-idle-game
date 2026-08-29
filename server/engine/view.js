@@ -126,7 +126,12 @@ function getPlayerView(player) {
     pvpStats: player.pvpStats,
     combatStats: player.combatStats,
     attrPresets: player.attrPresets || [],
-    tutorialStep: normalizeTutorialStep(player.tutorialStep), tutorialDone: normalizeTutorialStep(player.tutorialStep) === 6
+    tutorialStep: normalizeTutorialStep(player.tutorialStep), tutorialDone: normalizeTutorialStep(player.tutorialStep) === 6,
+    expedition: player.expedition || null,
+    expeditionHistory: Array.isArray(player.expeditionHistory) ? player.expeditionHistory.slice(0,20) : [],
+    expeditionReports: player.expeditionReports || {},
+    expeditionCodex: player.expeditionCodex || {},
+    cockfight: player.cockfight || null
   };
 }
 

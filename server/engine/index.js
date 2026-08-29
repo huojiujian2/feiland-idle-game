@@ -16,6 +16,7 @@ const view = require('./view');
 const genesis = require('./genesis');
 const cockfight = require('./cockfight');
 const settlement = require('./settlement');
+const expedition = require('./expedition');
 
 // ====== 绑定循环引用 ======
 // recalcMaxStats：与原 engine.js 行为一致（基于词条加成的 baseHp）
@@ -56,6 +57,10 @@ pvp.setBotCharacterDeps({
   createCharacter: player.createCharacter,
   recalcMaxStats: realRecalcMaxStats,
 });
+
+// 远征注入
+expedition.setGrantHandlers({ grantGold: (p, a) => player.grantGold(p, a), grantExpWithLevelUp: (p, e) => player.grantExpWithLevelUp(p, e) });
+expedition.setProgressHandlers({ updateDailyProgress: (p, id, inc) => daily.updateDailyProgress(p, id, inc), checkAchievements: (p) => daily.checkAchievements(p) });
 
 // 创世系统：把 store.getMeta 注入到 idle/genesis 两个引擎
 let _store = null;
@@ -274,5 +279,11 @@ module.exports = {
   // 斗鸡纯函数（测试用）
   __simulateLineup: cockfight.__simulateLineup,
   __battleOnce: cockfight.__battleOnce,
+  // 远征
+  dispatchExpedition: expedition.dispatchExpedition,
+  chooseExpeditionEvent: expedition.chooseEventOption,
+  claimExpedition: expedition.claimExpedition,
+  getExpeditionStatus: expedition.getExpeditionStatus,
+  simulateExpeditionBossBattle: expedition.simulateExpeditionBossBattle,
   setStore,
 };

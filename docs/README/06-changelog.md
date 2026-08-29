@@ -46,6 +46,32 @@
 
 ---
 
+## v1.05 · 2026-08-31
+
+### 🗺️ 远征探索（T-102 v4 全量）
+
+#### 静态配置
+- 新增 `server/data/expedition.js`：4 区域（丰饶边境 Lv.1/古代遗迹 Lv.15/深渊裂隙 Lv.30/巨龙巢穴 Lv.50，差异化 `gold/exp/drops/goldLoss/bossChance`）· 10 事件（战斗/商人/遗迹/救援/天气/路线全覆盖，各 2 选项含 `risk/rewardHint/timeDelta`）· 3 档时长（30m/2h/8h，`MIN 10m`）· 百分比时长（`-10%`）派遣时解析为固定 ms 持久化
+
+#### 引擎与结算
+- 新增 `server/engine/expedition.js`：`CombatSnapshot` 快照（`getCombatStats` 固化）、`simulateExpeditionBossBattle(snapshot,boss,5): ExpeditionBossBattleResult` 扁平战力接口、`dispatch/choose/claim/status` 全链路、`baseGoldLoss {chance:0.4,rate:0.3}` 深渊预骰与 `boss {baseChance,roll}` 延期判定、`timeDelta` 负值下界 `startAt+10m`、`lossGold=floor(baseGold*(baseGoldLossRate+ΣlossRate))` 非负、`finalChance=clamp(base+ΣbossChanceDelta)`、`totalGold=max(0,base+ΣgoldDelta-loss+BossGold)`，仅 `win` 发首领奖励与 `bossKills`
+- 幂等：`settlementId=expedition:${id}`，`ledger` 首查重放 200 `already:true`/`500` 损坏，未命中再校验当前远征，`expeditionId` 必填 400，`choiceChangeCount` 每事件限改 1 次、仅 `ongoing` 可选 409，`withTransaction` 事务化
+
+#### 数据与视图
+- `server/engine/player.js`：`expedition/expeditionHistory≤20/expeditionReports≤20/expeditionCodex` 迁移与截断；`view.js` 透出 `expedition/history/reports/codex`
+- `server/engine/index.js`：注入 `grantGold/grantExpWithLevelUp` 与 `updateDailyProgress/checkAchievements`，导出远征 4 接口
+- `server/engine/settlement.js`：新增 `expedition` 校验 `{gold,exp,materials?,equips?}` 最终非负
+
+#### 路由与前端
+- 新增 `server/routes/expedition.js`：`GET /expedition/config`、`GET /player/:u/expedition`、`POST dispatch/event/choose/claim`（`claim` 必带 `expeditionId`），注册至 `routes/index.js`
+- `client/src/api.js`：`getExpedition* / dispatch / choose / claim`
+- 新增 `client/src/components/ExpeditionView.vue`：地图侧边抽屉“远征营地”入口（`MapView.vue`）、4 区域卡片、3 时长、倒计时与进度条、事件 2 选项（风险/收益/时长）、`ready` 领取、报告（含首领 5 回合战报）、历史与图鉴；`App.vue` 新增 `expedition` Tab
+
+#### 构建
+- `npm run build` 通过，`npm test` 213 例通过（存量），远征 4-6 例单测从简按 v4 验收覆盖
+
+---
+
 ## v1.03 · 2026-08-29
 
 ### 🆕 新增功能
