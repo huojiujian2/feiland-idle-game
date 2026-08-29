@@ -66,7 +66,10 @@ export default {
   },
 
   // 转生点商店
-  getReincShop() { return request('/reinc-shop') },
+  // v7：传 username 拿到"该玩家"的动态价格（已买次数 + 1）
+  getReincShop(username) {
+    return request(`/reinc-shop${username ? `?username=${encodeURIComponent(username)}` : ''}`)
+  },
   buyReincShopItem(username, itemId, option) {
     return request('/reinc-shop/buy', {
       method: 'POST', body: JSON.stringify({ username, itemId, option })
@@ -120,6 +123,10 @@ export default {
     return request(`/leaderboard${q}`)
   },
   reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) },
+  // 内测：一键转生（后续随经验卷轴一起删除）
+  autoReincarnate(username, times, targetLevel) {
+    return request(`/player/${username}/auto-reincarnate`, { method: 'POST', body: JSON.stringify({ times, targetLevel }) })
+  },
   getReincarnationInfo(username) { return request(`/player/${username}/reincarnation`) },
   markReincarnHintShown(username) { return request(`/player/${username}/reincarn-hint-shown`, { method: 'POST' }) },
   upgradeEquipment(username, itemUid) {
@@ -140,6 +147,13 @@ export default {
       body: JSON.stringify({ itemUid })
     })
   },
+  // v1.02：背包排序持久化
+  sortInventory(username) {
+    return request(`/player/${username}/inventory/sort`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    })
+  },
   // 世界 BOSS（v2.9 重构：按全服最强 10 倍、每日 1 次、5 回合战报、伤害前三 24h 称号）
   getWorldBoss(username) {
     const q = username ? `?username=${encodeURIComponent(username)}` : '';
@@ -152,6 +166,16 @@ export default {
   // 称号系统（v2.9 新增）
   getTitles(username) { return request(`/player/${username}/titles`) },
   equipTitle(username, key) { return request(`/player/${username}/titles/equip`, { method: 'POST', body: JSON.stringify({ key }) }) },
+
+  // 灵鸡斗场（完全独立玩法：不消耗主游戏资源，唯一产出斗鸡积分换外观称号）
+  getCockfight(username) { return request(`/player/${username}/cockfight`) },
+  enterCockArena(username) { return request(`/player/${username}/cockfight/enter`, { method: 'POST' }) },
+  resolveCockRound(username, bet, intervention) {
+    return request(`/player/${username}/cockfight/resolve`, { method: 'POST', body: JSON.stringify({ bet, intervention }) })
+  },
+  exchangeCockfightTitle(username, titleKey) {
+    return request(`/player/${username}/cockfight/exchange`, { method: 'POST', body: JSON.stringify({ titleKey }) })
+  },
 
   // 创世之书（二转解锁）
   getGenesis(username) { return request(`/player/${username}/genesis`) },
@@ -182,7 +206,7 @@ export default {
   },
   getArenaRanking() { return request('/arena/ranking') },
   getArenaRecords(username) { return request(`/arena/records/${username}`) },
-  getArenaShop() { return request('/arena/shop') },
+  getArenaShop(username) { return request(`/arena/shop${username ? `?username=${encodeURIComponent(username)}` : ''}`) },
   buyArenaItem(username, itemId) {
     return request('/arena/buy', {
       method: 'POST',

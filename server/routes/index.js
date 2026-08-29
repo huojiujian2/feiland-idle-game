@@ -12,6 +12,7 @@ const { registerStrategyRoute } = require('./strategy');
 const { registerQuestRoutes } = require('./quest');
 const { registerGenesisRoutes } = require('./genesis');
 const { registerTitleRoutes } = require('./titles');
+const { registerCockfightRoutes } = require('./cockfight');
 
 function registerRoutes(app, store) {
   registerAuthRoutes(app, store);
@@ -27,6 +28,7 @@ function registerRoutes(app, store) {
   registerQuestRoutes(app, store);
   registerGenesisRoutes(app, store);
   registerTitleRoutes(app, store);
+  registerCockfightRoutes(app, store);
 }
 
 module.exports = { registerRoutes };

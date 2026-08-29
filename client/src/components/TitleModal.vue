@@ -45,7 +45,7 @@
         </div>
       </div>
 
-      <!-- 限时称号（世界 BOSS 伤害前三） -->
+      <!-- 限时称号（世界 BOSS 伤害前三，含未获得的锁定态） -->
       <div class="group" v-if="timeTitles && timeTitles.length > 0">
         <div class="group-title">限时称号（24h 有效）</div>
         <div class="title-row">
@@ -54,12 +54,56 @@
             :key="t.key"
             type="button"
             class="title-chip"
-            :class="{ 'is-current': currentKey === t.key }"
-            :title="`点击佩戴 ${t.name}`"
+            :class="{ 'is-current': currentKey === t.key, 'is-locked': !t.owned }"
+            :disabled="!t.owned"
+            :title="t.owned ? `点击佩戴 ${t.name}` : '世界 BOSS 伤害前三获得（24h 限时）'"
             @click="equip(t.key)"
           >
-            <span class="chip-name" :style="{ color: t.color }">{{ t.name }}</span>
-            <span class="chip-time">⏳ {{ formatRemaining(t.remainingMs) }}</span>
+            <span class="chip-name" :style="{ color: t.owned ? t.color : undefined }">{{ t.name }}</span>
+            <span v-if="t.owned" class="chip-time">⏳ {{ formatRemaining(t.remainingMs) }}</span>
+            <span v-else class="chip-lock">🔒 世界BOSS前三</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 永久称号（竞技场商店购买，含未拥有的锁定态） -->
+      <div class="group" v-if="permanentTitles && permanentTitles.length > 0">
+        <div class="group-title">永久称号</div>
+        <div class="title-row">
+          <button
+            v-for="t in permanentTitles"
+            :key="t.key"
+            type="button"
+            class="title-chip"
+            :class="{ 'is-current': currentKey === t.key, 'is-locked': !t.owned }"
+            :disabled="!t.owned"
+            :title="t.owned ? `点击佩戴 ${t.name}` : `${t.desc}（竞技场商店购买解锁）`"
+            @click="equip(t.key)"
+          >
+            <span class="chip-name" :style="{ color: t.owned ? t.color : undefined }">{{ t.name }}</span>
+            <span v-if="t.owned" class="chip-perm">✦ 永久</span>
+            <span v-else class="chip-lock">🔒 竞技场商店</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 斗鸡称号（灵鸡斗场积分兑换 / 成就，含未拥有的锁定态） -->
+      <div class="group" v-if="cockfightTitles && cockfightTitles.length > 0">
+        <div class="group-title">灵鸡斗场称号</div>
+        <div class="title-row">
+          <button
+            v-for="t in cockfightTitles"
+            :key="t.key"
+            type="button"
+            class="title-chip"
+            :class="{ 'is-current': currentKey === t.key, 'is-locked': !t.owned }"
+            :disabled="!t.owned"
+            :title="t.owned ? `点击佩戴 ${t.name}` : `${t.desc}（灵鸡斗场获得）`"
+            @click="equip(t.key)"
+          >
+            <span class="chip-name" :style="{ color: t.owned ? t.color : undefined }">{{ t.name }}</span>
+            <span v-if="t.owned" class="chip-perm">✦ 永久</span>
+            <span v-else class="chip-lock">🔒 灵鸡斗场</span>
           </button>
         </div>
       </div>
@@ -87,6 +131,8 @@ const emit = defineEmits(['close', 'changed'])
 
 const jobTitlesByJob = ref({})
 const timeTitles = ref([])
+const permanentTitles = ref([])
+const cockfightTitles = ref([])
 
 const jobNames = {
   thunder: '雷霆系', light: '光明系', wind: '风行系', knight: '骑士系', alchemy: '炼金系',
@@ -108,6 +154,17 @@ async function load() {
     if (res.success) {
       const unlocked = res.data.unlocked || []
       const active = res.data.active || []
+      // 永久称号：完整显示（含未拥有，锁定态），来源 source === 'arena'
+      const ownedKeys = (res.data.permanent || []).map(t => t.key)
+      const allTitles = res.data.all || {}
+      permanentTitles.value = Object.keys(allTitles)
+        .filter(key => allTitles[key].source === 'arena')
+        .map(key => ({ key, ...allTitles[key], owned: ownedKeys.includes(key) }))
+      // 斗鸡称号：完整显示（含未拥有，锁定态），来源 source === 'cockfight'
+      const cockOwnedKeys = (res.data.cockfight || []).map(t => t.key)
+      cockfightTitles.value = Object.keys(allTitles)
+        .filter(key => allTitles[key].source === 'cockfight')
+        .map(key => ({ key, ...allTitles[key], owned: cockOwnedKeys.includes(key) }))
       // 按职业分组
       const grouped = {}
       for (const t of unlocked) {
@@ -132,7 +189,15 @@ async function load() {
         grouped[j].sort((a, b) => a.requiresLevel - b.requiresLevel)
       }
       jobTitlesByJob.value = grouped
-      timeTitles.value = active
+      // 限时称号：完整显示（含未获得的锁定态；获得中的带倒计时）
+      timeTitles.value = Object.keys(allTitles)
+        .filter(key => key.startsWith('boss_killer'))
+        .map(key => {
+          const act = active.find(t => t.key === key)
+          return act
+            ? { ...act, owned: true }
+            : { key, ...allTitles[key], owned: false }
+        })
     }
   } catch (e) { /* ignore */ }
 }
@@ -241,6 +306,7 @@ onMounted(load)
 .chip-name { font-weight: 600; }
 .chip-lock { font-size: 0.65rem; color: var(--dim); }
 .chip-time { font-size: 0.65rem; color: var(--accent); font-family: monospace; }
+.chip-perm { font-size: 0.65rem; color: var(--accent2); }
 
 .title-actions {
   display: flex; gap: 0.5rem; margin-top: 0.8rem;

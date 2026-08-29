@@ -5,6 +5,7 @@ const {
   useConsumable, buyItem,
   sellMaterial, sellEquip, sellEquipsByLevel,
   upgradeEquipment, mergeEquipment, reforgeEquipment,
+  sortInventory,
   getPlayerView,
 } = require('../engine');
 const { SHOP_ITEMS, SHOP_MATERIALS, EQUIP_TEMPLATES, QUALITY_COLORS, AFFIX_LEVELS, AFFIX_TREE } = require('../data');
@@ -140,6 +141,17 @@ function registerCombatRoutes(app, store) {
     const r = loadPlayer(store, req.params.username);
     if (r.error) return fail(res, r.error);
     const result = reforgeEquipment(r.player, itemUid);
+    if (!result.success) return fail(res, result.message);
+    savePlayer(store, r.player);
+    store.save();
+    ok(res, getPlayerView(r.player));
+  });
+
+  // v1.02：背包排序持久化（前端"整理"按钮触发）
+  app.post('/api/player/:username/inventory/sort', (req, res) => {
+    const r = loadPlayer(store, req.params.username);
+    if (r.error) return fail(res, r.error);
+    const result = sortInventory(r.player);
     if (!result.success) return fail(res, result.message);
     savePlayer(store, r.player);
     store.save();

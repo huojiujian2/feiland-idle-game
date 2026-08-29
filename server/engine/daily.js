@@ -137,7 +137,8 @@ function claimAchievement(player, achId) {
     const tpl = ach.reward.equipPool[Math.floor(getRand()() * ach.reward.equipPool.length)];
     const item = createEquipItem(tpl, genUid());
     if (item) {
-      player.equips.push(item);
+      // v1.02 持久化：任务奖励的装备也按排序插入
+      addEquipToSortedPositionLocal(player, item);
       ensureQuestStats(player);
       if (!player.questStats.seenEquipTemplates.includes(tpl)) player.questStats.seenEquipTemplates.push(tpl);
     }
@@ -161,8 +162,9 @@ function claimAchievement(player, achId) {
     titleToGrant = player.godhood === 'god' ? '神灵' : '半神';
   }
   if (titleToGrant) {
-    if (!player.titles) player.titles = [];
-    if (!player.titles.includes(titleToGrant)) player.titles.push(titleToGrant);
+    // v1.03：titles 统一对象结构（key → true）
+    if (!player.titles || typeof player.titles !== 'object' || Array.isArray(player.titles)) player.titles = {};
+    if (!player.titles[titleToGrant]) player.titles[titleToGrant] = true;
     if (!player.currentTitle) player.currentTitle = titleToGrant;
     rec.grantedTitle = titleToGrant;
   }
@@ -265,3 +267,36 @@ module.exports = {
   maybeResetWeeklyBossKills,
   setGrantHandlers,
 };
+
+// v1.02 本地版"按排序插入"（与 items.js 同步）
+const SLOT_ORDER_DAILY = { weapon: 0, armor: 1, accessory: 2 };
+function getEquipSortKeyDaily(item) {
+  if (!item || !item.stats) return 0;
+  let max = 0;
+  for (const v of Object.values(item.stats)) {
+    if (typeof v === 'number' && v > max) max = v;
+  }
+  return max;
+}
+function compareEquipDaily(a, b) {
+  const sa = SLOT_ORDER_DAILY[a.slot] ?? 99;
+  const sb = SLOT_ORDER_DAILY[b.slot] ?? 99;
+  if (sa !== sb) return sa - sb;
+  const va = getEquipSortKeyDaily(a);
+  const vb = getEquipSortKeyDaily(b);
+  if (va !== vb) return vb - va;
+  const qOrder = { mythic: 5, legend: 4, epic: 3, fine: 2, normal: 1 };
+  return (qOrder[b.quality] || 0) - (qOrder[a.quality] || 0);
+}
+function addEquipToSortedPositionLocal(player, item) {
+  if (!item) return;
+  player.equips = player.equips || [];
+  let insertIdx = player.equips.length;
+  for (let i = 0; i < player.equips.length; i++) {
+    if (compareEquipDaily(item, player.equips[i]) < 0) {
+      insertIdx = i;
+      break;
+    }
+  }
+  player.equips.splice(insertIdx, 0, item);
+}

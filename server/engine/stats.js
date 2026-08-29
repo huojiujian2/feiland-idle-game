@@ -41,6 +41,11 @@ function getReincarnationBonus(player) {
     baseDef: b.baseDefBonus || 0,
     baseHp: b.baseHpBonus || 0,
     baseAgi: b.baseAgiBonus || 0,
+    // v8：4 个属性之魂改为"基础属性永久增幅"（百分比）
+    baseAtkPercent: b.baseAtkPercent || 0,
+    baseDefPercent: b.baseDefPercent || 0,
+    baseHpPercent: b.baseHpPercent || 0,
+    baseAgiPercent: b.baseAgiPercent || 0,
     expBonus: b.expBonus || 0,
     goldBonus: b.goldBonus || 0,
   };
@@ -184,10 +189,18 @@ function getTotalStats(player) {
   const base = player.attributes;
   const allAttrMult = 1 + (lawBonus.allAttr || 0);
 
-  const baseAtk = (10 + (player.level - 1) * 3 + base.atk * 2 + eq.atk + (raceBonus.str || 0) * 2 + (godBonus.atk || 0) * 2 + reincBonus.baseAtk);
-  const baseDef = (5 + (player.level - 1) * 2 + base.def * 1.5 + eq.def + (raceBonus.con || 0) * 1.5 + (godBonus.def || 0) * 1.5 + reincBonus.baseDef);
-  const baseHp = (100 + (player.level - 1) * 20 + base.hp * 10 + eq.hp + (raceBonus.con || 0) * 5 + (godBonus.hp || 0) * 5 + reincBonus.baseHp);
-  const baseAgi = (10 + (player.level - 1) * 2 + base.agi * 1 + eq.agi + (raceBonus.agi || 0) + (godBonus.agi || 0) + reincBonus.baseAgi);
+  // v8：4 个属性之魂改为"基础属性永久增幅"（百分比）
+  //   4 个属性之魂 → permanentBuffs.base{X}Percent 累加
+  //   在加完所有 flat 之后、乘以 affix/strategy/allAttr 之前，乘 (1 + percent)
+  //   这样买 1 次攻击之魂就 = 基础攻击 +2%（永久），体验更平滑
+  const baseAtkRaw = 10 + (player.level - 1) * 3 + base.atk * 2 + eq.atk + (raceBonus.str || 0) * 2 + (godBonus.atk || 0) * 2 + reincBonus.baseAtk;
+  const baseDefRaw = 5 + (player.level - 1) * 2 + base.def * 1.5 + eq.def + (raceBonus.con || 0) * 1.5 + (godBonus.def || 0) * 1.5 + reincBonus.baseDef;
+  const baseHpRaw = 100 + (player.level - 1) * 20 + base.hp * 10 + eq.hp + (raceBonus.con || 0) * 5 + (raceBonus.hp || 0) + (godBonus.hp || 0) * 5 + reincBonus.baseHp;
+  const baseAgiRaw = 10 + (player.level - 1) * 2 + base.agi * 1 + eq.agi + (raceBonus.agi || 0) + (godBonus.agi || 0) + reincBonus.baseAgi;
+  const baseAtk = Math.floor(baseAtkRaw * (1 + (reincBonus.baseAtkPercent || 0)));
+  const baseDef = Math.floor(baseDefRaw * (1 + (reincBonus.baseDefPercent || 0)));
+  const baseHp = Math.floor(baseHpRaw * (1 + (reincBonus.baseHpPercent || 0)));
+  const baseAgi = Math.floor(baseAgiRaw * (1 + (reincBonus.baseAgiPercent || 0)));
 
   const strat = STRATEGIES[player.strategy] || STRATEGIES.balanced;
   const sAtk = strat.effects.atk || 0;
@@ -197,7 +210,9 @@ function getTotalStats(player) {
   const atkTotal = Math.floor(baseAtk * (1 + affix.atk) * (1 + sAtk) * allAttrMult);
   const defTotal = Math.floor(baseDef * (1 + affix.def) * (1 + sDef) * allAttrMult);
   const hpTotal = Math.floor(baseHp * (1 + affix.hp) * allAttrMult);
-  const agiTotal = Math.floor(baseAgi * (1 + affix.agi) * allAttrMult);
+  // v1.02：种族魅力(cha) → 移速加成，每 2 点 = 1%（翼人 10 点 = +5%，天使 30 点 = +15%）
+  const raceSpeed = (raceBonus.cha || 0) * 0.005;
+  const agiTotal = Math.floor(baseAgi * (1 + raceSpeed) * (1 + affix.agi) * allAttrMult);
 
   const crit = affix.crit + (talents.crit || 0) + (mechanics.crit || 0);
   const critDmg = affix.critDmg + (talents.critDmg || 0) + (mechanics.critDmg || 0) + 0.5;

@@ -7,7 +7,7 @@ const {
   settleArenaRewards, maybeResetSeason, applySeasonResetToPlayers,
   buyArenaItem, getPlayerView, getNow,
 } = require('../engine');
-const { PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, ARENA_EQUIPMENT } = require('../data');
+const { PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, ARENA_EQUIPMENT, ARENA_TITLES } = require('../data');
 const { ok, fail, loadPlayer, savePlayer } = require('./_helpers');
 
 function registerPvpRoutes(app, store) {
@@ -232,7 +232,12 @@ function registerPvpRoutes(app, store) {
       if (!grouped[item.reqLevel]) grouped[item.reqLevel] = [];
       grouped[item.reqLevel].push(item);
     }
-    res.json({ success: true, data: { items: ARENA_EQUIPMENT, grouped } });
+    // 永久称号商品：带 owned 标记（需传 ?username=）
+    const username = req.query.username || '';
+    const player = username ? store.getPlayer(username) : null;
+    const ownedKeys = player ? Object.keys(player.titles || {}) : [];
+    const titles = ARENA_TITLES.map(t => ({ ...t, owned: ownedKeys.includes(t.titleKey) }));
+    res.json({ success: true, data: { items: ARENA_EQUIPMENT, grouped, titles } });
   });
   app.post('/api/arena/buy', (req, res) => {
     const { username, itemId } = req.body;

@@ -29,6 +29,12 @@ function getWorld(meta) {
   if (!meta.genesis.equipsMax || typeof meta.genesis.equipsMax !== 'object') {
     meta.genesis.equipsMax = {};
   }
+  // v2.8：混沌归档（全服共享）——被造物主抹除的生物/装备的完整快照
+  if (!meta.genesis.chaos || typeof meta.genesis.chaos !== 'object') {
+    meta.genesis.chaos = { monsters: [], equips: [] };
+  }
+  if (!Array.isArray(meta.genesis.chaos.monsters)) meta.genesis.chaos.monsters = [];
+  if (!Array.isArray(meta.genesis.chaos.equips))   meta.genesis.chaos.equips   = [];
   return meta.genesis;
 }
 
@@ -318,6 +324,13 @@ function deleteCustom(player, kind, id, meta) {
       }
     }
   }
+  // v2.8：抹除前把完整快照归档进全服混沌图鉴（meta.genesis.chaos）
+  w.chaos[kind].push({
+    ...JSON.parse(JSON.stringify(item)),
+    erasedAt: Date.now(),
+    erasedBy: player.username || player.name,
+    erasedReason: 'creator_delete',
+  });
   list.splice(idx, 1);
   if (kind === 'equips') unregisterCustomEquip(id);
   player.logs = player.logs || [];

@@ -5,7 +5,7 @@ const {
 } = require('../data');
 const { AREAS } = require('../data');
 const { refreshDailyIfNeeded, checkAchievements } = require('./daily');
-const { migratePlayer, grantGold } = require('./player');
+const { migratePlayer, grantGold, grantExpWithLevelUp } = require('./player');
 
 // recalcMaxStats 注入
 let _recalcMaxStats = () => {};
@@ -60,19 +60,38 @@ function doReincarnate(player) {
   }
   const totalAttr = (player.attributes.atk || 0) + (player.attributes.def || 0) +
                     (player.attributes.hp || 0) + (player.attributes.agi || 0);
-  const earnedPoints = Math.max(1, Math.floor(totalAttr / 100));
+  // v6：转生点公式改为按等级
+  //   第一次转生（rc=0→1）：固定 10 点（特殊值，激励玩家转生）
+  //   后续转生（rc≥1）：floor(等级 / 50)
+  //   100 级 → 2 点；200 级 → 4 点；500 级 → 10 点；1000 级 → 20 点
+  const newRc = (player.reincarnation || 0) + 1;
+  const earnedPoints = newRc === 1
+    ? 10
+    : Math.max(0, Math.floor((player.level || 0) / 50));
 
-  player.reincarnation = (player.reincarnation || 0) + 1;
+  player.reincarnation = newRc;
   player.reincPoints = (player.reincPoints || 0) + earnedPoints;
 
-  const rc = player.reincarnation;
+  // v4：转生时**累加** permanentBuffs（保留商店购买的加成）
+  //   经验/金币：每次转生只增加 0.01（与商店"经验祝福·微"同速率），封顶 0.60
+  //   基础 4 维：每次转生只增加 1（与经验/金币统一）
+  //   之前转生给 +0.02/+5 会让玩家感觉到"转生 1 次比买 1 次多涨得多"，与"统一累加"不符
+  //   现在统一改成 +0.01/+1，玩家可以从"经验祝福·微"的 +0.01 一直买到封顶
+  // v9：4 个属性之魂的 baseXPercent 也要保留（v8 引入，bug 修复）
+  //   之前 v4 修复时还没这个字段，所以不覆盖丢失的字段变成"清零"
+  const prev = player.permanentBuffs || {};
   player.permanentBuffs = {
-    expBonus: Math.min(0.30, rc * 0.02),
-    goldBonus: Math.min(0.30, rc * 0.02),
-    baseAtkBonus: rc * 5,
-    baseDefBonus: rc * 5,
-    baseHpBonus: rc * 5,
-    baseAgiBonus: rc * 5,
+    expBonus: Math.min(0.60, (prev.expBonus || 0) + 0.01),
+    goldBonus: Math.min(0.60, (prev.goldBonus || 0) + 0.01),
+    baseAtkBonus: (prev.baseAtkBonus || 0) + 1,
+    baseDefBonus: (prev.baseDefBonus || 0) + 1,
+    baseHpBonus: (prev.baseHpBonus || 0) + 1,
+    baseAgiBonus: (prev.baseAgiBonus || 0) + 1,
+    // v9：保留 4 个属性之魂买的百分比增幅
+    baseAtkPercent: prev.baseAtkPercent || 0,
+    baseDefPercent: prev.baseDefPercent || 0,
+    baseHpPercent: prev.baseHpPercent || 0,
+    baseAgiPercent: prev.baseAgiPercent || 0,
   };
 
   player.level = 1;
@@ -93,16 +112,78 @@ function doReincarnate(player) {
   player.logs.push({
     time: getNow(),
     type: 'reincarnate',
-    text: `【轮回 ${player.reincarnation}】转生成功！获得 ${earnedPoints} 转生点，永久 +${Math.round(player.permanentBuffs.expBonus*100)}% 经验/+${Math.round(player.permanentBuffs.goldBonus*100)}% 金币/基础属性 +5`
+    text: `【轮回 ${player.reincarnation}】转生成功！获得 ${earnedPoints} 转生点，永久 +${Math.round(player.permanentBuffs.expBonus*100)}% 经验/+${Math.round(player.permanentBuffs.goldBonus*100)}% 金币/基础属性 +1`
   });
   checkAchievements(player);
   return { success: true, earnedPoints, reincarnation: player.reincarnation };
 }
 
+// ====== 内测工具：一键转生 ======
+// 原理：用当前金币按"高级经验卷轴"（800 金币 / 3000 经验）的购买力把等级速拉到 targetLevel，
+//       然后走正常 doReincarnate，重复 times 轮。金币不够时停在断点，返回已完成轮数。
+// 注意：内测专用，后续删除经验卷轴时同步删除。
+const AUTO_REINC_SCROLL_EXP = 3000;   // 高级经验卷轴经验
+const AUTO_REINC_SCROLL_COST = 800;  // 高级经验卷轴价格
+function autoReincarnate(player, times, targetLevel) {
+  player = migratePlayer(player);
+  const n = Math.floor(Number(times) || 0);
+  const lv = Math.floor(Number(targetLevel) || 0);
+  if (n < 1) return { success: false, message: '转生次数至少为 1' };
+  if (lv < 100) return { success: false, message: '目标等级不能低于 100（转生需要 Lv.100）' };
+
+  // 通关条件提前校验（转生后保留进度，只需检查一次）
+  const maxClearedArea = player.stats?.maxClearedArea || 'gaomanshan';
+  if (AREA_ORDER.indexOf(maxClearedArea) < AREA_ORDER.indexOf('longdao')) {
+    return { success: false, message: '需先通关「龙岛」才可转生' };
+  }
+
+  let completed = 0;
+  for (let i = 1; i <= n; i++) {
+    // 1) 计算当前等级 → 目标等级的缺口经验（已有经验可抵扣）
+    if (player.level < lv) {
+      let need = 0;
+      for (let l = player.level; l < lv; l++) need += expToNext(l);
+      need -= player.exp || 0;
+      if (need > 0) {
+        const scrolls = Math.ceil(need / AUTO_REINC_SCROLL_EXP);
+        const cost = scrolls * AUTO_REINC_SCROLL_COST;
+        if (player.gold < cost) {
+          return {
+            success: true, completed, stoppedAt: i,
+            message: `金币不足：第 ${i} 轮需 ${scrolls} 张高级经验卷轴（${cost} 金币），当前仅 ${player.gold} 金币`,
+          };
+        }
+        player.gold -= cost;
+        grantExpWithLevelUp(player, need);
+      }
+    }
+    // 2) 正常转生（等级/经验/属性重置，永久加成累加）
+    const r = doReincarnate(player);
+    if (!r.success) return { success: false, message: `第 ${i} 轮转生失败：${r.message}` };
+    completed = i;
+  }
+  return {
+    success: true, completed,
+    message: `一键转生完成：共 ${completed} 轮（目标 Lv.${lv}）`,
+  };
+}
+
 function getReincarnationInfo(player) {
   player = migratePlayer(player);
   const rc = player.reincarnation || 0;
-  const nextCap = 30;
+  // v5：nextBuffs 返回实际能获得的增量（封顶时为 0）
+  // 单次转生基础增量 = 0.01/+1；距离封顶还差多少就只返回多少
+  // 封顶时当前已经是 0.60，实际能获得 0（前端显示 +0%）
+  const currentExp = (player.permanentBuffs && player.permanentBuffs.expBonus) || 0;
+  const currentGold = (player.permanentBuffs && player.permanentBuffs.goldBonus) || 0;
+  const REINC_BONUS_STEP = 0.01;
+  const REINC_BONUS_CAP = 0.60;
+  const nextExpBonus = currentExp >= REINC_BONUS_CAP
+    ? 0
+    : Math.min(REINC_BONUS_STEP, REINC_BONUS_CAP - currentExp);
+  const nextGoldBonus = currentGold >= REINC_BONUS_CAP
+    ? 0
+    : Math.min(REINC_BONUS_STEP, REINC_BONUS_CAP - currentGold);
   return {
     reincarnation: rc,
     reincPoints: player.reincPoints || 0,
@@ -111,12 +192,13 @@ function getReincarnationInfo(player) {
       baseAtkBonus: 0, baseDefBonus: 0, baseHpBonus: 0, baseAgiBonus: 0,
     },
     nextBuffs: {
-      expBonus: Math.min(nextCap, (rc + 1) * 0.02),
-      goldBonus: Math.min(nextCap, (rc + 1) * 0.02),
-      baseAtkBonus: (rc + 1) * 5,
-      baseDefBonus: (rc + 1) * 5,
-      baseHpBonus: (rc + 1) * 5,
-      baseAgiBonus: (rc + 1) * 5,
+      expBonus: nextExpBonus,
+      goldBonus: nextGoldBonus,
+      // 基础 4 维无上限，永远 +1
+      baseAtkBonus: 1,
+      baseDefBonus: 1,
+      baseHpBonus: 1,
+      baseAgiBonus: 1,
     },
     canReincarnate: (player.level >= 100) &&
       ((player.stats && player.stats.maxClearedArea &&
@@ -125,54 +207,92 @@ function getReincarnationInfo(player) {
   };
 }
 
-// 转生点商店
-// 平衡约定：exp/gold 加成类购买上限 30%（与 doReincarnate 的封顶一致）；
-// 金币礼包与材料盒的「每点转生点期望收益」对齐（约 250~320 金/点）
-const REINC_BUFF_CAP = 0.30;
+// 转生点商店（v8 重做）
+//   每个商品"已买次数"独立计数，存放在 player.reincShopCounts[itemId]
+//   购买价格 = 已买次数 + 1（第 1 次 1 点，第 2 次 2 点，第 N 次 N 点）
+//   累计消耗 = 1 + 2 + ... + N = N(N+1)/2
+//   单次购买效果：
+//     - 经验祝福·微 / 财富祝福·微：+0.01（+1%）
+//     - 攻击之魂 / 防御之魂 / 生命之魂 / 敏捷之魂：+0.02（+2% 基础属性永久增幅）
+//     - 材料宝盒：5 个自选高级材料（固定 5 个，不随次数变化）
+//     - 金币大礼包：9000 金币（固定，不随次数变化）
+// 经验/金币加成类有封顶 +60%，其他无封顶
+const REINC_BUFF_CAP = 0.60;
 const MATERIAL_BOX_OPTIONS = ['法则碎片', '深渊之石', '龙血', '光明晶'];
+// 商品的"基础效果"配置（不含 cost，因为 cost 动态计算）
 const REINC_SHOP_ITEMS = [
-  { id: 'exp_potion', name: '经验祝福·微', desc: '永久增加 1% 经验加成（累计上限 +30%）', cost: 10, type: 'buff', apply: (p) => {
+  { id: 'exp_potion', name: '经验祝福·微', desc: '永久增加 1% 经验加成（累计上限 +60%）', type: 'buff', apply: (p) => {
     p.permanentBuffs = p.permanentBuffs || {};
-    p.permanentBuffs.expBonus = (p.permanentBuffs.expBonus || 0) + 0.01;
+    p.permanentBuffs.expBonus = Math.min(REINC_BUFF_CAP, (p.permanentBuffs.expBonus || 0) + 0.01);
   }},
-  { id: 'gold_potion', name: '财富祝福·微', desc: '永久增加 1% 金币加成（累计上限 +30%）', cost: 10, type: 'buff', apply: (p) => {
+  { id: 'gold_potion', name: '财富祝福·微', desc: '永久增加 1% 金币加成（累计上限 +60%）', type: 'buff', apply: (p) => {
     p.permanentBuffs = p.permanentBuffs || {};
-    p.permanentBuffs.goldBonus = (p.permanentBuffs.goldBonus || 0) + 0.01;
+    p.permanentBuffs.goldBonus = Math.min(REINC_BUFF_CAP, (p.permanentBuffs.goldBonus || 0) + 0.01);
   }},
-  { id: 'attr_potion_atk', name: '攻击之魂', desc: '永久增加 10 攻击基础值', cost: 20, type: 'buff', apply: (p) => {
+  // v8：4 个属性之魂改为"基础属性永久增幅 +2%"（不是 flat +10/+50）
+  { id: 'attr_potion_atk', name: '攻击之魂', desc: '永久增加 2% 攻击基础值（累计永久增幅）', type: 'buff', apply: (p) => {
     p.permanentBuffs = p.permanentBuffs || {};
-    p.permanentBuffs.baseAtkBonus = (p.permanentBuffs.baseAtkBonus || 0) + 10;
+    p.permanentBuffs.baseAtkPercent = (p.permanentBuffs.baseAtkPercent || 0) + 0.02;
   }},
-  { id: 'attr_potion_def', name: '防御之魂', desc: '永久增加 10 防御基础值', cost: 20, type: 'buff', apply: (p) => {
+  { id: 'attr_potion_def', name: '防御之魂', desc: '永久增加 2% 防御基础值（累计永久增幅）', type: 'buff', apply: (p) => {
     p.permanentBuffs = p.permanentBuffs || {};
-    p.permanentBuffs.baseDefBonus = (p.permanentBuffs.baseDefBonus || 0) + 10;
+    p.permanentBuffs.baseDefPercent = (p.permanentBuffs.baseDefPercent || 0) + 0.02;
   }},
-  { id: 'attr_potion_hp', name: '生命之魂', desc: '永久增加 50 生命基础值', cost: 20, type: 'buff', apply: (p) => {
+  { id: 'attr_potion_hp', name: '生命之魂', desc: '永久增加 2% 生命基础值（累计永久增幅）', type: 'buff', apply: (p) => {
     p.permanentBuffs = p.permanentBuffs || {};
-    p.permanentBuffs.baseHpBonus = (p.permanentBuffs.baseHpBonus || 0) + 50;
+    p.permanentBuffs.baseHpPercent = (p.permanentBuffs.baseHpPercent || 0) + 0.02;
   }},
-  { id: 'attr_potion_agi', name: '敏捷之魂', desc: '永久增加 5 敏捷基础值', cost: 20, type: 'buff', apply: (p) => {
+  { id: 'attr_potion_agi', name: '敏捷之魂', desc: '永久增加 2% 敏捷基础值（累计永久增幅）', type: 'buff', apply: (p) => {
     p.permanentBuffs = p.permanentBuffs || {};
-    p.permanentBuffs.baseAgiBonus = (p.permanentBuffs.baseAgiBonus || 0) + 5;
+    p.permanentBuffs.baseAgiPercent = (p.permanentBuffs.baseAgiPercent || 0) + 0.02;
   }},
-  { id: 'material_box', name: '材料宝盒', desc: '自选获得 5 个高级材料（法则碎片/深渊之石/龙血/光明晶）', cost: 20, type: 'material', apply: (p, option) => {
+  { id: 'material_box', name: '材料宝盒', desc: '自选获得 5 个高级材料（法则碎片/深渊之石/龙血/光明晶）', type: 'material', apply: (p, option) => {
     const mat = option;
     const existing = p.inventory.find(i => i.name === mat);
     if (existing) existing.count += 5;
     else p.inventory.push({ name: mat, count: 5, type: 'material' });
     return `获得 5 个 ${mat}`;
   }},
-  { id: 'gold_pack', name: '金币大礼包', desc: '直接获得 9000 金币', cost: 30, type: 'gold', apply: (p) => {
+  { id: 'gold_pack', name: '金币大礼包', desc: '直接获得 9000 金币', type: 'gold', apply: (p) => {
     grantGold(p, 9000);
     return '获得 9000 金币';
   }},
 ];
 
-function getReincShop() {
-  return REINC_SHOP_ITEMS.map(item => ({
-    id: item.id, name: item.name, desc: item.desc, cost: item.cost, type: item.type,
-    options: item.id === 'material_box' ? MATERIAL_BOX_OPTIONS : undefined
-  }));
+// 工具：取商品已买次数
+function getReincShopCount(player, itemId) {
+  player.reincShopCounts = player.reincShopCounts || {};
+  return player.reincShopCounts[itemId] || 0;
+}
+// 工具：取商品"下一次购买"的价格 = 已买次数 + 1
+function getReincShopCost(player, itemId) {
+  return getReincShopCount(player, itemId) + 1;
+}
+// 工具：累加已买次数
+function bumpReincShopCount(player, itemId) {
+  player.reincShopCounts = player.reincShopCounts || {};
+  player.reincShopCounts[itemId] = (player.reincShopCounts[itemId] || 0) + 1;
+}
+
+// getReincShop：返回当前状态下的商品列表（含动态 cost）
+//   cost = 已买次数 + 1
+//   boughtCount 也返回给前端显示「第 N 次购买」
+function getReincShop(player) {
+  player = migratePlayer(player);
+  return REINC_SHOP_ITEMS.map(item => {
+    const bought = getReincShopCount(player, item.id);
+    const cost = bought + 1;
+    return {
+      id: item.id,
+      name: item.name,
+      desc: item.desc,
+      type: item.type,
+      cost,                   // 下一次购买的价格（动态）
+      boughtCount: bought,     // 已买次数
+      nextCost: cost,          // 冗余字段，前端更易用
+      options: item.id === 'material_box' ? MATERIAL_BOX_OPTIONS : undefined,
+    };
+  });
 }
 
 function buyReincShopItem(player, itemId, option) {
@@ -185,25 +305,36 @@ function buyReincShopItem(player, itemId, option) {
       return { success: false, message: `请选择要获得的材料（${MATERIAL_BOX_OPTIONS.join('/')}）` };
     }
   }
-  // 加成类购买上限保护
+  // v7：封顶保护——经验/金币加成类满 60% 后禁止再买
   if (item.id === 'exp_potion') {
     const cur = (player.permanentBuffs || {}).expBonus || 0;
-    if (cur >= REINC_BUFF_CAP) return { success: false, message: '经验加成已达上限 +30%' };
+    if (cur >= REINC_BUFF_CAP) return { success: false, message: `经验加成已达上限 +${Math.round(REINC_BUFF_CAP * 100)}%` };
   }
   if (item.id === 'gold_potion') {
     const cur = (player.permanentBuffs || {}).goldBonus || 0;
-    if (cur >= REINC_BUFF_CAP) return { success: false, message: '金币加成已达上限 +30%' };
+    if (cur >= REINC_BUFF_CAP) return { success: false, message: `金币加成已达上限 +${Math.round(REINC_BUFF_CAP * 100)}%` };
   }
+  // v7：动态价格 = 已买次数 + 1
+  const cost = getReincShopCost(player, itemId);
   const points = player.reincPoints || 0;
-  if (points < item.cost) {
-    return { success: false, message: `转生点不足，需要 ${item.cost} 点（当前 ${points}）` };
+  if (points < cost) {
+    return { success: false, message: `转生点不足，需要 ${cost} 点（当前 ${points}）` };
   }
-  player.reincPoints = points - item.cost;
+  player.reincPoints = points - cost;
+  // v7：累加已买次数（影响下次价格）
+  bumpReincShopCount(player, itemId);
+  // 应用效果
   const result = item.apply(player, option);
   recalc(player);
   player.hp = player.maxHp;
   player.mp = player.maxMp;
-  return { success: true, message: result || `兑换成功：${item.name}`, reincPoints: player.reincPoints };
+  return {
+    success: true,
+    message: result || `兑换成功：${item.name}（第 ${getReincShopCount(player, itemId)} 次，已消耗 ${cost} 点）`,
+    reincPoints: player.reincPoints,
+    cost,                          // 本次实际扣的点数
+    boughtCount: getReincShopCount(player, itemId),  // 买完后的次数
+  };
 }
 
 // 离线收益
@@ -245,6 +376,7 @@ function updateOfflineSnapshot(player) {
 module.exports = {
   chooseJob, attemptAscension,
   doReincarnate, getReincarnationInfo,
+  autoReincarnate, // 内测：一键转生
   getReincShop, buyReincShopItem,
   getOfflineSummary, updateOfflineSnapshot,
   setRecalcMaxStatsHandler,

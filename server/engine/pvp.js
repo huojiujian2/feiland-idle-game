@@ -7,7 +7,7 @@ const { findAffix } = require('./daily');
 const { getActiveSkillCd } = require('./utils');
 const {
   EQUIP_TEMPLATES, ENCHANT_RECIPES, AFFIX_TREE, JOB_TREE, LAWS,
-  ARENA_RANK_REWARDS, ARENA_EQUIPMENT, BOT_NAMES, BOT_JOB_PREF,
+  ARENA_RANK_REWARDS, ARENA_EQUIPMENT, ARENA_TITLES, BOT_NAMES, BOT_JOB_PREF,
   PVP_CURRENCY_KEY, SEASON_MONTHS,
 } = require('../data');
 const { getDailyKey, getWeeklyKey, getMonthlyKey } = require('./daily');
@@ -467,6 +467,10 @@ function applySeasonResetToPlayers(store) {
 
 // 竞技商店
 function buyArenaItem(player, itemId) {
+  // 永久称号商品：type = 'title'
+  const titleItem = ARENA_TITLES.find(e => e.id === itemId);
+  if (titleItem) return buyArenaTitle(player, titleItem);
+
   const item = ARENA_EQUIPMENT.find(e => e.id === itemId);
   if (!item) return { success: false, message: '装备不存在' };
   if ((player.level || 1) < item.reqLevel) {
@@ -484,10 +488,61 @@ function buyArenaItem(player, itemId) {
     stats: { ...item.stats }, enchants: []
   };
   player.equips = player.equips || [];
-  player.equips.push(newItem);
+  // v1.02 持久化：竞技商店买装备也按排序插入
+  addEquipToSortedPositionLocal(player, newItem);
   player.logs = player.logs || [];
   player.logs.push({ time: getNow(), type: 'arena', text: `竞技商店购买：${item.name} [传说]` });
   return { success: true, item: newItem };
+}
+
+// 竞技商店：购买永久称号（写入 player.titles，无 titleExpiry → 永久有效）
+function buyArenaTitle(player, item) {
+  player.titles = player.titles || {};
+  if (player.titles[item.titleKey]) {
+    return { success: false, message: '已拥有该称号' };
+  }
+  const coins = player[PVP_CURRENCY_KEY] || 0;
+  if (coins < item.price) {
+    return { success: false, message: `竞技币不足，需要 ${item.price} 币` };
+  }
+  player[PVP_CURRENCY_KEY] = coins - item.price;
+  player.titles[item.titleKey] = true; // 无过期时间 = 永久
+  player.logs = player.logs || [];
+  player.logs.push({ time: getNow(), type: 'arena', text: `竞技商店购买：永久称号「${item.name}」` });
+  return { success: true, item: { id: item.id, type: 'title', titleKey: item.titleKey, name: item.name } };
+}
+
+// v1.02 本地版"按排序插入"（与 items.js 同步）
+const SLOT_ORDER_PVP = { weapon: 0, armor: 1, accessory: 2 };
+function getEquipSortKeyPvp(item) {
+  if (!item || !item.stats) return 0;
+  let max = 0;
+  for (const v of Object.values(item.stats)) {
+    if (typeof v === 'number' && v > max) max = v;
+  }
+  return max;
+}
+function compareEquipPvp(a, b) {
+  const sa = SLOT_ORDER_PVP[a.slot] ?? 99;
+  const sb = SLOT_ORDER_PVP[b.slot] ?? 99;
+  if (sa !== sb) return sa - sb;
+  const va = getEquipSortKeyPvp(a);
+  const vb = getEquipSortKeyPvp(b);
+  if (va !== vb) return vb - va;
+  const qOrder = { mythic: 5, legend: 4, epic: 3, fine: 2, normal: 1 };
+  return (qOrder[b.quality] || 0) - (qOrder[a.quality] || 0);
+}
+function addEquipToSortedPositionLocal(player, item) {
+  if (!item) return;
+  player.equips = player.equips || [];
+  let insertIdx = player.equips.length;
+  for (let i = 0; i < player.equips.length; i++) {
+    if (compareEquipPvp(item, player.equips[i]) < 0) {
+      insertIdx = i;
+      break;
+    }
+  }
+  player.equips.splice(insertIdx, 0, item);
 }
 
 module.exports = {

@@ -60,13 +60,15 @@ function createCharacter(username, charName) {
     dailyChestClaimed: false,
     achievements: {},
     questStats: { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] },
-    titles: [],
+    titles: {},
     currentTitle: null,
     reincPoints: 0,
     tutorialStep: 0,
     combatStats: { totalWins: 0, totalLosses: 0, totalDraws: 0, todayKills: 0, monthKills: 0, todayResetAt: getTodayKey(), monthResetAt: getMonthKey() },
     pvpStats: { wins: 0, losses: 0, rating: 1000, streak: 0, bestStreak: 0, lastPvpAt: 0 },
     attrPresets: [],
+    // 灵鸡斗场（完全独立玩法，不与主游戏资源交互）
+    cockfight: { points: 0, wins: 0, streak: 0, played: 0, loseStreak: 0, dayKey: '', usedToday: 0, banNext: null, current: null, history: [] },
   };
   p.achievements['first'] = { unlocked: true, claimed: false, unlockAt: now };
   return p;
@@ -99,6 +101,8 @@ function migratePlayer(player) {
     player.combatStats.monthResetAt = getMonthKey();
   }
   if (player.reincarnation === undefined) player.reincarnation = 0;
+  // v7：转生点商店购买次数（每个商品独立计数，用于动态价格）
+  if (!player.reincShopCounts || typeof player.reincShopCounts !== 'object') player.reincShopCounts = {};
   if (player.bossKills === undefined) player.bossKills = 0;
   // v0.9：满百级转生一次性提醒的标记
   if (player.reincarnHintShown === undefined) player.reincarnHintShown = false;
@@ -139,7 +143,18 @@ function migratePlayer(player) {
   if (!Array.isArray(player.questStats.affixSeen)) player.questStats.affixSeen = [];
   if (!Array.isArray(player.questStats.seenEquipTemplates)) player.questStats.seenEquipTemplates = [];
   if (!Number.isFinite(player.questStats.totalGoldEarned)) player.questStats.totalGoldEarned = 0;
-  if (!Array.isArray(player.titles)) player.titles = [];
+  // v1.03：称号统一为对象结构（key → true）
+  //   老存档是数组：已知称号 key 原样迁移；中文名成就称号（如"神灵"）以名字为 key 保留
+  //   （数组上的字符串键属性 JSON.stringify 会丢弃，导致购买的永久称号不固化）
+  if (Array.isArray(player.titles)) {
+    const migrated = {};
+    for (const t of player.titles) {
+      if (typeof t === 'string' && t) migrated[t] = true;
+    }
+    player.titles = migrated;
+  } else if (!player.titles || typeof player.titles !== 'object') {
+    player.titles = {};
+  }
   if (player.currentTitle !== null && typeof player.currentTitle !== 'string') player.currentTitle = null;
   if (!Number.isFinite(player.reincPoints)) player.reincPoints = 0;
   if (!Number.isFinite(player.tutorialStep)) player.tutorialStep = 0;
@@ -147,6 +162,11 @@ function migratePlayer(player) {
   if (!Array.isArray(player.attrPresets)) player.attrPresets = [];
   // v1.02：自定义头像字段迁移（缺失 → 留空走首字 fallback）
   if (typeof player.avatar !== 'string') player.avatar = '';
+  // 灵鸡斗场状态迁移（老存档补字段）
+  if (!player.cockfight || typeof player.cockfight !== 'object') {
+    player.cockfight = { points: 0, wins: 0, streak: 0, played: 0, loseStreak: 0, dayKey: '', usedToday: 0, banNext: null, current: null, history: [] };
+  }
+  if (!Array.isArray(player.cockfight.history)) player.cockfight.history = [];
   // 过滤掉 null 项（旧版本可能 push null 占位，避免下面逻辑踩到）
   player.attrPresets = player.attrPresets.filter(Boolean);
   if (!player.pvpStats || typeof player.pvpStats !== 'object') player.pvpStats = {};
@@ -333,28 +353,108 @@ function applyAttrPreset(player, presetId) {
   if (!player.attrPoints || player.attrPoints <= 0) {
     return { success: false, message: '没有可分配的属性点' };
   }
-  const totalAttr = preset.attributes.atk + preset.attributes.def + preset.attributes.hp + preset.attributes.agi;
-  if (totalAttr <= 0) return { success: false, message: '预设数据无效' };
-  const points = player.attrPoints;
-  const ratio = {
-    atk: preset.attributes.atk / totalAttr,
-    def: preset.attributes.def / totalAttr,
-    hp: preset.attributes.hp / totalAttr,
-    agi: preset.attributes.agi / totalAttr
+
+  // 读取预设的 4 维比例
+  const ra = Math.max(0, Number(preset.attributes.atk) || 0);
+  const rd = Math.max(0, Number(preset.attributes.def) || 0);
+  const rh = Math.max(0, Number(preset.attributes.hp)  || 0);
+  const rg = Math.max(0, Number(preset.attributes.agi) || 0);
+  const rsum = ra + rd + rh + rg;
+  if (rsum <= 0) return { success: false, message: '预设数据无效' };
+  const r = { atk: ra, def: rd, hp: rh, agi: rg };
+
+  // 当前属性
+  const cur = {
+    atk: player.attributes.atk || 0,
+    def: player.attributes.def || 0,
+    hp:  player.attributes.hp  || 0,
+    agi: player.attributes.agi || 0,
   };
-  let atk = Math.floor(points * ratio.atk);
-  let def = Math.floor(points * ratio.def);
-  let hp = Math.floor(points * ratio.hp);
-  let agi = points - atk - def - hp;
-  player.attributes.atk += atk;
-  player.attributes.def += def;
-  player.attributes.hp += hp;
-  player.attributes.agi += agi;
+
+  let points = player.attrPoints;
+  const alloc = { atk: 0, def: 0, hp: 0, agi: 0 };
+  const keys = ['atk', 'def', 'hp', 'agi'];
+
+  // 两阶段：先按比例补齐到对齐值，剩余按比例分配（余数给比例最大的维度）
+  let safety = 0;
+  while (points > 0 && safety < 10) {
+    safety++;
+
+    // 阶段 A：补齐
+    // k = max(cur[i] / r[i])，对 r[i] > 0 的维度
+    // 目标值 = k * r[i]；缺口 = 目标值 - cur[i]（r[i] = 0 的维度跳过）
+    let k = 0;
+    for (const key of keys) {
+      if (r[key] > 0) {
+        const curRatio = cur[key] / r[key];
+        if (curRatio > k) k = curRatio;
+      }
+    }
+    const gap = {
+      atk: r.atk > 0 ? Math.max(0, Math.round(k * r.atk - cur.atk)) : 0,
+      def: r.def > 0 ? Math.max(0, Math.round(k * r.def - cur.def)) : 0,
+      hp:  r.hp  > 0 ? Math.max(0, Math.round(k * r.hp  - cur.hp))  : 0,
+      agi: r.agi > 0 ? Math.max(0, Math.round(k * r.agi - cur.agi)) : 0,
+    };
+    const gapTotal = gap.atk + gap.def + gap.hp + gap.agi;
+
+    if (gapTotal > 0 && gapTotal <= points) {
+      // 一次补齐：所有维度缺口加起来 ≤ 剩余点数 → 全部补完
+      for (const key of keys) {
+        cur[key] += gap[key];
+        alloc[key] += gap[key];
+      }
+      points -= gapTotal;
+      continue;
+    }
+
+    // 补不齐：把余点全给缺口最大的维度
+    if (points > 0 && gapTotal > points) {
+      let maxGapKey = null;
+      let maxGap = 0;
+      for (const key of keys) {
+        if (gap[key] > maxGap) { maxGap = gap[key]; maxGapKey = key; }
+      }
+      if (maxGapKey && gap[maxGapKey] > 0) {
+        const give = Math.min(gap[maxGapKey], points);
+        cur[maxGapKey] += give;
+        alloc[maxGapKey] += give;
+        points -= give;
+        continue;
+      }
+    }
+
+    // 阶段 B：按比例分配剩余点（余数全给比例最大的维度）
+    if (points > 0) {
+      const m = { atk: 0, def: 0, hp: 0, agi: 0 };
+      for (const key of keys) m[key] = Math.floor(points * (r[key] / rsum));
+      let rem = points - m.atk - m.def - m.hp - m.agi;
+      // 余数全给"预设里权重最大"的维度（按 r 降序，r 相同时按 keys 顺序）
+      const order = [...keys].sort((a, b) => r[b] - r[a] || keys.indexOf(a) - keys.indexOf(b));
+      const topKey = order[0];
+      m[topKey] += rem;
+      rem = 0;
+      for (const key of keys) {
+        cur[key] += m[key];
+        alloc[key] += m[key];
+      }
+      points = 0;
+      break;
+    }
+  }
+
+  // 整数兜底
+  for (const key of keys) alloc[key] = Math.round(alloc[key]);
+
+  player.attributes.atk += alloc.atk;
+  player.attributes.def += alloc.def;
+  player.attributes.hp  += alloc.hp;
+  player.attributes.agi += alloc.agi;
   player.attrPoints = 0;
   recalcMaxStats(player);
   updateDailyProgressSafe(player, 'alloc1', 1);
   checkAchievements(player);
-  return { success: true, allocated: { atk, def, hp, agi } };
+  return { success: true, allocated: alloc };
 }
 // v0.9：按比例加点（"先补齐再分配"算法）
 // 需求：5:1:1:1 + 当前属性 40:5:10:8 + 80 点

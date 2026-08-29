@@ -142,7 +142,7 @@
               :class="{ 'btn-disabled': !canApplyPreset(p) }"
               :disabled="!canApplyPreset(p)"
               data-alloc-available
-              @click="handleApplyPreset(idx)"
+              @click="handleApplyPreset({ idx, presetId: p.presetId })"
             >应用</button>
             <button
               v-if="p.attributes"
@@ -219,33 +219,48 @@ function maxPending(key) {
     .reduce((sum, [attrKey, value]) => attrKey === key ? sum : sum + (Number(value) || 0), 0)
   return Math.max(0, available - allocatedToOthers)
 }
+// pending 的语义：这一项要分配多少点（相对于 player.attributes 的增量）。
+// adjDelta 任何时刻都从 pending 直接推导，避免 +/- 路径与输入框路径双计算。
+function recomputeAdjDelta() {
+  const out = {}
+  for (const [k, v] of Object.entries(pending.value)) {
+    const n = Number(v) || 0
+    if (n > 0) out[k] = n
+  }
+  adjDelta.value = out
+}
+
 function onPendingInput(key, event) {
   const raw = Number.parseInt(event.target.value, 10)
   const max = maxPending(key)
   const next = Number.isFinite(raw) ? Math.max(0, Math.min(max, raw)) : 0
-  const previous = pending.value[key] || 0
-  const delta = next - previous
-  if (delta !== 0) {
-    pending.value[key] = next
-    adjDelta.value[key] = (adjDelta.value[key] || 0) + delta
-    if (next <= 0) {
-      delete pending.value[key]
-      delete adjDelta.value[key]
-    }
-  }
+  if (next > 0) pending.value[key] = next
+  else delete pending.value[key]
+  recomputeAdjDelta()
   event.target.value = String(next)
 }
 
 function adjust(key, delta) {
-  const newVal = (pending.value[key] || 0) + delta
-  const total = Object.values(pending.value).reduce((a, b) => a + b, 0) + delta
-  if (total > props.player.attrPoints) return
+  const cur = pending.value[key] || 0
+  const newVal = cur + delta
   if (newVal < 0) return
-  pending.value[key] = newVal
-  adjDelta.value[key] = (pending.value[key] || 0) - (props.player.attributes[key] || 0)
+  // 全部 pending 之和不能超过 attrPoints
+  const others = Object.entries(pending.value)
+    .reduce((sum, [attrKey, value]) => attrKey === key ? sum : sum + (Number(value) || 0), 0)
+  if (others + newVal > props.player.attrPoints) return
+  if (newVal > 0) pending.value[key] = newVal
+  else delete pending.value[key]
+  recomputeAdjDelta()
 }
 function confirmAllocate() {
-  emit('allocate', { ...adjDelta.value })
+  // 只提交真正有正增量的项
+  const payload = {}
+  for (const [k, v] of Object.entries(adjDelta.value)) {
+    const n = Number(v) || 0
+    if (n > 0) payload[k] = n
+  }
+  if (Object.keys(payload).length === 0) return
+  emit('allocate', payload)
   pending.value = {}
   adjDelta.value = {}
 }
@@ -311,11 +326,12 @@ function canApplyPreset(p) {
 
 function handleSavePreset(idx) {
   if (!canSavePreset()) return
+  // 保存的是"自由调整面板的快照"（attrAdjust：0~30 的微调值），不立刻加点。
+  // 真正加点走 confirmAllocate / handleApplyPreset 路径。
   emit('savePreset', {
     slot: idx,
     name: `方案${['一','二','三'][idx]}`,
     attributes: { ...attrAdjust.value },
-    delta: { ...attrAdjust.value },
   })
 }
 function handleApplyPreset(payload) {

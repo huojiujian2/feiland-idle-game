@@ -124,7 +124,8 @@ function calculateIdle(player) {
           // v0.9：传入的可能是自创装备 templateId（custom_xxx），createEquipItem 走模板表查找
           const item = createEquipItem(drop.template, genUid());
           if (item) {
-            player.equips.push(item);
+            // v1.02 持久化：怪物掉落也按排序插入
+            addEquipToSortedPositionLocal(player, item);
             drops.push(`${item.name} [${item.quality}]`);
             ensureQuestStats(player);
             if (!player.questStats.seenEquipTemplates.includes(item.templateId)) player.questStats.seenEquipTemplates.push(item.templateId);
@@ -330,6 +331,39 @@ function _calculateIdleBatch(player, area, elapsed) {
 let _recalcMaxStats = () => {};
 function setRecalcMaxStatsHandler(fn) { if (typeof fn === 'function') _recalcMaxStats = fn; }
 function recalcMaxStatsFromStats(player) { return _recalcMaxStats(player); }
+
+// v1.02 本地版"按排序插入"（与 items.js 同步）
+const SLOT_ORDER_LOCAL = { weapon: 0, armor: 1, accessory: 2 };
+function getEquipSortKeyLocal(item) {
+  if (!item || !item.stats) return 0;
+  let max = 0;
+  for (const v of Object.values(item.stats)) {
+    if (typeof v === 'number' && v > max) max = v;
+  }
+  return max;
+}
+function compareEquipLocal(a, b) {
+  const sa = SLOT_ORDER_LOCAL[a.slot] ?? 99;
+  const sb = SLOT_ORDER_LOCAL[b.slot] ?? 99;
+  if (sa !== sb) return sa - sb;
+  const va = getEquipSortKeyLocal(a);
+  const vb = getEquipSortKeyLocal(b);
+  if (va !== vb) return vb - va;
+  const qOrder = { mythic: 5, legend: 4, epic: 3, fine: 2, normal: 1 };
+  return (qOrder[b.quality] || 0) - (qOrder[a.quality] || 0);
+}
+function addEquipToSortedPositionLocal(player, item) {
+  if (!item) return;
+  player.equips = player.equips || [];
+  let insertIdx = player.equips.length;
+  for (let i = 0; i < player.equips.length; i++) {
+    if (compareEquipLocal(item, player.equips[i]) < 0) {
+      insertIdx = i;
+      break;
+    }
+  }
+  player.equips.splice(insertIdx, 0, item);
+}
 
 module.exports = {
   calculateIdle,

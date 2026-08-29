@@ -93,11 +93,11 @@ function getPlayerView(player) {
     let title = a.title;
     if (a.id === 'ascend') {
       title = rec.grantedTitle || (player.godhood === 'god' ? '神灵' : '半神');
-      if (rec.claimed && !rec.grantedTitle) title = (player.titles || []).includes('神灵') ? '神灵' : '半神';
+      if (rec.claimed && !rec.grantedTitle) title = (player.titles || {})['神灵'] ? '神灵' : '半神';
     }
     return { id: a.id, name: a.name, desc: a.desc, unlocked: !!rec.unlocked, claimed: !!rec.claimed, reward: a.reward, title };
   });
-  const questView = { dailyQuests: dailyQuestsView, chest: chestView, achievements: achievementsView, titles: player.titles || [], currentTitle: player.currentTitle || null };
+  const questView = { dailyQuests: dailyQuestsView, chest: chestView, achievements: achievementsView, titles: player.titles || {}, currentTitle: player.currentTitle || null };
 
   return {
     username: player.username, name: player.name, avatar: player.avatar || '', race: player.race, raceStage: player.raceStage,
@@ -120,7 +120,7 @@ function getPlayerView(player) {
     canEvolve: nextRace ? (player.level >= nextRace.reqLevel) : false,
     jobInfo,
     strategy, strategyChangedAt, strategyCdRemaining, strategies,
-    titles: player.titles || [], currentTitle: player.currentTitle || null,
+    titles: player.titles || {}, currentTitle: player.currentTitle || null,
     questView,
     pvpStats: player.pvpStats,
     combatStats: player.combatStats,

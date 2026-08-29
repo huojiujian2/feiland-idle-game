@@ -402,6 +402,8 @@ async function confirmBulkMerge() {
 const equipPage = ref(1)
 const matPage = ref(1)
 const pageSize = 12
+// v1.02：背包整理加载态
+const sortLoading = ref(false)
 
 const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说', mythic: '神话' }
 const slotLabels = { weapon: '武器', armor: '护甲', accessory: '饰品' }
@@ -486,27 +488,25 @@ const EQUIP_SELL_PRICES_LOCAL = { normal: 20, fine: 80, epic: 300, legend: 1500,
 
 function openBulkSell() { bulkSellVisible.value = true }
 
-// v1.02：背包整理——按装备类别（武器→护甲→饰品）+ 类别内按最高属性降序
-//   不动 equips 源数据，只重排顺序；用于玩家在 back-end 同步前先看到整理结果
-function maxStat(item) {
-  if (!item || !item.stats) return 0
-  let max = 0
-  for (const v of Object.values(item.stats)) {
-    if (typeof v === 'number' && v > max) max = v
+// v1.02：背包整理——后端持久化（POST /inventory/sort）
+//   后端 sortInventory + 所有"加装备"入口都用 addEquipToSortedPosition
+//   排序后下次 5 秒轮询 getPlayer 顺序保持
+async function doSort() {
+  if (sortLoading.value) return
+  sortLoading.value = true
+  try {
+    const res = await api.sortInventory(props.player.username)
+    if (res.success) {
+      emit('refresh', res.data)
+      toast.success('背包已按类别+属性整理')
+    } else {
+      toast.error(res.message || '整理失败')
+    }
+  } catch (e) {
+    toast.error('整理失败：' + e.message)
+  } finally {
+    sortLoading.value = false
   }
-  return max
-}
-const SLOT_ORDER = { weapon: 0, armor: 1, accessory: 2 }
-function doSort() {
-  const arr = props.player.equips || []
-  const sorted = [...arr].sort((a, b) => {
-    const sa = SLOT_ORDER[a.slot] ?? 99
-    const sb = SLOT_ORDER[b.slot] ?? 99
-    if (sa !== sb) return sa - sb
-    return maxStat(b) - maxStat(a)
-  })
-  // 发出排序事件让 App.vue 同步后端（v1.02 当前仅前端排序，等后端 confirm 再持久化）
-  emit('sort', sorted)
 }
 
 const bulkSellPreview = computed(() => {

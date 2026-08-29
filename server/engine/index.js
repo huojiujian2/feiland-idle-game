@@ -14,6 +14,7 @@ const worldboss = require('./worldboss');
 const idle = require('./idle');
 const view = require('./view');
 const genesis = require('./genesis');
+const cockfight = require('./cockfight');
 
 // ====== 绑定循环引用 ======
 // recalcMaxStats：与原 engine.js 行为一致（基于词条加成的 baseHp）
@@ -25,7 +26,7 @@ const realRecalcMaxStats = (p) => {
   const reincBonus = stats.getReincarnationBonus(p);
   const base = p.attributes;
   const godMult = p.godhood === 'demigod' ? 2 : (p.godhood === 'god' ? 3 : 1);
-  const baseHp = 100 + (p.level - 1) * 20 + base.hp * 10 + eq.hp + (raceBonus.con || 0) * 5 + (godBonus.hp || 0) * 5 + reincBonus.baseHp;
+  const baseHp = 100 + (p.level - 1) * 20 + base.hp * 10 + eq.hp + (raceBonus.con || 0) * 5 + (raceBonus.hp || 0) + (godBonus.hp || 0) * 5 + reincBonus.baseHp;
   p.maxHp = Math.floor(baseHp * (1 + affix.hp) * godMult);
   p.maxMp = (50 + (p.level - 1) * 10 + eq.mp) * godMult;
   if (p.hp > p.maxHp) p.hp = p.maxHp;
@@ -105,6 +106,10 @@ module.exports = {
   sellMaterial: items.sellMaterial,
   sellEquip: items.sellEquip,
   sellEquipsByLevel: items.sellEquipsByLevel,
+  // v1.02：背包排序持久化
+  sortInventory: items.sortInventory,
+  addEquipToSortedPosition: items.addEquipToSortedPosition,
+  getEquipSortKey: items.getEquipSortKey,
   enchantItem: items.enchantItem,
   upgradeEquipment: items.upgradeEquipment,
   mergeEquipment: items.mergeEquipment,
@@ -138,6 +143,7 @@ module.exports = {
   learnLaw: items.learnLaw,
   attemptAscension: progression.attemptAscension,
   doReincarnate: progression.doReincarnate,
+  autoReincarnate: progression.autoReincarnate, // 内测：一键转生
   getReincarnationInfo: progression.getReincarnationInfo,
   getReincShop: progression.getReincShop,
   buyReincShopItem: progression.buyReincShopItem,
@@ -196,7 +202,14 @@ module.exports = {
   grantWorldBossParticipation: worldboss.grantWorldBossParticipation,
   settleWorldBossRewards: worldboss.settleWorldBossRewards,
   getBossRanking: worldboss.getBossRanking,
+  // v3.0：保留 getStrongestPlayer 兼容旧调用方（实际已不再使用）
   getStrongestPlayer: worldboss.getStrongestPlayer,
+  // v3.0：暴露新函数供测试 / 调试
+  getTopHalfByLevel: worldboss.getTopHalfByLevel,
+  getMedianPlayerByLevel: worldboss.getMedianPlayerByLevel,
+  estimateTopHalfTotalDamage: worldboss.estimateTopHalfTotalDamage,
+  buildBossStats: worldboss.buildBossStats,
+  BOSS_BATTLE_ROUNDS: worldboss.BOSS_BATTLE_ROUNDS,
 
   // 授予（player 模块，外部偶尔需要）
   grantGold: player.grantGold,
@@ -209,5 +222,14 @@ module.exports = {
   forgeEquip: genesis.forgeEquip,
   deleteGenesis: genesis.deleteCustom,
   rehydrateGenesis: genesis.rehydrateFromMeta,
+
+  // 灵鸡斗场（完全独立玩法）
+  getCockfightStatus: cockfight.getCockfightStatus,
+  enterCockArena: cockfight.enterCockArena,
+  resolveCockRound: cockfight.resolveCockRound,
+  exchangeCockfightTitle: cockfight.exchangeCockfightTitle,
+  // 斗鸡纯函数（测试用）
+  __simulateLineup: cockfight.__simulateLineup,
+  __battleOnce: cockfight.__battleOnce,
   setStore,
 };

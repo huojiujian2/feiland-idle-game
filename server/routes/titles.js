@@ -2,7 +2,7 @@
 // GET  /api/player/:username/titles   → 玩家可用称号列表（已解锁职业称号 + 未过期限时称号）
 // POST /api/player/:username/titles/equip { key }   → 佩戴指定称号（佩戴限时称号需未过期）
 const { ok, fail, loadPlayer, savePlayer } = require('./_helpers');
-const { ALL_TITLES, getUnlockedJobTitles, getActiveTimeTitles, isValidTitleKey } = require('../data');
+const { ALL_TITLES, getUnlockedJobTitles, getActiveTimeTitles, getOwnedPermanentTitles, getOwnedCockfightTitles, isValidTitleKey } = require('../data');
 
 function registerTitleRoutes(app, store) {
   app.get('/api/player/:username/titles', (req, res) => {
@@ -22,10 +22,14 @@ function registerTitleRoutes(app, store) {
     }
     const job = getUnlockedJobTitles(player);
     const time = getActiveTimeTitles(player);
+    const permanent = getOwnedPermanentTitles(player);
+    const cockfight = getOwnedCockfightTitles(player);
     return ok(res, {
       currentTitle: player.currentTitle || null,
       unlocked: job,
       active: time,
+      permanent,
+      cockfight,
       all: ALL_TITLES,
     });
   });
@@ -41,7 +45,11 @@ function registerTitleRoutes(app, store) {
     const unlocked = getUnlockedJobTitles(player).some(t => t.key === key);
     // 限时称号：必须在有效期内
     const timeActive = getActiveTimeTitles(player).some(t => t.key === key);
-    if (!unlocked && !timeActive) {
+    // 永久称号：必须已购买（竞技场商店）
+    const permanentOwned = getOwnedPermanentTitles(player).some(t => t.key === key);
+    // 斗鸡称号：必须已兑换/成就获得（灵鸡斗场）
+    const cockfightOwned = getOwnedCockfightTitles(player).some(t => t.key === key);
+    if (!unlocked && !timeActive && !permanentOwned && !cockfightOwned) {
       return fail(res, '该称号尚未解锁或已过期');
     }
     player.currentTitle = key;

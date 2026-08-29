@@ -138,7 +138,53 @@ function buildCodexData(store) {
     }
   }
 
-  return { materials, equips: Array.from(equipMap.values()), consumables, monsters };
+  // v2.8：混沌图鉴（全服共享）——被抹除的创世生物/装备历史
+  const chaos = { monsters: [], equips: [] };
+  if (genesis && genesis.chaos) {
+    for (const m of (genesis.chaos.monsters || [])) {
+      chaos.monsters.push({
+        id: m.id,
+        name: m.name,
+        area: m.areaId,
+        areaName: AREAS[m.areaId]?.name || m.areaId,
+        areaLevel: AREAS[m.areaId]?.minLevel || 0,
+        hp: m.hp, atk: m.atk, def: m.def, agi: m.agi,
+        exp: m.exp, gold: m.gold,
+        skills: m.skills || [],
+        skillDetails: (m.skills || []).map(sid => {
+          const sk = MONSTER_SKILLS[sid];
+          return sk ? { id: sid, name: sk.name, desc: sk.desc, mult: sk.mult } : null;
+        }).filter(Boolean),
+        creator: m.creator,
+        creatorUsername: m.creatorUsername,
+        customDesc: m.desc,
+        erasedAt: m.erasedAt,
+        erasedBy: m.erasedBy,
+        erasedReason: m.erasedReason,
+      });
+    }
+    for (const e of (genesis.chaos.equips || [])) {
+      chaos.equips.push({
+        templateId: e.id,
+        id: e.id,
+        name: e.name,
+        slot: e.slot,
+        quality: e.quality,
+        reqLevel: e.reqLevel,
+        stats: e.stats || {},
+        area: e.areaId,
+        areaName: AREAS[e.areaId]?.name || e.areaId,
+        creator: e.creator,
+        creatorUsername: e.creatorUsername,
+        customDesc: e.desc,
+        erasedAt: e.erasedAt,
+        erasedBy: e.erasedBy,
+        erasedReason: e.erasedReason,
+      });
+    }
+  }
+
+  return { materials, equips: Array.from(equipMap.values()), consumables, monsters, chaos };
 }
 
 function registerCodexRoutes(app, store) {

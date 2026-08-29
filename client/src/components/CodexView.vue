@@ -16,6 +16,27 @@
       <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
     </div>
 
+    <!-- 装备排序（仅展示排序，不影响背包/存档） -->
+    <div v-if="showSortBar" class="sort-bar">
+      <select v-model="sortKey" class="sort-select">
+        <option value="">默认排序</option>
+        <option v-for="opt in sortOptions" :key="opt.key" :value="opt.key">按{{ opt.label }}</option>
+      </select>
+      <button class="sort-dir-btn" :disabled="!sortKey" @click="sortDir = sortDir === 'desc' ? 'asc' : 'desc'">
+        {{ sortDir === 'desc' ? '↓ 从高到低' : '↑ 从低到高' }}
+      </button>
+    </div>
+
+    <!-- 混沌页：生物/装备子分类 -->
+    <div v-if="activeCat === 'chaos'" class="chaos-subtabs">
+      <div class="chaos-subtab" :class="{ active: chaosSub === 'monsters' }" @click="chaosSub = 'monsters'">
+        被抹除的生物 ({{ (codexData.chaos?.monsters || []).length }})
+      </div>
+      <div class="chaos-subtab" :class="{ active: chaosSub === 'equips' }" @click="chaosSub = 'equips'">
+        被抹除的装备 ({{ (codexData.chaos?.equips || []).length }})
+      </div>
+    </div>
+
     <!-- 材料图鉴 -->
     <div v-if="activeCat === 'material'" class="codex-grid">
       <div v-for="mat in pagedItems" :key="mat.name" class="codex-item"
@@ -58,6 +79,33 @@
         <div class="item-name">{{ mo.name }}<span v-if="mo.creator || mo.creatorUsername" class="creator-tag" :title="`造物主：${displayCreator(mo)}`">{{ displayCreator(mo) }}造</span></div>
         <div class="item-area">{{ mo.areaName }}</div>
       </div>
+    </div>
+
+    <!-- 混沌图鉴：被抹除的生物 -->
+    <div v-if="activeCat === 'chaos' && chaosSub === 'monsters'" class="codex-grid">
+      <div v-for="mo in pagedItems" :key="mo.id" class="codex-item chaos-item"
+        @click="selectItem(mo)">
+        <div class="item-icon mon-icon chaos-icon"><IconBase name="skull" :size="28" /></div>
+        <div class="item-name">{{ mo.name }}<span class="creator-tag" :title="`造物主：${displayCreator(mo)}`">{{ displayCreator(mo) }}造</span></div>
+        <div class="item-area">{{ mo.areaName }}</div>
+      </div>
+    </div>
+
+    <!-- 混沌图鉴：被抹除的装备 -->
+    <div v-if="activeCat === 'chaos' && chaosSub === 'equips'" class="codex-grid">
+      <div v-for="eq in pagedItems" :key="eq.id" class="codex-item chaos-item"
+        @click="selectItem(eq)">
+        <div class="item-icon chaos-icon" :class="eq.quality">
+          <IconBase :name="equipIcons[eq.slot]" :size="28" />
+        </div>
+        <div class="item-name" :style="{ color: qualityColors[eq.quality] }">{{ eq.name }}<span class="creator-tag" :title="`造物主：${displayCreator(eq)}`">{{ displayCreator(eq) }}造</span></div>
+        <div class="item-quality" :style="{ color: qualityColors[eq.quality] }">{{ qualityLabels[eq.quality] }}</div>
+      </div>
+    </div>
+
+    <!-- 混沌页空状态 -->
+    <div v-if="activeCat === 'chaos' && currentList.length === 0" class="chaos-empty">
+      混沌尚无痕迹——被造物主抹除的生物与装备将归档于此，全服可见。
     </div>
 
     <!-- 分页器 -->
@@ -158,6 +206,50 @@
           </div>
         </template>
 
+        <!-- 混沌详情：被抹除的生物 -->
+        <template v-if="activeCat === 'chaos' && chaosSub === 'monsters'">
+          <div class="detail-title">☠️ {{ selected.name }}<span class="creator-tag" :title="`造物主：${displayCreator(selected)}`">{{ displayCreator(selected) }}造</span></div>
+          <div class="detail-row"><span class="dl">状态</span><span class="dv chaos-state">已被抹除</span></div>
+          <div class="detail-row" v-if="selected.customDesc"><span class="dl">神谕</span><span class="dv">{{ selected.customDesc }}</span></div>
+          <div class="detail-row"><span class="dl">曾出没于</span><span class="dv">{{ selected.areaName }} (Lv.{{ selected.areaLevel }}+)</span></div>
+          <div class="detail-section-title">属性</div>
+          <div class="monster-stats-grid">
+            <div class="ms-item"><span class="ms-label">HP</span><span class="ms-val">{{ selected.hp }}</span></div>
+            <div class="ms-item"><span class="ms-label">攻击</span><span class="ms-val">{{ selected.atk }}</span></div>
+            <div class="ms-item"><span class="ms-label">防御</span><span class="ms-val">{{ selected.def }}</span></div>
+            <div class="ms-item"><span class="ms-label">敏捷</span><span class="ms-val">{{ selected.agi }}</span></div>
+            <div class="ms-item"><span class="ms-label">经验</span><span class="ms-val">{{ selected.exp }}</span></div>
+            <div class="ms-item"><span class="ms-label">金币</span><span class="ms-val">{{ selected.gold }}</span></div>
+          </div>
+          <div v-if="selected.skills && selected.skills.length" class="detail-section-title">技能</div>
+          <div v-if="selected.skills && selected.skills.length" class="monster-skills">
+            <div v-for="sk in selected.skillDetails" :key="sk.id" class="mskill-item">
+              <span class="mskill-name">{{ sk.name }}</span>
+              <span class="mskill-desc">{{ sk.desc }}</span>
+              <span class="mskill-mult">×{{ sk.mult }}</span>
+            </div>
+          </div>
+          <div class="detail-row chaos-erase-row"><span class="dl">抹除时间</span><span class="dv">{{ formatErasedAt(selected.erasedAt) }}</span></div>
+        </template>
+
+        <!-- 混沌详情：被抹除的装备 -->
+        <template v-if="activeCat === 'chaos' && chaosSub === 'equips'">
+          <div class="detail-title" :style="{ color: qualityColors[selected.quality] }"><IconBase :name="equipIcons[selected.slot]" :size="18" class="title-icon" /> {{ selected.name }}<span class="creator-tag" :title="`造物主：${displayCreator(selected)}`">{{ displayCreator(selected) }}造</span></div>
+          <div class="detail-row"><span class="dl">状态</span><span class="dv chaos-state">已被抹除</span></div>
+          <div class="detail-row" v-if="selected.customDesc"><span class="dl">神谕</span><span class="dv">{{ selected.customDesc }}</span></div>
+          <div class="detail-row"><span class="dl">品质</span><span class="dv" :style="{ color: qualityColors[selected.quality] }">{{ qualityLabels[selected.quality] }}</span></div>
+          <div class="detail-row"><span class="dl">类型</span><span class="dv">{{ slotLabels[selected.slot] }}</span></div>
+          <div class="detail-row"><span class="dl">需求等级</span><span class="dv">Lv.{{ selected.reqLevel }}</span></div>
+          <div class="detail-row"><span class="dl">曾投放于</span><span class="dv">{{ selected.areaName }}</span></div>
+          <div class="detail-section-title">属性</div>
+          <div class="stat-list">
+            <div v-for="(val, key) in selected.stats" :key="key" class="stat-item">
+              {{ statLabels[key] || key }} +{{ val }}{{ ['exp','gold'].includes(key) ? '%' : '' }}
+            </div>
+          </div>
+          <div class="detail-row chaos-erase-row"><span class="dl">抹除时间</span><span class="dv">{{ formatErasedAt(selected.erasedAt) }}</span></div>
+        </template>
+
         <button class="btn detail-close-btn" @click="selected = null">关闭</button>
       </div>
     </div>
@@ -191,10 +283,33 @@ const selected = ref(null)
 const page = ref(1)
 const pageSize = 16
 const searchQuery = ref('')
-const codexData = ref({ materials: [], equips: [], consumables: [], monsters: [] })
+const codexData = ref({ materials: [], equips: [], consumables: [], monsters: [], chaos: { monsters: [], equips: [] } })
+
+// v2.8：混沌页子分类（生物 / 装备）
+const chaosSub = ref('monsters')
+
+// v2.8：装备展示排序（仅前端展示，不改背包、不写存档）
+const sortKey = ref('')
+const sortDir = ref('desc')
+const sortOptions = [
+  { key: 'atk', label: '攻击' },
+  { key: 'def', label: '防御' },
+  { key: 'hp', label: 'HP' },
+  { key: 'mp', label: 'MP' },
+  { key: 'str', label: '力量' },
+  { key: 'con', label: '体质' },
+  { key: 'spi', label: '精神' },
+  { key: 'agi', label: '敏捷' },
+  { key: 'exp', label: '经验' },
+  { key: 'gold', label: '金币' },
+  { key: 'reqLevel', label: '需求等级' },
+]
+const showSortBar = computed(() =>
+  activeCat.value === 'equip' || (activeCat.value === 'chaos' && chaosSub.value === 'equips')
+)
 
 const searchPlaceholder = computed(() => {
-  const map = { material: '搜索材料名称...', equip: '搜索装备名称、品质、部位...', consumable: '搜索消耗品名称...', monster: '搜索怪物名称、地点...' }
+  const map = { material: '搜索材料名称...', equip: '搜索装备名称、品质、部位...', consumable: '搜索消耗品名称...', monster: '搜索怪物名称、地点...', chaos: '搜索混沌造物名称、地点...' }
   return map[activeCat.value] || '搜索...'
 })
 
@@ -204,29 +319,46 @@ const currentList = computed(() => {
   else if (activeCat.value === 'equip') list = codexData.value.equips
   else if (activeCat.value === 'consumable') list = codexData.value.consumables
   else if (activeCat.value === 'monster') list = codexData.value.monsters
+  else if (activeCat.value === 'chaos') {
+    const chaos = codexData.value.chaos || { monsters: [], equips: [] }
+    list = chaosSub.value === 'monsters' ? chaos.monsters : chaos.equips
+  }
 
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return list
-
-  return list.filter(item => {
-    // 名称搜索（所有类别通用）
-    if (item.name?.toLowerCase().includes(q)) return true
-    // 装备：搜索品质、部位、属性
-    if (activeCat.value === 'equip') {
-      if (qualityLabels[item.quality]?.toLowerCase().includes(q)) return true
-      if (slotLabels[item.slot]?.toLowerCase().includes(q)) return true
-      if (item.stats) {
-        for (const key of Object.keys(item.stats)) {
-          if ((statLabels[key] || key).toLowerCase().includes(q)) return true
+  const filtered = q
+    ? list.filter(item => {
+      // 名称搜索（所有类别通用）
+      if (item.name?.toLowerCase().includes(q)) return true
+      // 装备：搜索品质、部位、属性
+      if (activeCat.value === 'equip' || (activeCat.value === 'chaos' && chaosSub.value === 'equips')) {
+        if (qualityLabels[item.quality]?.toLowerCase().includes(q)) return true
+        if (slotLabels[item.slot]?.toLowerCase().includes(q)) return true
+        if (item.stats) {
+          for (const key of Object.keys(item.stats)) {
+            if ((statLabels[key] || key).toLowerCase().includes(q)) return true
+          }
         }
       }
-    }
-    // 怪物：搜索地点
-    if (activeCat.value === 'monster') {
-      if (item.areaName?.toLowerCase().includes(q)) return true
-    }
-    return false
-  })
+      // 怪物 / 混沌生物：搜索地点
+      if (activeCat.value === 'monster' || (activeCat.value === 'chaos' && chaosSub.value === 'monsters')) {
+        if (item.areaName?.toLowerCase().includes(q)) return true
+      }
+      return false
+    })
+    : list.slice()
+
+  // v2.8：装备展示排序（对副本排序；缺失属性按 0，同值按名称稳定排序）
+  if (showSortBar.value && sortKey.value) {
+    const val = (item) => sortKey.value === 'reqLevel'
+      ? (item.reqLevel || 0)
+      : ((item.stats || {})[sortKey.value] || 0)
+    filtered.sort((a, b) => {
+      const d = val(a) - val(b)
+      if (d !== 0) return sortDir.value === 'asc' ? d : -d
+      return (a.name || '').localeCompare(b.name || '')
+    })
+  }
+  return filtered
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(currentList.value.length / pageSize)))
@@ -234,6 +366,8 @@ const pagedItems = computed(() => currentList.value.slice((page.value - 1) * pag
 
 watch(activeCat, () => { page.value = 1; searchQuery.value = '' })
 watch(searchQuery, () => { page.value = 1 })
+watch(chaosSub, () => { page.value = 1 })
+watch([sortKey, sortDir], () => { page.value = 1 })
 
 const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e', mythic: '#ff6738' }
 const qualityLabels = { normal: '普通', fine: '精良', epic: '史诗', legend: '传说', mythic: '神话' }
@@ -245,8 +379,17 @@ const categories = [
   { id: 'material', label: '材料', icon: 'bag' },
   { id: 'equip', label: '装备', icon: 'sword' },
   { id: 'consumable', label: '消耗品', icon: 'heart' },
-  { id: 'monster', label: '怪物', icon: 'skull' }
+  { id: 'monster', label: '怪物', icon: 'skull' },
+  { id: 'chaos', label: '混沌', icon: 'sparkle' }
 ]
+
+// v2.8：格式化抹除时间
+function formatErasedAt(ts) {
+  if (!ts) return '未知'
+  const d = new Date(ts)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
 
 function getConsumableIcon(id) {
   if (id.includes('hp')) return '🧪'
@@ -370,4 +513,48 @@ onMounted(async () => {
 .pager-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .pager-info { font-size: 0.75rem; color: var(--muted); font-family: monospace; }
 .pager-info-single { text-align: center; font-size: 0.7rem; color: var(--dim); padding: 0.3rem; }
+
+/* v2.8：装备展示排序控件（仅前端展示排序） */
+.sort-bar { display: flex; gap: 0.4rem; margin-bottom: 0.3rem; }
+.sort-select {
+  flex: 1; padding: 0.35rem 0.5rem;
+  background: rgba(var(--panel-rgb), 0.6);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.sort-select:focus { border-color: var(--accent2); }
+.sort-dir-btn {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: rgba(var(--panel-rgb), 0.5);
+  color: var(--ink);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.sort-dir-btn:hover:not(:disabled) { border-color: var(--accent2); background: rgba(var(--violet-rgb),0.08); }
+.sort-dir-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* v2.8：混沌图鉴页 */
+.chaos-subtabs { display: flex; gap: 0.4rem; margin-bottom: 0.3rem; }
+.chaos-subtab {
+  flex: 1; text-align: center; padding: 0.35rem;
+  border: 1px solid var(--rule); border-radius: 6px;
+  font-size: 0.72rem; color: var(--muted); cursor: pointer;
+  background: rgba(var(--panel-rgb), 0.5);
+  transition: all 0.2s;
+}
+.chaos-subtab:hover { border-color: var(--accent2); }
+.chaos-subtab.active { border-color: var(--accent); color: var(--accent); font-weight: 600; background: rgba(var(--gold-rgb),0.08); }
+.chaos-item { opacity: 0.88; }
+.chaos-item .item-icon, .chaos-item .item-icon.chaos-icon { filter: grayscale(0.65) brightness(0.75); }
+.chaos-empty { text-align: center; color: var(--dim); font-size: 0.75rem; padding: 1.2rem 0.5rem; }
+.chaos-state { color: var(--danger); }
+.chaos-erase-row { border-top: 1px dashed var(--rule); margin-top: 0.5rem; padding-top: 0.5rem; }
 </style>

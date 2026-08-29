@@ -16,7 +16,7 @@
     <PvPOpponents v-if="tab === 'opponents'" :loading="loading" :opponents="opponents" @challenge="doChallenge" />
     <PvPRanking v-if="tab === 'ranking'" :loading="loadingRank" :ranking="ranking" :currentUser="currentUser" />
     <PvPRecords v-if="tab === 'records'" :loading="loadingRec" :records="records" />
-    <PvPShop v-if="tab === 'shop'" :loading="loadingShop" :shopItems="shopItems"
+    <PvPShop v-if="tab === 'shop'" :loading="loadingShop" :shopItems="shopItems" :shopTitles="shopTitles"
       :playerLevel="player.level" :arenaCoins="arenaCoins" @buy="doBuy" />
     <PvPRewards v-if="tab === 'rewards'" :loading="loadingRewards"
       :rewardData="rewardData" :rewardPeriod="rewardPeriod" :currentUser="currentUser"
@@ -63,6 +63,7 @@ const opponents = ref([]);
 const ranking = ref([]);
 const records = ref([]);
 const shopItems = ref([]);
+const shopTitles = ref([]);
 const battleResult = ref(null);
 const season = ref(null);
 const rewardData = ref(null);
@@ -121,8 +122,11 @@ async function loadRecords() {
 async function loadShop() {
   loadingShop.value = true;
   try {
-    const res = await api.getArenaShop();
-    if (res.success) shopItems.value = res.data.items || [];
+    const res = await api.getArenaShop(props.currentUser);
+    if (res.success) {
+      shopItems.value = res.data.items || [];
+      shopTitles.value = res.data.titles || [];
+    }
   } finally { loadingShop.value = false; }
 }
 
@@ -173,6 +177,8 @@ async function doBuy(item) {
       // 通知父组件更新 player
       props.player && (props.player.arenaCoins = res.data.arenaCoins);
       if (res.data.player) props.player && Object.assign(props.player, res.data.player);
+      // 刷新商店（称号 owned 状态实时更新）
+      if (item.type === 'title') loadShop();
     } else {
       toast.error(res.message || '购买失败');
     }

@@ -25,7 +25,9 @@
       :reincShop="reincShop"
       :reincLoading="reincLoading"
       :shopBuying="shopBuying"
+      :autoReincRunning="autoReincRunning"
       @reincarnate="doReincarnate"
+      @autoReincarnate="doAutoReincarnate"
       @goGenesis="$emit('goGenesis')"
       @buyReincItem="handleBuyReincItem" />
   </div>
@@ -78,6 +80,7 @@ const reincInfo = ref({
 const reincLoading = ref(false);
 const reincShop = ref([]);
 const shopBuying = ref(false);
+const autoReincRunning = ref(false); // 内测：一键转生进行中
 
 const reincEstimatePoints = computed(() => {
   const a = props.player.attributes || {};
@@ -93,7 +96,8 @@ async function fetchReincInfo() {
 }
 async function fetchReincShop() {
   try {
-    const res = await api.getReincShop();
+    // v7：传 username 拿到动态价格
+    const res = await api.getReincShop(props.player.username);
     if (res.success) reincShop.value = res.data;
   } catch (e) { /* ignore */ }
 }
@@ -122,13 +126,42 @@ async function doReincarnate() {
   }
 }
 
+// 内测：一键转生（金币按高级经验卷轴购买力速升等级后连续转生）
+async function doAutoReincarnate({ times, targetLevel }) {
+  const n = Math.floor(Number(times) || 0);
+  const lv = Math.floor(Number(targetLevel) || 0);
+  if (n < 1) return toast.error('转生次数至少为 1');
+  if (lv < 100) return toast.error('目标等级不能低于 100');
+  if (!await modalConfirm(`一键转生：连转 ${n} 次（目标 Lv.${lv}），金币不够会停在断点，继续？`)) return;
+  autoReincRunning.value = true;
+  try {
+    const res = await api.autoReincarnate(props.player.username, n, lv);
+    if (res.success) {
+      emit('reincarnated', res.data);
+      await fetchReincInfo();
+      await fetchReincShop();
+      toast.success(res.message || `一键转生完成 ${res.completed} 轮`);
+    } else {
+      toast.error(res.message || '一键转生失败');
+    }
+  } catch (e) {
+    toast.error('一键转生失败：' + (e.message || '网络错误'));
+  } finally {
+    autoReincRunning.value = false;
+  }
+}
+
 async function handleBuyReincItem(item, option) {
   if (!await modalConfirm(`兑换「${item.name}」将消耗 ${item.cost} 转生点，继续？`)) return;
   shopBuying.value = true;
   try {
     const res = await api.buyReincShopItem(props.player.username, item.id, option);
     if (res.success) {
+      // 通知 App 更新父 player（含 permanentBuffs / reincPoints）
       emit('reincarnated', res.data);
+      // v8：实时拉取新 shop 列表（cost/boughtCount 都已更新）
+      await fetchReincShop();
+      // 同步刷新转生点信息（reincPoints 扣减等）
       await fetchReincInfo();
       toast.success(res.message || '兑换成功');
     } else {

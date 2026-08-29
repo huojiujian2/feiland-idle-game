@@ -1,14 +1,15 @@
 // ====== 排行榜路由 =====
 const { getReadonlyPlayer, getPowerScore, getTotalStats, getStageFull } = require('../engine');
 const { ok, fail } = require('./_helpers');
+const { ARENA_SHOP_TITLES, COCKFIGHT_DISPLAY_TITLES } = require('../data');
 
 const LEADERBOARD_CONFIG = {
   level: { sort: (a, b) => b.level - a.level || b.exp - a.exp || b.gold - a.gold },
   power: { sort: (a, b) => b.power - a.power },
   gold: { sort: (a, b) => b.gold - a.gold },
   kills: { sort: (a, b) => b.killCount - a.killCount || b.level - a.level },
-  reincarnation: { sort: (a, b) => b.reincarnation - a.reincarnation || b.level - a.level },
-  boss: { sort: (a, b) => b.bossKills - a.bossKills || b.level - a.level }
+  reincarnation: { sort: (a, b) => b.reincarnation - b.reincarnation || b.level - a.level },
+  boss: { sort: (a, b) => b.bossKills - b.killCount || b.level - a.level }
 };
 
 // v1.02：本地兜底的世界 BOSS 限时称号字典，避免前端未拉缓存时显示 key 字符串
@@ -22,6 +23,20 @@ const TIME_TITLE_COLORS = {
   boss_killer_2: '#c0c0c0',
   boss_killer_3: '#cd7f32',
 };
+// 竞技场商店永久称号兜底字典（同上，避免显示 key 字符串）
+const ARENA_TITLE_NAMES = Object.fromEntries(
+  Object.entries(ARENA_SHOP_TITLES).map(([k, v]) => [k, v.name])
+);
+const ARENA_TITLE_COLORS = Object.fromEntries(
+  Object.entries(ARENA_SHOP_TITLES).map(([k, v]) => [k, v.color])
+);
+// 灵鸡斗场称号兜底字典（同上，避免显示 key 字符串）
+const COCK_TITLE_NAMES = Object.fromEntries(
+  Object.entries(COCKFIGHT_DISPLAY_TITLES).map(([k, v]) => [k, v.name])
+);
+const COCK_TITLE_COLORS = Object.fromEntries(
+  Object.entries(COCKFIGHT_DISPLAY_TITLES).map(([k, v]) => [k, v.color])
+);
 
 function registerLeaderboardRoutes(app, store) {
   app.get('/api/leaderboard', (req, res) => {
@@ -40,6 +55,14 @@ function registerLeaderboardRoutes(app, store) {
         if (TIME_TITLE_NAMES[ct]) {
           titleName = TIME_TITLE_NAMES[ct];
           titleColor = TIME_TITLE_COLORS[ct];
+        } else if (ARENA_TITLE_NAMES[ct]) {
+          // 竞技场商店永久称号
+          titleName = ARENA_TITLE_NAMES[ct];
+          titleColor = ARENA_TITLE_COLORS[ct];
+        } else if (COCK_TITLE_NAMES[ct]) {
+          // 灵鸡斗场称号
+          titleName = COCK_TITLE_NAMES[ct];
+          titleColor = COCK_TITLE_COLORS[ct];
         } else if (rp.jobInfo?.stages) {
           const found = rp.jobInfo.stages.find(s => `${rp.jobPath}:${s.name}` === ct);
           if (found) titleName = found.name;

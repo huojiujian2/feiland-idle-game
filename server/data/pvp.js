@@ -67,6 +67,13 @@ const ARENA_EQUIPMENT = [
   { id: 'arena_ring_5',   name: '传奇·战神印', slot: 'accessory', quality: 'legend', reqLevel: 100, price: 7500, stats: { atk: 160, def: 160, gold: 0.20, exp: 0.12, critDmg: 0.20, dodge: 0.05, hp: 200 } }
 ];
 
+// 竞技场商店：永久称号（type: 'title'，购买后写入 player.titles，无过期时间）
+//   titleKey 对应 data/titles.js 的 ARENA_SHOP_TITLES
+const ARENA_TITLES = [
+  { id: 'arena_title_immortal', type: 'title', titleKey: 'arena_immortal_star', name: '不朽星灵', desc: '竞技场商店永久称号', price: 10000 },
+  { id: 'arena_title_samsara',  type: 'title', titleKey: 'arena_samsara_lord',  name: '轮回之主', desc: '竞技场商店永久称号', price: 10000 },
+];
+
 // Bot 随机名（分男女）
 const BOT_NAMES = {
   male: [
@@ -92,6 +99,6 @@ const BOT_JOB_PREF = {
 
 module.exports = {
   PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, SEASON_MONTHS,
-  ARENA_RANK_REWARDS, ARENA_EQUIPMENT,
+  ARENA_RANK_REWARDS, ARENA_EQUIPMENT, ARENA_TITLES,
   BOT_NAMES, BOT_JOB_PREF,
 };

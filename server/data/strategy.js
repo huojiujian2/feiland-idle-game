@@ -15,6 +15,8 @@ const STRATEGIES = {
 const STRATEGY_CD_MS = 5 * 60 * 1000;
 
 // 世界 BOSS 配置（全服共享血量）
+//   v3.1：去掉材料奖励（参与奖 / 最后一击奖都不再发材料）
+//   v3.1：基础奖励只剩 gold/exp，按伤害占比发；前三另有"等级进度"额外奖，4-20 名有固定排名奖
 const WORLD_BOSS_TEMPLATES = [
   {
     id: 'void_lord',
@@ -26,8 +28,8 @@ const WORLD_BOSS_TEMPLATES = [
     baseDef: 200,
     baseAgi: 80,
     skillChance: 0.30,
-    rewards: { gold: 5000, exp: 2000, materials: [{ name: '法则碎片', count: 5 }] },
-    finalHitRewards: { gold: 10000, exp: 5000, materials: [{ name: '龙血', count: 3 }] },
+    rewards: { gold: 5000, exp: 2000 },
+    finalHitRewards: { gold: 10000, exp: 5000 },
   },
   {
     id: 'abyss_serpent',
@@ -39,8 +41,8 @@ const WORLD_BOSS_TEMPLATES = [
     baseDef: 250,
     baseAgi: 60,
     skillChance: 0.25,
-    rewards: { gold: 4000, exp: 1500, materials: [{ name: '深渊之石', count: 8 }] },
-    finalHitRewards: { gold: 8000, exp: 3500, materials: [{ name: '龙鳞', count: 5 }] },
+    rewards: { gold: 4000, exp: 1500 },
+    finalHitRewards: { gold: 8000, exp: 3500 },
   },
   {
     id: 'titan_soul',
@@ -52,12 +54,18 @@ const WORLD_BOSS_TEMPLATES = [
     baseDef: 350,
     baseAgi: 50,
     skillChance: 0.20,
-    rewards: { gold: 8000, exp: 3000, materials: [{ name: '法则碎片', count: 10 }] },
-    finalHitRewards: { gold: 15000, exp: 7000, materials: [{ name: '天使之羽', count: 5 }] },
+    rewards: { gold: 8000, exp: 3000 },
+    finalHitRewards: { gold: 15000, exp: 7000 },
   },
 ];
+
+// v3.2 排名奖配置
+//   前 3 名：按 levelBonus × 比例拿"等级进度奖"（lv bonus = floor(boss.hp * 0.01)）
+const TOP3_RATIO = [0.50, 0.30, 0.20];  // 第 1/2/3 名占 levelBonus 的比例
+//   4-20 名：取参与奖上限 = BOSS 基础 gold/exp × 1.0（在 worldboss.js 里按 boss.rewards 计算）
+const RANK_BONUS_MAX_RANK = 20;  // 4~20 名都拿这个固定奖
 
 // BOSS 自动刷新间隔（毫秒）
 const WORLD_BOSS_SPAWN_INTERVAL_MS = 30 * 60 * 1000;
 
-module.exports = { STRATEGIES, STRATEGY_CD_MS, WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS };
+module.exports = { STRATEGIES, STRATEGY_CD_MS, WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS, TOP3_RATIO, RANK_BONUS_MAX_RANK };

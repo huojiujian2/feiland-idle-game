@@ -33,11 +33,11 @@
             @use="handleUseItem" @sellMaterial="handleSellMaterial"
             @sellEquip="handleSellEquip" @sellEquipsByLevel="handleSellEquipsByLevel"
             @equip="handleEquip" @enchant="handleEnchant"
-            @sort="handleInventorySort"
             @refresh="player = $event" />
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
             @select="handleAreaChange" @strategy-change="handleStrategyChange"
-            @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" @goBoss="activeTab = 'boss'" />
+            @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" @goBoss="activeTab = 'boss'"
+            @goCock="activeTab = 'cock'" />
           <CodexView v-else-if="activeTab === 'codex'" :player="player" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             :initialSubTab="reincarnHint ? 'reinc' : undefined"
@@ -49,6 +49,8 @@
           <PvPView v-else-if="activeTab === 'pvp'" :player="player" :currentUser="currentUserRef"
             @goBack="activeTab = 'map'" @updatePlayer="player = $event" />
           <WorldBossView v-else-if="activeTab === 'boss'" :player="player" :currentUser="currentUserRef" />
+          <CockfightArena v-else-if="activeTab === 'cock'" :player="player" :currentUser="currentUserRef"
+            @goBack="activeTab = 'map'" />
           <GenesisView v-else-if="activeTab === 'genesis'" :player="player" />
         </div>
       </transition>
@@ -127,6 +129,7 @@ import LeaderboardView from './components/LeaderboardView.vue';
 import QuestView from './components/QuestView.vue';
 import PvPView from './components/PvPView.vue';
 import WorldBossView from './components/WorldBossView.vue';
+import CockfightArena from './components/CockfightArena.vue';
 import GenesisView from './components/GenesisView.vue';
 import TutorialOverlay from './components/TutorialOverlay.vue';
 
@@ -156,7 +159,7 @@ const activeTab = ref('char');
 const showShop = ref(false);
 
 const transitionName = ref('slide-left');
-const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'genesis'];
+const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'cock', 'genesis'];
 
 let pollTimer = null;
 let prevLevel = 0;
@@ -380,7 +383,8 @@ async function handleApplyPresetRatio(ratio) {
 }
 // v0.8+：保存方案（payload 兼容旧版 name 字符串）
 async function handleSavePreset(payload) {
-  // payload = { slot, name, attributes, delta } | string（旧版只发 name）
+  // payload = { slot, name, attributes, delta? } | string（旧版只发 name）
+  // 修复：v2.x 起默认不传 delta —— 保存预设只快照模板，不立刻加点
   let body;
   if (typeof payload === 'string') {
     body = { name: payload };
@@ -389,8 +393,11 @@ async function handleSavePreset(payload) {
       name: (payload.name || '').trim().slice(0, 24) || '属性预设',
       slot: payload.slot,
       attributes: payload.attributes || null,
-      delta: payload.delta || null,
     };
+    // 仅在显式 delta 时附带（兼容老调用方），不附带时后端不加点
+    if (payload.delta && typeof payload.delta === 'object') {
+      body.delta = payload.delta;
+    }
   }
   const r = await api.saveAttrPreset(currentUser, body);
   if (r.success) {
@@ -445,8 +452,9 @@ async function handleEnchant(itemUid, recipeId) {
   const r = await api.enchant(currentUser, itemUid, recipeId);
   if (r.success) player.value = r.data; else toast.error(r.message);
 }
-// v1.02：背包整理——前端排序（按装备类别 + 最高属性），仅本地即时反馈
-//   后端目前无 sortInventory 路由（v1.02 不增后端改动），仅前端乐观更新
+// v1.02：背包整理——后端持久化（POST /inventory/sort）
+//   旧逻辑（前端只排不持久化）已删除，所有"加装备"入口都走 addEquipToSortedPosition
+//   此函数已无 caller，但保留以防旧前端缓存引用报错（实际 InventoryView 改为 emit 'refresh'）
 function handleInventorySort(sortedEquips) {
   if (player.value && Array.isArray(sortedEquips)) {
     player.value.equips = sortedEquips;

@@ -1,8 +1,11 @@
-// ====== 世界 BOSS（v2.9：每日 0 点强制结算、按全服最强玩家 10 倍数值生成） ======
+// ====== 世界 BOSS（v3.0：按「模板 70% + 玩家中位 30%」攻防 + 8 回合 + 血量按前 50% 玩家总伤害 × 1.05） ======
 const { getNow, getRand } = require('./state');
 const { WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS } = require('../data');
 const { getTotalStats } = require('./stats');
 const { simulateBossBattle } = require('./combat');
+
+// v3.0：BOSS 战斗回合数（从 5 提到 8，让玩家有更多输出时间）
+const BOSS_BATTLE_ROUNDS = 8;
 
 // 每日 0 点的本地时区时间戳（用于判定 boss 是否过期）
 function getTodayMidnight() {
@@ -11,66 +14,98 @@ function getTodayMidnight() {
   return d.getTime();
 }
 
-// 取全服当前最强的玩家（按 totalStats.score 综合分）
-// score = hp/10 + atk + def*2 + agi + level*5
-function getStrongestPlayer(store) {
+// v3.0：取全服按等级排序的前 50% 玩家（ceil 取整）
+// 说明：用等级排序而不是伤害分，避免超模玩家带飞；50% 是 ceil，玩家数为 1 时取 1 个
+function getTopHalfByLevel(store) {
   const all = store.getAllPlayers ? store.getAllPlayers() : [];
-  let best = null;
-  let bestScore = -1;
-  for (const p of all) {
-    if (!p || !p.username) continue;
-    const s = getTotalStats(p);
-    // 排除极弱（LV1无装备）的账号，把阈值设为最低统计分
-    const score = (s.hp || 0) / 10 + (s.atk || 0) + (s.def || 0) * 2 + (s.agi || 0) + (p.level || 0) * 5;
-    if (score > bestScore) {
-      bestScore = score;
-      best = p;
-    }
-  }
-  return best;
+  const valid = all.filter(p => p && p.username);
+  if (valid.length === 0) return [];
+  // 按等级降序，等级相同时按用户名保证稳定排序
+  const sorted = [...valid].sort((a, b) => (b.level || 0) - (a.level || 0) || a.username.localeCompare(b.username));
+  const topN = Math.max(1, Math.ceil(sorted.length / 2));
+  return sorted.slice(0, topN);
 }
 
-// 按全服最强玩家 × 10 倍生成 BOSS 属性（生命5:攻击3:防御1:敏捷1）
-// 分配逻辑：hp = 锚点 hp * 10 * (5/10)，atk = 锚点 atk * 10 * (3/10)，
-//          def = 锚点 def * 10 * (1/10)，agi = 锚点 agi * 10 * (1/10)
-// 简化为：hp×5，atk×3，def×1，agi×1（10 倍拆分给 5+3+1+1=10）
-function buildBossFromStrongest(store, tpl) {
-  const sp = getStrongestPlayer(store);
-  if (!sp) return null; // 全服无玩家数据时返回 null（应回落到模板）
-  const s = getTotalStats(sp);
-  const mult = 10;
+// v3.0：取全服"按等级中位"的玩家（用于攻防的 30% 玩家侧参考）
+// 说明：奇数取中间，偶数取较大索引；返回单个玩家对象或 null
+function getMedianPlayerByLevel(store) {
+  const all = store.getAllPlayers ? store.getAllPlayers() : [];
+  const valid = all.filter(p => p && p.username);
+  if (valid.length === 0) return null;
+  const sorted = [...valid].sort((a, b) => (a.level || 0) - (b.level || 0) || a.username.localeCompare(b.username));
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+// v3.0：估算"前 50% 玩家各打 1 次"对 BOSS 的累计伤害
+// 用真实战斗模拟（每次独立模拟，不累积血量），把每人的 totalDamage 累加
+function estimateTopHalfTotalDamage(store, boss, rounds = BOSS_BATTLE_ROUNDS) {
+  const topHalf = getTopHalfByLevel(store);
+  if (topHalf.length === 0) return 0;
+  let total = 0;
+  for (const p of topHalf) {
+    const r = simulateBossBattle(p, boss, rounds);
+    total += Math.max(0, r.totalDamage || 0);
+  }
+  return total;
+}
+
+// v3.0：BOSS 攻防 = 模板 70% + 玩家中位 30%
+// 没有玩家数据时退化为 100% 模板
+function buildBossStats(store, tpl) {
+  const median = getMedianPlayerByLevel(store);
+  if (!median) {
+    return {
+      atk: tpl.baseAtk,
+      def: tpl.baseDef,
+      agi: tpl.baseAgi,
+      hasMedian: false,
+    };
+  }
+  const s = getTotalStats(median);
   return {
-    hp: Math.floor((s.hp || 100) * 5),
-    maxHp: Math.floor((s.hp || 100) * 5),
-    atk: Math.floor((s.atk || 5) * 3),
-    def: Math.floor((s.def || 0) * 1),
-    agi: Math.floor((s.agi || 8) * 1),
+    atk: Math.floor(tpl.baseAtk * 0.7 + (s.atk || 0) * 0.3),
+    def: Math.floor(tpl.baseDef * 0.7 + (s.def || 0) * 0.3),
+    agi: Math.floor(tpl.baseAgi * 0.7 + (s.agi || 0) * 0.3),
+    hasMedian: true,
   };
 }
 
-// 生成 BOSS（优先按全服最强 10 倍；找不到玩家时退回模板）
+// v3.0：生成 BOSS
+// 流程：先按「模板 70% + 玩家中位 30%」算攻防 → 用这组攻防模拟"前 50% 玩家"的累计伤害 → boss.hp = topHalf × 1.05
+// 说明：1.05 是 5% 余量，防止极小概率下玩家全暴击失败刚好打不到 100%
 function spawnWorldBoss(store) {
   const meta = store.getMeta();
   const tpl = WORLD_BOSS_TEMPLATES[Math.floor(getRand()() * WORLD_BOSS_TEMPLATES.length)];
-  const fromStrongest = buildBossFromStrongest(store, tpl);
-  const stats = fromStrongest || {
-    hp: tpl.baseHp,
-    maxHp: tpl.baseHp,
-    atk: tpl.baseAtk,
-    def: tpl.baseDef,
-    agi: tpl.baseAgi,
+
+  // 1. 算攻防
+  const bossStats = buildBossStats(store, tpl);
+  const tempBoss = {
+    // 估算阶段只测伤害，不需要真实血量；使用足够大的占位血量让每位玩家跑满 8 回合。
+    hp: Number.MAX_SAFE_INTEGER,
+    maxHp: Number.MAX_SAFE_INTEGER,
+    atk: bossStats.atk,
+    def: bossStats.def,
+    agi: bossStats.agi,
+    skillChance: tpl.skillChance,
   };
+
+  // 2. 模拟前 50% 玩家累计伤害
+  const topHalfTotal = estimateTopHalfTotalDamage(store, tempBoss, BOSS_BATTLE_ROUNDS);
+
+  // 3. boss.hp = 前 50% 玩家总伤害 × 1.05（5% 余量），最低 1 万（防止全服空数据时为 0）
+  const targetHp = Math.max(10000, Math.floor(topHalfTotal * 1.05));
+
   const todayKey = new Date().toISOString().slice(0, 10);
   meta.worldBoss = {
     id: tpl.id,
     name: tpl.name,
     icon: tpl.icon,
     desc: tpl.desc,
-    hp: stats.hp,
-    maxHp: stats.maxHp,
-    atk: stats.atk,
-    def: stats.def,
-    agi: stats.agi,
+    hp: targetHp,
+    maxHp: targetHp,
+    atk: bossStats.atk,
+    def: bossStats.def,
+    agi: bossStats.agi,
     skillChance: tpl.skillChance,
     spawnedAt: getNow(),
     spawnDayKey: todayKey,
@@ -81,7 +116,9 @@ function spawnWorldBoss(store) {
     finalHitBy: null,
     dead: false,
     settled: false,
-    fromStrongest: !!fromStrongest,
+    // v3.0：保留中位玩家参考信息（调试 + 前端展示用）
+    buildMode: 'tpl70_median30',
+    rounds: BOSS_BATTLE_ROUNDS,
   };
   store.setMeta(meta);
   return meta.worldBoss;
@@ -138,8 +175,8 @@ function attackWorldBoss(store, username) {
     return { success: false, message: '今日挑战次数已用完，请等待次日 BOSS 重生' };
   }
 
-  // 模拟 5 回合战斗
-  const battle = simulateBossBattle(player, boss, 5);
+  // 模拟 BOSS_BATTLE_ROUNDS 回合战斗（v3.0: 5 → 8）
+  const battle = simulateBossBattle(player, boss, boss.rounds || BOSS_BATTLE_ROUNDS);
   boss.hp = Math.max(0, boss.hp - battle.totalDamage);
   boss.damageLog = boss.damageLog || {};
   boss.damageLog[username] = (boss.damageLog[username] || 0) + battle.totalDamage;
@@ -179,27 +216,29 @@ function attackWorldBoss(store, username) {
 }
 
 // 给玩家参与奖励（按伤害占比）
+//   v3.1：去掉材料奖励，只发金币/经验
+//   v3.2：参与奖翻倍（基础 gold/exp × 伤害占比 × 2）让所有参与玩家都有"拿得动"的回报
 function grantWorldBossParticipation(player, boss) {
   const myDmg = boss.damageLog[player.username] || 0;
   const totalDmg = Object.values(boss.damageLog).reduce((a, b) => a + b, 0);
   const ratio = totalDmg > 0 ? myDmg / totalDmg : 0;
   const baseGold = boss.rewards?.gold || 0;
   const baseExp = boss.rewards?.exp || 0;
-  const goldGain = Math.floor(baseGold * ratio);
-  const expGain = Math.floor(baseExp * ratio);
+  // v3.2 参与奖翻倍
+  const goldGain = Math.floor(baseGold * ratio * 2);
+  const expGain = Math.floor(baseExp * ratio * 2);
   player.gold = (player.gold || 0) + goldGain;
   player.exp = (player.exp || 0) + expGain;
-  if (boss.rewards?.materials) {
-    for (const m of boss.rewards.materials) {
-      const inv = player.inventory.find(i => i.name === m.name);
-      const cnt = Math.max(1, Math.floor(m.count * Math.max(0.3, ratio)));
-      if (inv) inv.count += cnt;
-      else player.inventory.push({ name: m.name, count: cnt, type: 'material' });
-    }
-  }
 }
 
-// 结算 BOSS 奖励：参与奖 + 最后一击奖 + 伤害前三称号（24h 限时）
+// 结算 BOSS 奖励：参与奖 + 最后一击奖 + 伤害前三称号（24h 限时）+ 前三名等级进度奖 + 4-20 名取参与奖上限
+//   v3.1 重构：
+//     - 去掉所有材料奖励（参与奖 / 最后一击奖都不再发材料）
+//     - 前 3 名（已有称号）新增"等级进度奖"
+//   v3.2 调高：
+//     - levelBonus = floor(boss.hp × 0.01)（原来 × 0.001，× 10 调高）
+//     - 第 4-20 名：取"参与奖上限"= BOSS 基础 gold/exp × 1.0（远高于 v3.1 的固定 200/100）
+//     - 参与奖在 attackWorldBoss 里发的是基础奖 × 伤害占比 × 2
 function settleWorldBossRewards(store, boss) {
   const ranked = Object.entries(boss.damageLog || {})
     .map(([username, dmg]) => ({ username, dmg }))
@@ -208,43 +247,66 @@ function settleWorldBossRewards(store, boss) {
   const result = { participants: ranked.length, top: [], titleWinners: [] };
   const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
   const titleKeys = ['boss_killer_1', 'boss_killer_2', 'boss_killer_3'];
+  // v3.3 排名奖常量
+  //   前 3 名进度奖 = BOSS 基础奖 × 3/2/1.5 倍（确保严格高于 4-20 名的 × 1.0）
+  const TOP3_MULT = [3, 2, 1.5];  // 第 1/2/3 名进度奖是 BOSS 基础奖的多少倍
+  const RANK_BONUS_MAX_RANK = 20;
+  // v3.3 第 4-20 名：取参与奖上限 = BOSS 基础 gold/exp × 1.0
+  const rank4_20Gold = boss.rewards?.gold || 0;
+  const rank4_20Exp = boss.rewards?.exp || 0;
+  // v3.3 等级进度奖：BOSS 基础奖 × TOP3_MULT（不再用 boss.hp 系数）
+  const baseGold = boss.rewards?.gold || 0;
+  const baseExp = boss.rewards?.exp || 0;
 
   for (let i = 0; i < ranked.length; i++) {
     const r = ranked[i];
     const p = store.getPlayer(r.username);
     if (!p) continue;
+    const rank = i + 1;  // 1-based
 
+    // 1) 最后一击奖（v3.1：去掉材料，只剩金币/经验）
     if (r.username === boss.finalHitBy && boss.finalHitRewards) {
       p.gold = (p.gold || 0) + (boss.finalHitRewards.gold || 0);
       p.exp = (p.exp || 0) + (boss.finalHitRewards.exp || 0);
-      if (boss.finalHitRewards.materials) {
-        for (const m of boss.finalHitRewards.materials) {
-          const inv = p.inventory.find(i => i.name === m.name);
-          if (inv) inv.count += m.count;
-          else p.inventory.push({ name: m.name, count: m.count, type: 'material' });
-        }
-      }
     }
 
-    // 前三名发限时称号（仅当实际挑战过该 BOSS，且 boss 是真死亡或结算触发）
-    if (i < 3 && titleKeys[i]) {
+    // 2) 前 3 名：称号 + 等级进度奖（按 50%/30%/20% 拆分）
+    if (i < 3) {
+      // 称号
       const tk = titleKeys[i];
       p.titles = p.titles || {};
       p.titleExpiry = p.titleExpiry || {};
       p.titles[tk] = true;
       p.titleExpiry[tk] = expiresAt;
-      result.titleWinners.push({ rank: i + 1, username: r.username, titleKey: tk });
+      result.titleWinners.push({ rank, username: r.username, titleKey: tk });
+
+      // 等级进度奖（v3.3：BOSS 基础奖 × 3/2/1.5 倍，严格高于 4-20 名的 × 1.0）
+      const mult = TOP3_MULT[i];
+      const bonusGold = Math.floor(baseGold * mult);
+      const bonusExp = Math.floor(baseExp * mult);
+      p.gold = (p.gold || 0) + bonusGold;
+      p.exp = (p.exp || 0) + bonusExp;
     }
+    // 3) 第 4-20 名：取参与奖上限 = BOSS 基础 gold/exp × 1.0
+    else if (rank >= 4 && rank <= RANK_BONUS_MAX_RANK) {
+      p.gold = (p.gold || 0) + rank4_20Gold;
+      p.exp = (p.exp || 0) + rank4_20Exp;
+    }
+    // 4) 20 名后：只拿参与奖（在 attackWorldBoss 里已即时发放，× 2 翻倍）
 
     p.logs = p.logs || [];
     const expireNote = boss.expired ? '今日已过，强制结算' : '已被击杀';
-    p.logs.push({
-      time: getNow(),
-      type: 'world-boss',
-      text: r.username === boss.finalHitBy
-        ? `【世界 BOSS】你击杀了 ${boss.name}！获得额外击杀奖励`
-        : `【世界 BOSS】${boss.name} ${expireNote}，你参与了战斗`,
-    });
+    let logText = '';
+    if (r.username === boss.finalHitBy) {
+      logText = `【世界 BOSS】你击杀了 ${boss.name}！获得额外击杀奖励`;
+    } else if (rank <= 3) {
+      logText = `【世界 BOSS】${boss.name} ${expireNote}，你以第 ${rank} 名身份参与了战斗（获得等级进度奖）`;
+    } else if (rank <= 20) {
+      logText = `【世界 BOSS】${boss.name} ${expireNote}，你以第 ${rank} 名身份参与了战斗（获得排名奖）`;
+    } else {
+      logText = `【世界 BOSS】${boss.name} ${expireNote}，你参与了战斗`;
+    }
+    p.logs.push({ time: getNow(), type: 'world-boss', text: logText });
     store.setPlayer(r.username, p);
   }
   result.top = ranked.slice(0, 5);
@@ -266,5 +328,8 @@ module.exports = {
   spawnWorldBoss, getActiveBoss, getBossExpiresAt,
   attackWorldBoss,
   grantWorldBossParticipation, settleWorldBossRewards, getBossRanking,
-  getStrongestPlayer,
+  // v3.0：暴露新函数供测试 / 调试使用
+  getTopHalfByLevel, getMedianPlayerByLevel,
+  estimateTopHalfTotalDamage, buildBossStats,
+  BOSS_BATTLE_ROUNDS,
 };

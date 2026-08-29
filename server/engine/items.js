@@ -71,7 +71,10 @@ function equipItem(player, itemUid) {
   const item = player.equips[idx];
   if (player.level < item.reqLevel) return { success: false, message: `需要 Lv.${item.reqLevel}` };
   const old = player.equipped[item.slot];
-  if (old) player.equips.push(old);
+  if (old) {
+    // v1.02 持久化：把旧装备按排序插入回 equips（不直接 push 末尾）
+    addEquipToSortedPosition(player, old);
+  }
   player.equipped[item.slot] = item;
   player.equips.splice(idx, 1);
   recalc(player);
@@ -85,7 +88,8 @@ function equipItem(player, itemUid) {
 function unequipItem(player, slot) {
   player = migratePlayer(player);
   if (!player.equipped[slot]) return { success: false, message: '该位置无装备' };
-  player.equips.push(player.equipped[slot]);
+  // v1.02 持久化：用 addEquipToSortedPosition 插入到正确位置（不直接 push 末尾）
+  addEquipToSortedPosition(player, player.equipped[slot]);
   player.equipped[slot] = null;
   recalc(player);
   return { success: true };
@@ -140,7 +144,8 @@ function buyItem(player, itemId, count = 1) {
     for (let i = 0; i < actualCount; i++) {
       const item = createEquipItem(itemId, genUid());
       if (item) {
-        player.equips.push(item);
+        // v1.02 持久化：商店买到的装备也按排序插入
+        addEquipToSortedPosition(player, item);
         ensureQuestStats(player);
         if (!player.questStats.seenEquipTemplates.includes(item.templateId)) player.questStats.seenEquipTemplates.push(item.templateId);
       }
@@ -349,7 +354,8 @@ function mergeEquipment(player, itemUids) {
     enchants: [],
     upgradeLevel: 0,
   };
-  player.equips.push(newItem);
+  // v1.02 持久化：合成的新装备按排序插入
+  addEquipToSortedPosition(player, newItem);
   recalc(player);
   player.logs = player.logs || [];
   player.logs.push({ time: getNow(), type: 'merge', text: `【合成】3 件 ${q} ${slot} → 1 件 ${next} ${slot}「${newItem.name}」` });
@@ -376,6 +382,60 @@ function reforgeEquipment(player, itemUid, cost = 1000) {
   return { success: true };
 }
 
+// ============================================================
+// v1.02 背包排序持久化
+//   关键：sort 排序一次后，新装备/卸下/合成都"插入到正确位置"而不是末尾
+//   这样 5 秒轮询 getPlayer 时顺序依然保持
+// ============================================================
+const SLOT_ORDER = { weapon: 0, armor: 1, accessory: 2 };
+
+// 取装备的"最高属性"（排序 key 用）
+function getEquipSortKey(item) {
+  if (!item || !item.stats) return 0;
+  let max = 0;
+  for (const v of Object.values(item.stats)) {
+    if (typeof v === 'number' && v > max) max = v;
+  }
+  return max;
+}
+
+// 装备比较函数：slot 顺序 + 类别内 maxStat 降序
+function compareEquip(a, b) {
+  const sa = SLOT_ORDER[a.slot] ?? 99;
+  const sb = SLOT_ORDER[b.slot] ?? 99;
+  if (sa !== sb) return sa - sb;
+  const va = getEquipSortKey(a);
+  const vb = getEquipSortKey(b);
+  if (va !== vb) return vb - va;
+  // 稳定排序：同 maxStat 时按 quality 排
+  const qOrder = { mythic: 5, legend: 4, epic: 3, fine: 2, normal: 1 };
+  return (qOrder[b.quality] || 0) - (qOrder[a.quality] || 0);
+}
+
+// 排序整个 equips 数组（按 [slot, maxStat]）
+function sortInventory(player) {
+  player = migratePlayer(player);
+  player.equips = (player.equips || []).slice().sort(compareEquip);
+  return { success: true, count: player.equips.length };
+}
+
+// 把单件装备"插入"到正确位置（不破坏已有顺序）
+//   - 不直接 push 末尾，而是用 sort 找位置
+//   - 用于：equipItem 卸下旧装备、unequipItem 卸下穿戴装备、商店买装备、合成新装备、怪物掉落、任务奖励、竞技商店
+function addEquipToSortedPosition(player, item) {
+  if (!item) return;
+  player.equips = player.equips || [];
+  // 找到第一个"应该排在 item 之后"的位置
+  let insertIdx = player.equips.length;
+  for (let i = 0; i < player.equips.length; i++) {
+    if (compareEquip(item, player.equips[i]) < 0) {
+      insertIdx = i;
+      break;
+    }
+  }
+  player.equips.splice(insertIdx, 0, item);
+}
+
 // 学习法则
 function learnLaw(player, lawId) {
   player = migratePlayer(player);
@@ -400,5 +460,7 @@ module.exports = {
   evolveRace, enchantItem,
   upgradeEquipment, mergeEquipment, reforgeEquipment,
   learnLaw,
+  // v1.02：背包排序持久化
+  sortInventory, addEquipToSortedPosition, getEquipSortKey,
   setRecalcMaxStatsHandler,
 };

@@ -12,16 +12,18 @@ const RACE_EVOLUTION = {
   },
   翼人: {
     name: '翼人', stage: 1, desc: '鹰人进化而成，光属性亲和，拥有更强的飞行能力',
-    bonus: { str: 5, con: 5, spi: 10, agi: 10, cha: 10 },
-    bonusText: '全属性+5~10，光属性亲和',
+    // v1.02：spi 改 flat HP（+100）；cha 改移速（每 2 点 = 1% 敏捷增幅，10 点 = +5%）
+    bonus: { str: 5, con: 5, hp: 100, agi: 10, cha: 10 },
+    bonusText: '属性提升，生命+100，移速+5%，光属性亲和',
     reqLevel: 30,
     reqMaterial: { name: '天使之羽', count: 1 },
     nextEvolution: '天使'
   },
   天使: {
     name: '天使', stage: 2, desc: '翼人的终极进化形态，神圣属性的化身',
-    bonus: { str: 20, con: 20, spi: 30, agi: 20, cha: 30 },
-    bonusText: '全属性大幅提升，神圣属性，经验+20%',
+    // v1.02：spi 改 flat HP（+200）；cha 改移速（30 点 = +15%）；补上承诺的 exp +20%
+    bonus: { str: 20, con: 20, hp: 200, agi: 20, cha: 30, exp: 0.20 },
+    bonusText: '全属性大幅提升，生命+200，移速+15%，经验+20%',
     reqLevel: 80,
     reqMaterial: { name: '光明晶', count: 5 },
     nextEvolution: null

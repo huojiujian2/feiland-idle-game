@@ -1,7 +1,7 @@
 // ====== 进阶系统路由：职业 / 种族进化 / 附魔 / 法则 / 登神 / 转生 / 转生点商店 ======
 const {
   chooseJob, evolveRace, enchantItem, learnLaw,
-  attemptAscension, doReincarnate, getReincarnationInfo,
+  attemptAscension, doReincarnate, autoReincarnate, getReincarnationInfo,
   getReincShop, buyReincShopItem,
   getPlayerView,
 } = require('../engine');
@@ -71,6 +71,22 @@ function registerProgressionRoutes(app, store) {
     res.json({ success: true, data: getPlayerView(r.player), earnedPoints: result.earnedPoints, reincarnation: result.reincarnation });
   });
 
+  // 内测：一键转生（金币按高级经验卷轴购买力速升等级后连续转生，后续随经验卷轴一起删除）
+  app.post('/api/player/:username/auto-reincarnate', (req, res) => {
+    const r = loadPlayer(store, req.params.username);
+    if (r.error) return fail(res, r.error);
+    const { times, targetLevel } = req.body || {};
+    const result = autoReincarnate(r.player, times, targetLevel);
+    if (!result.success) return fail(res, result.message);
+    savePlayer(store, r.player);
+    res.json({
+      success: true,
+      data: getPlayerView(r.player),
+      completed: result.completed,
+      message: result.message,
+    });
+  });
+
   // v0.9：标记"满百级转生提醒"已弹出（避免每次启动都弹）
   app.post('/api/player/:username/reincarn-hint-shown', (req, res) => {
     const r = loadPlayer(store, req.params.username);
@@ -86,7 +102,16 @@ function registerProgressionRoutes(app, store) {
   });
 
   // 转生点商店
-  app.get('/api/reinc-shop', (req, res) => res.json({ success: true, data: getReincShop() }));
+  // v7：getReincShop 需要 player 才能返回动态价格（已买次数 + 1）
+  app.get('/api/reinc-shop', (req, res) => {
+    const username = req.query.username;
+    if (username) {
+      const r = loadPlayer(store, username);
+      if (r.error) return fail(res, r.error);
+      return res.json({ success: true, data: getReincShop(r.player) });
+    }
+    res.json({ success: true, data: getReincShop() });
+  });
   app.post('/api/reinc-shop/buy', (req, res) => {
     const { username, itemId, option } = req.body;
     const r = loadPlayer(store, username);
@@ -94,7 +119,14 @@ function registerProgressionRoutes(app, store) {
     const result = buyReincShopItem(r.player, itemId, option);
     if (!result.success) return fail(res, result.message);
     savePlayer(store, r.player);
-    res.json({ success: true, data: getPlayerView(r.player), message: result.message, reincPoints: result.reincPoints });
+    res.json({
+      success: true,
+      data: getPlayerView(r.player),
+      message: result.message,
+      reincPoints: result.reincPoints,
+      cost: result.cost,                  // v7：返回本次实际扣的点数
+      boughtCount: result.boughtCount,    // v7：返回买完后的次数
+    });
   });
 }
 
