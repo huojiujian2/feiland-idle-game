@@ -494,7 +494,7 @@ describe('T-010 世界 BOSS 奖励 v3.1', () => {
     boss.damageLog = { p0: 100000 };
     boss.finalHitBy = 'p0';
     boss.dead = true;
-    boss.settled = true;
+    boss.settled = false;
     engine.settleWorldBossRewards(store, boss);
     assert.equal(players.p0.gold, 5000 + 10000 + 15000, 'p0 = 参与奖 + 最后一击 + 进度奖×3');
     assert.equal(players.p0.exp, 2000 + 5000 + 6000);

@@ -222,15 +222,19 @@ async function handleLogin({ username, password }) {
   currentUser = username;
   currentUserRef.value = username;
   if (res.hasCharacter) {
-    player.value = res.data;
-    prevLevel = res.data.level;
-    if (res.offlineSummary && res.offlineSummary.offlineSeconds > 0) {
-      offlineSummary.value = { visible: true, data: res.offlineSummary };
+    const payload = res.data;
+    const p = (payload && payload.player) ? payload.player : payload;
+    player.value = p;
+    prevLevel = p?.level || 0;
+    const off = (payload && payload.offlineSummary) || res.offlineSummary;
+    if (off && off.offlineSeconds > 0) {
+      offlineSummary.value = { visible: true, data: off };
     }
+    hasHydrated = true;
     loadStaticData();
     startPolling();
     // v0.9：登录后立即检测（不等轮询）— 已 Lv.100 老玩家上线就弹
-    maybeShowReincarnHint(res.data);
+    maybeShowReincarnHint(p);
     // v2.2：登录后拉取全服名册，方便图鉴/造物库显示别人造物的真名
     refreshPlayerNameMap();
   } else {
@@ -267,9 +271,12 @@ async function handleCreateChar({ charName }) {
   }
   const res = await api.createCharacter(currentUser, charName);
   if (!res.success) { toast.error(res.message); return; }
-  player.value = res.data;
-  prevLevel = res.data.level;
+  const payload = res.data;
+  const p = (payload && payload.player) ? payload.player : payload;
+  player.value = p;
+  prevLevel = p?.level || 0;
   currentUserRef.value = currentUser;
+  hasHydrated = true;
   loadStaticData();
   startPolling();
 }
@@ -300,15 +307,25 @@ async function startPolling() {
     if (!player.value) return;
     const res = await api.getPlayer(currentUser);
     if (res.success) {
-      if (res.data.level > prevLevel) {
-        levelUpNotice.value = res.data.level;
-        prevLevel = res.data.level;
+      const payload = res.data;
+      const p = (payload && payload.player) ? payload.player : payload;
+      const off = (payload && payload.offlineSummary) || res.offlineSummary;
+      if (p && typeof p.level === 'number' && p.level > prevLevel) {
+        levelUpNotice.value = p.level;
+        prevLevel = p.level;
         setTimeout(() => { levelUpNotice.value = null; }, 2500);
         refreshShop(); // 升级可能解锁新的商店材料
       }
-      player.value = res.data;
+      player.value = p;
+      // handle offlineSummary if server sends it (compat)
+      if (off && off.offlineSeconds > 0 && !hasHydrated) {
+        offlineSummary.value = { visible: true, data: off };
+        hasHydrated = true;
+      } else if (off) {
+        hasHydrated = true;
+      }
       // v0.9：首次达到 Lv.100 且未转生 → 弹转生提醒弹窗（一次性）
-      maybeShowReincarnHint(res.data);
+      maybeShowReincarnHint(p);
     }
   }, 5000);
 }

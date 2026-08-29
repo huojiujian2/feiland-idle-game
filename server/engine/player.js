@@ -5,6 +5,7 @@ const {
   getTodayKey, getMonthKey, createDailyQuests, ensureQuestStats, checkAchievements,
   refreshDailyIfNeeded, normalizeTutorialStep,
 } = require('./daily');
+const { isValidTitleKey } = require('../data/titles');
 
 // 力量等阶（含神格）
 function getStageFull(level, godhood) {
@@ -61,12 +62,14 @@ function createCharacter(username, charName) {
     achievements: {},
     questStats: { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] },
     titles: {},
+    titleExpiry: {},
     currentTitle: null,
     reincPoints: 0,
     tutorialStep: 0,
     combatStats: { totalWins: 0, totalLosses: 0, totalDraws: 0, todayKills: 0, monthKills: 0, todayResetAt: getTodayKey(), monthResetAt: getMonthKey() },
     pvpStats: { wins: 0, losses: 0, rating: 1000, streak: 0, bestStreak: 0, lastPvpAt: 0 },
     attrPresets: [],
+    settlementLedger: [],
     // 灵鸡斗场（完全独立玩法，不与主游戏资源交互）
     cockfight: { points: 0, wins: 0, streak: 0, played: 0, loseStreak: 0, dayKey: '', usedToday: 0, banNext: null, current: null, history: [] },
   };
@@ -155,7 +158,26 @@ function migratePlayer(player) {
   } else if (!player.titles || typeof player.titles !== 'object') {
     player.titles = {};
   }
+  if (!player.titleExpiry || typeof player.titleExpiry !== 'object' || Array.isArray(player.titleExpiry)) {
+    player.titleExpiry = {};
+  }
+  for (const k of Object.keys(player.titles)) {
+    if (!isValidTitleKey(k)) delete player.titles[k];
+  }
+  for (const k of Object.keys(player.titleExpiry)) {
+    const v = player.titleExpiry[k];
+    if (!isValidTitleKey(k) || !Number.isFinite(v) || v <= 0) delete player.titleExpiry[k];
+  }
   if (player.currentTitle !== null && typeof player.currentTitle !== 'string') player.currentTitle = null;
+  if (player.currentTitle !== null) {
+    if (!isValidTitleKey(player.currentTitle)) player.currentTitle = null;
+    else {
+      const exp = player.titleExpiry[player.currentTitle];
+      if (Number.isFinite(exp) && exp <= getNow()) player.currentTitle = null;
+    }
+  }
+  if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
+  else if (player.settlementLedger.length > 100) player.settlementLedger.splice(0, player.settlementLedger.length - 100);
   if (!Number.isFinite(player.reincPoints)) player.reincPoints = 0;
   if (!Number.isFinite(player.tutorialStep)) player.tutorialStep = 0;
   player.tutorialStep = normalizeTutorialStep(player.tutorialStep);

@@ -15,6 +15,7 @@ const idle = require('./idle');
 const view = require('./view');
 const genesis = require('./genesis');
 const cockfight = require('./cockfight');
+const settlement = require('./settlement');
 
 // ====== 绑定循环引用 ======
 // recalcMaxStats：与原 engine.js 行为一致（基于词条加成的 baseHp）
@@ -57,13 +58,41 @@ pvp.setBotCharacterDeps({
 });
 
 // 创世系统：把 store.getMeta 注入到 idle/genesis 两个引擎
+let _store = null;
 function setStore(store) {
+  _store = store;
   if (!store || !store.getMeta) return;
   const getter = () => store.getMeta();
   idle.setMetaGetter(getter);
   genesis.setMetaGetter(getter);
   // 启动期把已存档的自创装备同步注册回装备模板表
   genesis.rehydrateFromMeta(store.getMeta());
+}
+function withTransaction(fn) {
+  if (_store && typeof _store.withTransaction === 'function') return _store.withTransaction(fn);
+  const s = require('../store');
+  return s.withTransaction(fn);
+}
+function safeSave() {
+  if (_store && typeof _store.safeSave === 'function') return _store.safeSave();
+  const s = require('../store');
+  return s.safeSave();
+}
+function getLastSaveError() {
+  if (_store && typeof _store.getLastSaveError === 'function') return _store.getLastSaveError();
+  try { const s = require('../store'); return s.getLastSaveError(); } catch(_) { return null; }
+}
+function cancelSaveTimer() {
+  if (_store && typeof _store.cancelSaveTimer === 'function') return _store.cancelSaveTimer();
+  try { const s = require('../store'); return s.cancelSaveTimer(); } catch(_) {}
+}
+function snapshot() {
+  if (_store && typeof _store.snapshot === 'function') return _store.snapshot();
+  try { const s = require('../store'); return s.snapshot(); } catch(_) { return JSON.stringify({}); }
+}
+function restore(snap) {
+  if (_store && typeof _store.restore === 'function') return _store.restore(snap);
+  try { const s = require('../store'); return s.restore(snap); } catch(_) {}
 }
 
 // ====== 统一导出（与原 engine.js 保持兼容） ======
@@ -74,6 +103,17 @@ module.exports = {
   __setRandom: state.__setRandom,
   __setDropRandom: state.__setDropRandom,
   __resetSeams: state.__resetSeams,
+
+  // 存档事务（store 代理，setStore 注入后走 _store，否则直连 store 模块）
+  withTransaction,
+  safeSave,
+  getLastSaveError,
+  cancelSaveTimer,
+  snapshot,
+  restore,
+
+  // 结算校验
+  assertSettlementReward: settlement.assertSettlementReward,
 
   // 工具
   shouldDrop: utils.shouldDrop,
@@ -190,6 +230,7 @@ module.exports = {
   createBot: pvp.createBot,
   generateArenaBots: pvp.generateArenaBots,
   settleArenaRewards: pvp.settleArenaRewards,
+  settleDuePeriods: pvp.settleDuePeriods,
   maybeResetSeason: pvp.maybeResetSeason,
   applySeasonResetToPlayers: pvp.applySeasonResetToPlayers,
   buyArenaItem: pvp.buyArenaItem,
@@ -203,6 +244,7 @@ module.exports = {
   settleWorldBossRewards: worldboss.settleWorldBossRewards,
   getBossRanking: worldboss.getBossRanking,
   getBossDayKey: worldboss.getBossDayKey,
+  getTodayMidnight: worldboss.getTodayMidnight,
   // v3.0：保留 getStrongestPlayer 兼容旧调用方（实际已不再使用）
   getStrongestPlayer: worldboss.getStrongestPlayer,
   // v3.0：暴露新函数供测试 / 调试

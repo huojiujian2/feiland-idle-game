@@ -119,8 +119,10 @@ function expToNext(level) {
 function createEquipItem(templateId, uid) {
   const t = EQUIP_TEMPLATES[templateId];
   if (!t) return null;
+  let _getNow = () => Date.now();
+  try { _getNow = require('../engine/state').getNow; } catch(_){}
   return {
-    uid: uid || (Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+    uid: uid || (_getNow() + '_' + Math.random().toString(36).substr(2, 6)),
     templateId,
     name: t.name,
     slot: t.slot,

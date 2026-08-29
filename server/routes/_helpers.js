@@ -15,8 +15,9 @@ function ok(res, data, extra = {}) {
   res.json({ success: true, data, ...extra });
 }
 
-function fail(res, message, status = 200) {
-  res.status(status).json({ success: false, message });
+function fail(res, message, status) {
+  const code = Number.isFinite(status) ? status : 400;
+  res.status(code).json({ success: false, message });
 }
 
 module.exports = { loadPlayer, savePlayer, ok, fail };

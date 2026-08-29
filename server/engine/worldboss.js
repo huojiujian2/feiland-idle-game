@@ -3,6 +3,7 @@ const { getNow, getRand } = require('./state');
 const { WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS } = require('../data');
 const { getTotalStats } = require('./stats');
 const { simulateBossBattle } = require('./combat');
+const { assertSettlementReward } = require('./settlement');
 
 // v3.0：BOSS 战斗回合数（从 5 提到 8，让玩家有更多输出时间）
 const BOSS_BATTLE_ROUNDS = 8;
@@ -199,7 +200,6 @@ function attackWorldBoss(store, username) {
     boss.dead = true;
     boss.killedAt = getNow();
     boss.finalHitBy = username;
-    boss.settled = true;
     killed = true;
     rewards = settleWorldBossRewards(store, boss);
   } else {
@@ -248,12 +248,13 @@ function grantWorldBossParticipation(player, boss) {
 //     - 第 4-20 名：取"参与奖上限"= BOSS 基础 gold/exp × 1.0（远高于 v3.1 的固定 200/100）
 //     - 参与奖在 attackWorldBoss 里发的是基础奖 × 伤害占比 × 2
 function settleWorldBossRewards(store, boss) {
+  if (boss.settled) return { already: true };
   const ranked = Object.entries(boss.damageLog || {})
     .map(([username, dmg]) => ({ username, dmg }))
     .sort((a, b) => b.dmg - a.dmg);
 
   const result = { participants: ranked.length, top: [], titleWinners: [] };
-  const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+  const expiresAt = getNow() + 24 * 60 * 60 * 1000;
   const titleKeys = ['boss_killer_1', 'boss_killer_2', 'boss_killer_3'];
   // v3.3 排名奖常量
   //   前 3 名进度奖 = BOSS 基础奖 × 3/2/1.5 倍（确保严格高于 4-20 名的 × 1.0）
@@ -266,16 +267,28 @@ function settleWorldBossRewards(store, boss) {
   const baseGold = boss.rewards?.gold || 0;
   const baseExp = boss.rewards?.exp || 0;
 
+  const spawnDayKey = boss.spawnDayKey || getBossDayKey(boss.spawnedAt || getNow());
+  const batchId = `boss:settle:${spawnDayKey}:${boss.id}`;
+  const childIds = [];
   for (let i = 0; i < ranked.length; i++) {
     const r = ranked[i];
     const p = store.getPlayer(r.username);
     if (!p) continue;
     const rank = i + 1;  // 1-based
+    let ledgerGold = 0;
+    let ledgerExp = 0;
+    const ledgerTitles = [];
+    const childId = `boss:settle:${spawnDayKey}:${boss.id}:rank:${rank}`;
+    childIds.push(childId);
 
     // 1) 最后一击奖（v3.1：去掉材料，只剩金币/经验）
     if (r.username === boss.finalHitBy && boss.finalHitRewards) {
-      p.gold = (p.gold || 0) + (boss.finalHitRewards.gold || 0);
-      p.exp = (p.exp || 0) + (boss.finalHitRewards.exp || 0);
+      const fg = (boss.finalHitRewards.gold || 0);
+      const fe = (boss.finalHitRewards.exp || 0);
+      p.gold = (p.gold || 0) + fg;
+      p.exp = (p.exp || 0) + fe;
+      ledgerGold += fg;
+      ledgerExp += fe;
     }
 
     // 2) 前 3 名：称号 + 等级进度奖（按 50%/30%/20% 拆分）
@@ -294,11 +307,16 @@ function settleWorldBossRewards(store, boss) {
       const bonusExp = Math.floor(baseExp * mult);
       p.gold = (p.gold || 0) + bonusGold;
       p.exp = (p.exp || 0) + bonusExp;
+      ledgerGold += bonusGold;
+      ledgerExp += bonusExp;
+      ledgerTitles.push(tk);
     }
     // 3) 第 4-20 名：取参与奖上限 = BOSS 基础 gold/exp × 1.0
     else if (rank >= 4 && rank <= RANK_BONUS_MAX_RANK) {
       p.gold = (p.gold || 0) + rank4_20Gold;
       p.exp = (p.exp || 0) + rank4_20Exp;
+      ledgerGold += rank4_20Gold;
+      ledgerExp += rank4_20Exp;
     }
     // 4) 20 名后：只拿参与奖（在 attackWorldBoss 里已即时发放，× 2 翻倍）
 
@@ -315,9 +333,37 @@ function settleWorldBossRewards(store, boss) {
       logText = `【世界 BOSS】${boss.name} ${expireNote}，你参与了战斗`;
     }
     p.logs.push({ time: getNow(), type: 'world-boss', text: logText });
+    // settlement ledger (boss_settle) with validation
+    if (ledgerGold > 0 || ledgerExp > 0 || ledgerTitles.length > 0) {
+      const reward = { gold: ledgerGold, exp: ledgerExp };
+      if (ledgerTitles.length > 0) reward.titles = [...ledgerTitles];
+      const v = assertSettlementReward('boss_settle', reward);
+      if (v.valid) {
+        if (!Array.isArray(p.settlementLedger)) p.settlementLedger = [];
+        const tier = rank === 1 ? 'S' : rank === 2 ? 'A' : rank === 3 ? 'B' : rank <= 10 ? 'C' : rank <= 20 ? 'D' : 'E';
+        const fullResult = { gold: ledgerGold, exp: ledgerExp, rank, tier };
+        if (ledgerTitles.length > 0) fullResult.titles = [...ledgerTitles];
+        // dedup by id if already exists (guard idempotency)
+        if (!p.settlementLedger.some(e => e.id === childId)) {
+          p.settlementLedger.push({
+            id: childId,
+            at: getNow(),
+            type: 'boss_settle',
+            reward,
+            source: batchId,
+            fullResult,
+          });
+          if (p.settlementLedger.length > 100) p.settlementLedger.splice(0, p.settlementLedger.length - 100);
+        }
+      }
+    }
     store.setPlayer(r.username, p);
   }
+  boss.settled = true;
+  boss.settlementIds = [batchId, ...childIds];
   result.top = ranked.slice(0, 5);
+  result.settlementIds = boss.settlementIds;
+  result.batchId = batchId;
   return result;
 }
 
@@ -332,6 +378,10 @@ function getBossRanking(store, limit = 10) {
     .slice(0, limit);
 }
 
+function getStrongestPlayer(store) {
+  const top = getTopHalfByLevel(store);
+  return top[0] || null;
+}
 module.exports = {
   spawnWorldBoss, getActiveBoss, getBossExpiresAt,
   attackWorldBoss,
@@ -340,6 +390,7 @@ module.exports = {
   getTopHalfByLevel, getMedianPlayerByLevel,
   estimateTopHalfTotalDamage, buildBossStats,
   // v3.4：北京日 key（路由层 challengedToday 判定用，与引擎同源）
-  getBossDayKey,
+  getBossDayKey, getTodayMidnight,
+  getStrongestPlayer,
   BOSS_BATTLE_ROUNDS,
 };
