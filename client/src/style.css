@@ -468,8 +468,9 @@ select option {
   inset: 0;
   overflow-y: auto;
   padding: 0.5rem;
-  /* v0.9：底部 fixed tabbar 留出空间（含 iOS 安全区） */
-  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 0.75rem);
+  /* v0.9：底部 fixed tabbar 留出空间（含 iOS 安全区）
+     v1.03：+ 悬浮底栏遮挡高度（夸克/UC等，JS 检测写入 --browser-bar-h） */
+  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--browser-bar-h, 0px) + 0.75rem);
   animation: fadeInUp var(--duration-slow) var(--ease-out);
 }
 

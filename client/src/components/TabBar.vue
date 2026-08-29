@@ -36,10 +36,15 @@ defineEmits(['tab-click']);
   display: flex;
   justify-content: space-around;
   align-items: flex-end;
-  padding: 6px 4px 8px;
-  flex-shrink: 0;
-  position: relative;
+  /* v1.03：fixed 贴底 + 三重底部保护，防止被手机浏览器底栏（夸克/UC/iOS等）遮挡
+     ① --safe-bottom：iOS 等标准安全区（env(safe-area-inset-bottom)）
+     ② --browser-bar-h：JS 检测的悬浮底栏遮挡高度（夸克/UC等不暴露safe-area的浏览器）
+     注意：曾因 scoped 样式 position:relative 覆盖全局 fixed 方案导致保护失效 */
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  padding: 6px 4px calc(8px + var(--safe-bottom) + var(--browser-bar-h, 0px));
   min-height: var(--tabbar-h);
+  z-index: 1000;
 }
 
 .tabbar-item {

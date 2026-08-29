@@ -108,7 +108,7 @@
 // 4. 教程引导：T-050 步骤更新
 // 5. 业务事件：加点、装备、商店、登神、转生、竞技场等
 // 6. 组合 10+ 子组件：LoginScreen / TopBar / TabBar / 9 个业务页 / 3 个弹窗
-import { ref, computed, watch, onUnmounted, provide } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue';
 import api from './api.js';
 import { toast, modalAlert, modalConfirm } from './ui-bridge.js';
 import UIBridge from './components/UIBridge.vue';
@@ -140,6 +140,27 @@ const jobTree = ref({});
 const shopItems = ref([]);
 const materialPrices = ref({});
 const qualityColors = { normal: '#9d9bb8', fine: '#5eda7a', epic: '#9d8cf0', legend: '#d4af5e', mythic: '#ff6738' };
+
+// ====== v1.03：悬浮底栏检测（夸克/UC/百度等地址栏在底部的浏览器）======
+// 原理：这类浏览器底栏悬浮在网页上方，不暴露 env(safe-area-inset-bottom)（返回0），
+//       但 visualViewport.height 会排除被遮挡部分 → innerHeight 与其差值即底部遮挡高度。
+//       检测结果写入 CSS 变量 --browser-bar-h，TabBar 和内容区据此垫高。
+//       封顶 60px：避免输入法键盘弹出时（vv.height 大幅缩小）被误判垫得太高。
+let vvCleanup = null;
+onMounted(() => {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const update = () => {
+    const bottomCovered = window.innerHeight - vv.height - vv.offsetTop;
+    const h = bottomCovered > 40 ? Math.min(bottomCovered, 60) : 0;
+    document.documentElement.style.setProperty('--browser-bar-h', h + 'px');
+  };
+  vv.addEventListener('resize', update);
+  vv.addEventListener('scroll', update);
+  update();
+  vvCleanup = () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+});
+onUnmounted(() => { if (vvCleanup) vvCleanup(); });
 
 // v2.2：全服玩家名册 { username: name } —— 用于把"造物主标签"里的账号解析成真名
 const playerNameMap = ref({});
