@@ -207,12 +207,16 @@ function migratePlayer(player) {
   if (!('expedition' in player) || (player.expedition !== null && typeof player.expedition !== 'object')) player.expedition = null;
   if (player.expedition) {
     if (!Number.isFinite(player.expedition.startAt)) player.expedition = null;
-    else {
+    else if (!player.expedition.snapshot || typeof player.expedition.snapshot !== 'object' || !Number.isFinite(player.expedition.snapshot.atk) || !Number.isFinite(player.expedition.snapshot.maxHp)) {
+      // 坏档缺 snapshot 时 claim 必 TypeError→500，又被单队并发 409 卡死新派遣 = 软锁
+      player.expedition = null;
+    } else {
       if (!Number.isFinite(player.expedition.baseEndAt)) player.expedition.baseEndAt = player.expedition.startAt + 30*60*1000;
       if (!Number.isFinite(player.expedition.endAt)) player.expedition.endAt = player.expedition.baseEndAt;
       if (!Number.isFinite(player.expedition.appliedTimeDelta)) player.expedition.appliedTimeDelta = 0;
       if (!Number.isFinite(player.expedition.baseGoldLossRate)) player.expedition.baseGoldLossRate = 0;
       if (!Number.isFinite(player.expedition.baseGoldLossRoll)) player.expedition.baseGoldLossRoll = 0;
+      if (!['ongoing','ready'].includes(player.expedition.status)) player.expedition.status = 'ongoing';
       if (!Array.isArray(player.expedition.events)) player.expedition.events = [];
       for (const ev of player.expedition.events) {
         if (typeof ev.choiceChangeCount !== 'number') ev.choiceChangeCount = 0;

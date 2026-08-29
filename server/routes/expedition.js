@@ -1,6 +1,6 @@
 // ====== 远征路由 ======
 const {
-  dispatchExpedition, chooseExpeditionEvent, claimExpedition, getExpeditionStatus,
+  dispatchExpedition, chooseExpeditionEvent, claimExpedition, getExpeditionStatus, sanitizeExpedition,
 } = require('../engine');
 const { EXPEDITION_AREAS, EXPEDITION_DURATIONS, EXPEDITION_EVENTS } = require('../data/expedition');
 const { ok, fail } = require('./_helpers');
@@ -23,7 +23,7 @@ function registerExpeditionRoutes(app, store) {
       if (!player) return { status: 404, message: '角色不存在' };
       const st = getExpeditionStatus(player);
       // 若已就绪但仍 ongoing，状态推导为 ready 不强制写盘（GET 不改 endAt，claim 时才补算默认a）
-      return { status: 200, data: { expedition: player.expedition || null, history: player.expeditionHistory || [], codex: player.expeditionCodex || {}, reports: player.expeditionReports || {}, remainingMs: st.remainingMs, status: st.status } };
+      return { status: 200, data: { expedition: sanitizeExpedition(player.expedition) || null, history: player.expeditionHistory || [], codex: player.expeditionCodex || {}, reports: player.expeditionReports || {}, remainingMs: st.remainingMs, status: st.status } };
     });
     if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
     return ok(res, result.data);
@@ -42,7 +42,7 @@ function registerExpeditionRoutes(app, store) {
       if (!player) return { status: 404, message: '角色不存在' };
       const r = dispatchExpedition(player, areaId, durationKey);
       if (!r.success) return { status: r.code || 400, message: r.message };
-      return { status: 200, data: { expedition: r.expedition } };
+      return { status: 200, data: { expedition: sanitizeExpedition(r.expedition) } };
     });
     if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
     return ok(res, result.data);
@@ -61,7 +61,7 @@ function registerExpeditionRoutes(app, store) {
       if (!player) return { status: 404, message: '角色不存在' };
       const r = chooseExpeditionEvent(player, eventId, choiceId);
       if (!r.success) return { status: r.code || 400, message: r.message };
-      return { status: 200, data: { expedition: r.expedition } };
+      return { status: 200, data: { expedition: sanitizeExpedition(r.expedition) } };
     });
     if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
     return ok(res, result.data);

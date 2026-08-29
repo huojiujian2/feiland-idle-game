@@ -9,6 +9,8 @@ const {
 const { getStageFull, getTotalStats, getEquipBonus, getLawBonus, getCombatStats } = require('./stats');
 const { refreshDailyIfNeeded, findAffix, getJobStage, getPassiveSlots, getAvailableAffixLevels, normalizeTutorialStep } = require('./daily');
 const { migratePlayer, getReadonlyPlayer } = require('./player');
+let _sanitizeExpedition = null;
+try { _sanitizeExpedition = require('./expedition').sanitizeExpedition; } catch (_) {}
 
 function getPowerScore(player) {
   const total = getTotalStats(player);
@@ -127,11 +129,10 @@ function getPlayerView(player) {
     combatStats: player.combatStats,
     attrPresets: player.attrPresets || [],
     tutorialStep: normalizeTutorialStep(player.tutorialStep), tutorialDone: normalizeTutorialStep(player.tutorialStep) === 6,
-    expedition: player.expedition || null,
+    expedition: _sanitizeExpedition ? _sanitizeExpedition(player.expedition) : (player.expedition || null),
     expeditionHistory: Array.isArray(player.expeditionHistory) ? player.expeditionHistory.slice(0,20) : [],
     expeditionReports: player.expeditionReports || {},
-    expeditionCodex: player.expeditionCodex || {},
-    cockfight: player.cockfight || null
+    expeditionCodex: player.expeditionCodex || {}
   };
 }
 

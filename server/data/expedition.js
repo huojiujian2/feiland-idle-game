@@ -55,7 +55,7 @@ const EXPEDITION_EVENTS = [
   {
     id: 'evt_ruins_trap', type: '遗迹', title: '机关密室', desc: '古老的密室布满机关，中央石台似乎藏有宝物。',
     choices: [
-      { id: 'a', label: '破解机关', risk: 'high', rewardHint: '敏捷判定，成功得宝箱，失败损失金币', timeDelta: 0, template: { goldRange: [80, 150], failGoldRange: [-80, -40], bossChanceDelta: 0 } },
+      { id: 'a', label: '破解机关', risk: 'high', rewardHint: '风险判定，成功得宝箱，失败损失金币', timeDelta: 0, template: { goldRange: [80, 150], failGoldRange: [-80, -40], bossChanceDelta: 0 } },
       { id: 'b', label: '绕行', risk: 'low', rewardHint: '耗时增加', timeDelta: 10 * 60 * 1000, template: { goldRange: [10, 20] } },
     ],
   },

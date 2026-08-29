@@ -128,7 +128,7 @@ function simulateExpeditionBossBattle(snapshot, boss, maxRounds = 5) {
     for (const actor of queue) {
       if (pHp <= 0 || mCurHp <= 0) break;
       if (actor === 'player') {
-        const r = calcDamage(snapshot.atk, mDef, 1, 0, 0, 0, snapshot.crit || 0, snapshot.critDmg || 1.5);
+        const r = calcDamage(snapshot.atk, mDef, 1, 0, 0, 0, snapshot.crit || 0, snapshot.critDmg);
         mCurHp = Math.max(0, mCurHp - r.value);
         totalDamage += r.value;
         if (snapshot.lifesteal > 0) pHp = Math.min(snapshot.maxHp, pHp + Math.floor(r.value * snapshot.lifesteal));
@@ -159,6 +159,28 @@ function getExpeditionStatus(player) {
   const status = getNow() >= exp.endAt ? 'ready' : 'ongoing';
   if (exp.status !== status) exp.status = status;
   return { expedition: exp, remainingMs, status };
+}
+
+function sanitizeExpedition(exp) {
+  if (!exp) return null;
+  const copy = JSON.parse(JSON.stringify(exp));
+  // 隐藏未选事件的预骰 outcome 与 boss.roll 等敏感预骰
+  if (copy.status === 'ongoing' || copy.status === 'ready') {
+    if (copy.boss && typeof copy.boss.roll === 'number') delete copy.boss.roll;
+    if (typeof copy.baseGoldLossRoll === 'number') delete copy.baseGoldLossRoll;
+    if (Array.isArray(copy.events)) {
+      for (const ev of copy.events) {
+        if (ev.chosenId === null) {
+          for (const ch of ev.choices) delete ch.outcome;
+        } else {
+          for (const ch of ev.choices) {
+            if (ch.id !== ev.chosenId) delete ch.outcome;
+          }
+        }
+      }
+    }
+  }
+  return copy;
 }
 
 function dispatchExpedition(player, areaId, durationKey) {
@@ -414,6 +436,7 @@ module.exports = {
   chooseEventOption,
   claimExpedition,
   getExpeditionStatus,
+  sanitizeExpedition,
   simulateExpeditionBossBattle,
   buildSnapshot,
   resolveTimeDelta,
