@@ -64,7 +64,9 @@ defineEmits([
    scoped 样式只对当前组件模板生效，必须用 :deep() 让子组件内部 class 命中。*/
 
 /* ===== 容器 ===== */
-.char-view { padding-bottom: 1rem; }
+/* v1.03：此处曾 padding-bottom:1rem 覆盖掉 .view-container 的 TabBar 底部预留
+   （scoped 选择器优先级更高），导致设置栏被垫高后的 TabBar 挡住 —— 改为叠加预留 */
+.char-view { padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--browser-bar-h, 0px) + 1.75rem); }
 /* char-top 在 JobPanel 子组件根元素上，需 :deep() 透传 */
 :deep(.char-top) { display: flex; gap: 0.8rem; margin-bottom: 0.6rem; }
 
