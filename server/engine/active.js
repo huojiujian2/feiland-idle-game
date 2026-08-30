@@ -2,6 +2,13 @@
 // @file server/engine/active.js
 // @module active
 // @description T-104 v2 每日活跃核心（5来源、封顶100、3档幂等、随机材料持久化）
+//
+// 本文件结构：
+// 1. 注入与工具 getTodayKeyActive (L12-L22)
+// 2. 刷新与视图 refreshIfNeeded/getDailyActiveView (L24-L81)
+// 3. 计分 addActivePoints (L83-L89)
+// 4. 领取 claimActive (L91-L146)
+// 5. 导出 (L148)
 const { getNow, getRand } = require('./state');
 const { DAILY_ACTIVE_TIERS, DAILY_ACTIVE_SOURCES, INITIAL_MATERIAL_POOL } = require('../data');
 const { assertSettlementReward } = require('./settlement');

@@ -86,21 +86,30 @@ describe('T-104 每日活跃', () => {
     p.lastTick = now - 4000;
     const { calculateIdle } = require('./idle');
     const { claimDaily } = require('./daily');
+    const { dispatchExpedition, claimExpedition } = require('./expedition');
     const idleRes = calculateIdle(p);
     assert.ok(idleRes);
     assert.equal(p.dailyActive.points, 5);
-    // daily
+    // daily via production claimDaily
     const dq = p.dailyQuests.find(q=>q.id==='battle20');
     dq.done = true;
     const rDaily = claimDaily(p, 'battle20');
     assert.equal(rDaily.success, true);
     assert.equal(p.dailyActive.points, 15);
-    // pvp / boss / expedition via addActivePoints as production埋点
+    // pvp via production埋点（与 routes/pvp.js:227 同路径）
     addActivePoints(p, 'pvp', 1);
     assert.equal(p.dailyActive.points, 30);
+    // boss via production埋点（与 routes/worldboss.js 同路径）
     addActivePoints(p, 'boss', 1);
     assert.equal(p.dailyActive.points, 45);
-    addActivePoints(p, 'expedition', 1);
+    // expedition via真实 dispatch/claim（非直接 addActivePoints）
+    __setRandom(()=> 0.4);
+    const disp = dispatchExpedition(p, 'verdant_border', '30m');
+    assert.equal(disp.success, true);
+    now += 30*60*1000 + 1000;
+    __setNow(()=> now);
+    const rExp = claimExpedition(p, disp.expedition.id);
+    assert.equal(rExp.success, true);
     assert.equal(p.dailyActive.points, 65);
   });
   it('旧存档 tier3 已领取但 rewards 缺失应回填', () => {
@@ -120,7 +129,7 @@ describe('T-104 每日活跃', () => {
     assert.ok(tier3.reward.materials && tier3.reward.materials.length>0);
     assert.ok(p.dailyActive.rewards[3]);
   });
-  it('save/reload 持久化与跨日', () => {
+  it('save/reload 持久化与跨日及 ledger 淘汰', () => {
     const store = require('../store');
     const path = require('path');
     const os = require('os');
@@ -131,19 +140,37 @@ describe('T-104 每日活跃', () => {
     store.load();
     let now = Date.now();
     __setNow(()=> now);
+    __setRandom(()=> 0.2);
     const p = createCharacter('t8','T8');
     store.setPlayer('t8', p);
     store.setAccount('t8', {username:'t8', password:'x', hasCharacter:true});
     addActivePoints(p, 'pvp', 2);
     claimActive(p, 1);
+    // tier3 随机奖励持久化
+    addActivePoints(p, 'expedition', 5);
+    const r3 = claimActive(p, 3);
+    assert.ok(r3.reward.materials);
     store.setPlayer('t8', p);
     store.save();
     // 模拟重启
     store.__resetStore();
     store.load();
     const reloaded = store.getPlayer('t8');
-    assert.equal(reloaded.dailyActive.points, 30);
-    assert.deepEqual(reloaded.dailyActive.claimed, [1]);
+    assert.equal(reloaded.dailyActive.points, 100);
+    assert.deepEqual(reloaded.dailyActive.claimed, [1,3]);
+    assert.ok(reloaded.dailyActive.rewards[3]);
+    // ledger 100 条淘汰后仍可重放 tier3
+    for(let i=0;i<110;i++) reloaded.settlementLedger.push({id:`dummy:${i}`, at:now+i, type:'daily', reward:{gold:1}, source:'x'});
+    if (reloaded.settlementLedger.length>100) reloaded.settlementLedger.splice(0, reloaded.settlementLedger.length-100);
+    // 此时原 daily_active:today:3 可能已被淘汰
+    const stillClaimed = reloaded.dailyActive.claimed.includes(3);
+    assert.ok(stillClaimed);
+    const view = getDailyActiveView(reloaded);
+    const tier3 = view.tiers.find(t=>t.tier===3);
+    assert.ok(tier3.reward.materials);
+    const replay = claimActive(reloaded, 3);
+    assert.equal(replay.already, true);
+    assert.ok(replay.reward || replay.already);
     try { fs.unlinkSync(tmp); fs.unlinkSync(tmp+'.bak'); } catch(_){}
     store.__setDbPath(require('path').join(__dirname, '../db.json'));
     store.__resetStore();
