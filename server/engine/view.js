@@ -10,7 +10,9 @@ const { getStageFull, getTotalStats, getEquipBonus, getLawBonus, getCombatStats 
 const { refreshDailyIfNeeded, findAffix, getJobStage, getPassiveSlots, getAvailableAffixLevels, normalizeTutorialStep } = require('./daily');
 const { migratePlayer, getReadonlyPlayer } = require('./player');
 let _sanitizeExpedition = null;
+let _getDailyActiveView = null;
 try { _sanitizeExpedition = require('./expedition').sanitizeExpedition; } catch (_) {}
+try { _getDailyActiveView = require('./active').getDailyActiveView; } catch (_) {}
 
 function getPowerScore(player) {
   const total = getTotalStats(player);
@@ -99,7 +101,8 @@ function getPlayerView(player) {
     }
     return { id: a.id, name: a.name, desc: a.desc, unlocked: !!rec.unlocked, claimed: !!rec.claimed, reward: a.reward, title };
   });
-  const questView = { dailyQuests: dailyQuestsView, chest: chestView, achievements: achievementsView, titles: player.titles || {}, currentTitle: player.currentTitle || null };
+  const dailyActiveView = _getDailyActiveView ? _getDailyActiveView(player) : null;
+  const questView = { dailyQuests: dailyQuestsView, chest: chestView, achievements: achievementsView, titles: player.titles || {}, currentTitle: player.currentTitle || null, dailyActive: dailyActiveView };
 
   return {
     username: player.username, name: player.name, avatar: player.avatar || '', race: player.race, raceStage: player.raceStage,
@@ -132,7 +135,8 @@ function getPlayerView(player) {
     expedition: _sanitizeExpedition ? _sanitizeExpedition(player.expedition) : (player.expedition || null),
     expeditionHistory: Array.isArray(player.expeditionHistory) ? player.expeditionHistory.slice(0,20) : [],
     expeditionReports: player.expeditionReports || {},
-    expeditionCodex: player.expeditionCodex || {}
+    expeditionCodex: player.expeditionCodex || {},
+    dailyActive: _getDailyActiveView ? _getDailyActiveView(player) : null
   };
 }
 

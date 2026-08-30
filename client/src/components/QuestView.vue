@@ -4,6 +4,22 @@
       <div class="quest-title"><IconBase name="scroll" :size="18" class="btn-icon icon-accent" />任务委托</div>
       <div class="quest-subtitle">日常可每日领取 · 成就永久有效</div>
     </div>
+    <!-- 每日活跃 -->
+    <div class="card daily-active-card">
+      <div class="da-head">
+        <span class="da-title">每日活跃 {{ dailyActive.points }}/100</span>
+        <span class="da-pct">{{ dailyActive.progressPct }}%</span>
+      </div>
+      <div class="bar da-bar"><div class="bar-fill" :style="{ width: dailyActive.progressPct + '%' }"></div></div>
+      <div class="da-tiers">
+        <div v-for="t in dailyActive.tiers" :key="t.tier" class="da-tier" :class="{ claimed: t.claimed, canClaim: t.canClaim }">
+          <span class="da-tier-label">{{ t.tier }}档 {{ t.need }}分</span>
+          <span class="da-tier-reward">{{ formatActiveReward(t.reward) }}</span>
+          <button class="btn btn-sm btn-primary da-claim-btn" :class="{ 'btn-disabled': !t.canClaim }" @click="onClaimActive(t.tier)">{{ t.claimed ? '已领' : (t.canClaim ? '领取' : '未满') }}</button>
+        </div>
+      </div>
+    </div>
+
     <div class="sub-tabs">
       <button class="sub-tab" :class="{ active: tab==='daily' }" @click="tab='daily'; page=1">日常</button>
       <button class="sub-tab" :class="{ active: tab==='ach' }" @click="tab='ach'; page=1">成就</button>
@@ -97,6 +113,7 @@ const selected = ref(null)
 const player = computed(()=> props.player || {})
 // v0.8+：创世之书仅二转（reincarnation >= 2）解锁
 const isGenesisUnlocked = computed(() => (player.value.reincarnation || 0) >= 2);
+const dailyActive = computed(()=> player.value.questView?.dailyActive || player.value.dailyActive || { points:0, claimed:[], tiers:[], progressPct:0 })
 const dailyList = computed(()=> player.value.questView?.dailyQuests || [])
 const achList = computed(()=> player.value.questView?.achievements || [])
 const chestNeed = computed(()=> player.value.questView?.chest?.need || 5)
@@ -112,9 +129,18 @@ function formatReward(r){
   if(r.gold) return r.gold + ' 金币'
   if(r.exp) return r.exp + ' 经验'
   if(r.materialPool) return '随机材料×' + (r.count||1)
+  if(r.materials) return r.materials.map(m=>m.name+'×'+m.count).join('、')
   if(r.equipPool) return '随机装备×1'
   if(r.affixLevel) return '大师词条×1'
   if(r.reincPoints) return '转生点×' + r.reincPoints
+  return JSON.stringify(r)
+}
+function formatActiveReward(r){
+  if(!r) return '-'
+  if(r.gold) return r.gold + ' 金币'
+  if(r.exp && r.materials) return r.exp + '经验+' + r.materials.map(m=>m.name+'×'+m.count).join('、')
+  if(r.exp) return r.exp + ' 经验'
+  if(r.materials) return r.materials.map(m=>m.name+'×'+m.count).join('、')
   return JSON.stringify(r)
 }
 async function onClaimDaily(id){
@@ -131,6 +157,13 @@ async function onClaimChest(){
 async function onClaimAch(id){
   const res = await api.claimAchievement(props.currentUser, id)
   if(!res.success) { toast.error(res.message||'领取失败'); return }
+  emit('refresh', res.data)
+}
+async function onClaimActive(tier){
+  const res = await api.claimDailyActive(props.currentUser, tier)
+  if(!res.success) { toast.error(res.message||'领取失败'); return }
+  if(res.already) toast.success('已领取（重放）')
+  else if(res.reward) toast.success('领取成功：' + formatActiveReward(res.reward))
   emit('refresh', res.data)
 }
 </script>
@@ -162,6 +195,17 @@ async function onClaimAch(id){
 .pager-btn:hover:not(:disabled){ border-color:var(--accent2); }
 .pager-btn:disabled{ opacity:0.3; cursor:not-allowed; }
 .pager-info{ font-size:0.72rem; color:var(--muted); font-family:monospace; }
+.daily-active-card{ padding:0.5rem 0.6rem; }
+.da-head{ display:flex; justify-content:space-between; font-size:0.78rem; font-weight:700; color:var(--ink); }
+.da-pct{ color:var(--accent); font-family:monospace; }
+.da-bar{ height:6px; margin:0.3rem 0; background:var(--quest-progress-bg); }
+.da-tiers{ display:grid; grid-template-columns:repeat(3,1fr); gap:0.3rem; }
+.da-tier{ display:flex; flex-direction:column; gap:0.15rem; padding:0.4rem; border:1px solid var(--rule); border-radius:6px; background:var(--bg); text-align:center; }
+.da-tier.canClaim{ border-color:var(--success); background:rgba(80,200,120,0.08); }
+.da-tier.claimed{ opacity:0.6; }
+.da-tier-label{ font-size:0.65rem; color:var(--muted); }
+.da-tier-reward{ font-size:0.62rem; color:var(--accent); min-height:1.2em; }
+.da-claim-btn{ font-size:0.62rem; padding:0.2rem 0.3rem; }
 .quest-detail-box{ background:var(--bg2); border:1px solid var(--rule); border-radius:12px; padding:1.2rem; max-width:320px; width:100%; }
 .qd-title{ font-size:1rem; font-weight:700; margin-bottom:0.4rem; }
 .qd-desc{ font-size:0.78rem; color:var(--dim); margin-bottom:0.4rem; }

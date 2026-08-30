@@ -206,6 +206,7 @@ function calculateIdle(player) {
   }
 
   player.lastTick = now;
+  try { require('./active').addActivePoints(player, 'idle_claim', 1); } catch (_) {}
   return { logEntry, levelUps };
 }
 
@@ -324,6 +325,7 @@ function _calculateIdleBatch(player, area, elapsed) {
   checkAchievements(player);
 
   player.lastTick = getNow();
+  try { require('./active').addActivePoints(player, 'idle_claim', 1); } catch (_) {}
   return { logEntry, levelUps: Array(levelUps).fill(0).map((_, i) => player.level - levelUps + i + 1) };
 }
 

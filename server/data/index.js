@@ -19,6 +19,7 @@ const { PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, SEASON_MONTHS,
 const { STRATEGIES, STRATEGY_CD_MS, WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS } = require('./strategy');
 const { WORLD_BOSS_TITLES, ARENA_SHOP_TITLES, COCKFIGHT_DISPLAY_TITLES, JOB_TITLES, ALL_TITLES, getUnlockedJobTitles, getActiveTimeTitles, getOwnedPermanentTitles, getOwnedCockfightTitles, isValidTitleKey } = require('./titles');
 const { EXPEDITION_AREAS, EXPEDITION_EVENTS, EXPEDITION_DURATIONS, MIN_EXPEDITION_MS, getExpeditionConfig } = require('./expedition');
+const { DAILY_ACTIVE_TIERS, DAILY_ACTIVE_SOURCES } = require('./active');
 
 module.exports = {
   AREAS, AREA_ORDER,
@@ -39,4 +40,5 @@ module.exports = {
   WORLD_BOSS_TEMPLATES, WORLD_BOSS_SPAWN_INTERVAL_MS,
   WORLD_BOSS_TITLES, ARENA_SHOP_TITLES, COCKFIGHT_DISPLAY_TITLES, JOB_TITLES, ALL_TITLES, getUnlockedJobTitles, getActiveTimeTitles, getOwnedPermanentTitles, getOwnedCockfightTitles, isValidTitleKey,
   EXPEDITION_AREAS, EXPEDITION_EVENTS, EXPEDITION_DURATIONS, MIN_EXPEDITION_MS, getExpeditionConfig,
+  DAILY_ACTIVE_TIERS, DAILY_ACTIVE_SOURCES,
 };
