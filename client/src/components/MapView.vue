@@ -52,6 +52,10 @@
             <IconBase name="feather" :size="20" class="side-tab-icon" />
             <span class="side-tab-label">灵鸡斗场</span>
           </div>
+          <div class="side-tab-item" @click="$emit('goExpedition')">
+            <IconBase name="map" :size="20" class="side-tab-icon" />
+            <span class="side-tab-label">远征营地</span>
+          </div>
         </div>
       </transition>
     </div>
@@ -91,7 +95,7 @@ const props = defineProps({
   player: { type: Object, required: true },
   areas: { type: Array, required: true },
 });
-const emit = defineEmits(['select', 'strategy-change', 'goBoss', 'goRank', 'goPvP', 'goCock']);
+const emit = defineEmits(['select', 'strategy-change', 'goBoss', 'goRank', 'goPvP', 'goCock', 'goExpedition']);
 
 // 页面状态：'select' 第一页 / 'battle' 第二页
 const page = ref('select');

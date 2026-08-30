@@ -188,6 +188,13 @@ export default {
   // 战斗策略
   setStrategy(username, strategy) { return request(`/player/${username}/strategy`, { method: 'POST', body: JSON.stringify({ strategy }) }) },
 
+  // 远征（T-102）
+  getExpeditionConfig() { return request('/expedition/config') },
+  getExpedition(username) { return request(`/player/${username}/expedition`) },
+  dispatchExpedition(username, areaId, durationKey) { return request(`/player/${username}/expedition/dispatch`, { method: 'POST', body: JSON.stringify({ areaId, durationKey }) }) },
+  chooseExpeditionEvent(username, eventId, choiceId) { return request(`/player/${username}/expedition/event/choose`, { method: 'POST', body: JSON.stringify({ eventId, choiceId }) }) },
+  claimExpedition(username, expeditionId) { return request(`/player/${username}/expedition/claim`, { method: 'POST', body: JSON.stringify({ expeditionId }) }) },
+
   // 任务/委托
   claimDaily(username, questId) { return request(`/player/${username}/quest/daily/${questId}/claim`, { method: 'POST' }) },
   claimChest(username) { return request(`/player/${username}/quest/chest/claim`, { method: 'POST' }) },

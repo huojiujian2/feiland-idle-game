@@ -6,14 +6,15 @@
 // 初始材料池唯一定义在 equipment.js，此处引用（避免双份定义漂移）
 const { INITIAL_MATERIAL_POOL } = require('./equipment');
 
-// 每日任务（T-040 静态）
+// 每日任务（T-040 静态 + T-102 远征）
 const DAILY_QUESTS = [
   { id: 'hunt50', name: '每日狩猎', desc: '击杀 50 只怪物', target: 50, reward: { gold: 500 } },
   { id: 'battle20', name: '每日冒险', desc: '完成 20 场战斗', target: 20, reward: { exp: 200 } },
   { id: 'alloc1', name: '每日分配', desc: '分配 1 次属性点', target: 1, reward: { gold: 100 } },
   { id: 'affix1', name: '每日词条', desc: '装备/卸下 1 个词条', target: 1, reward: { materialPool: INITIAL_MATERIAL_POOL, count: 1 } },
   { id: 'enchant1', name: '每日附魔', desc: '完成 1 次附魔', target: 1, reward: { gold: 300 } },
-  { id: 'buy1', name: '每日消费', desc: '在商店购买 1 件商品', target: 1, reward: { gold: 50 } }
+  { id: 'buy1', name: '每日消费', desc: '在商店购买 1 件商品', target: 1, reward: { gold: 50 } },
+  { id: 'expedition1', name: '远征探索', desc: '完成 1 次远征', target: 1, reward: { gold: 200 } },
 ];
 const DAILY_CHEST = { id: 'daily_chest', need: 5 };
 

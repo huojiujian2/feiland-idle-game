@@ -9,6 +9,8 @@ const {
 const { getStageFull, getTotalStats, getEquipBonus, getLawBonus, getCombatStats } = require('./stats');
 const { refreshDailyIfNeeded, findAffix, getJobStage, getPassiveSlots, getAvailableAffixLevels, normalizeTutorialStep } = require('./daily');
 const { migratePlayer, getReadonlyPlayer } = require('./player');
+let _sanitizeExpedition = null;
+try { _sanitizeExpedition = require('./expedition').sanitizeExpedition; } catch (_) {}
 
 function getPowerScore(player) {
   const total = getTotalStats(player);
@@ -114,7 +116,7 @@ function getPlayerView(player) {
     laws: player.laws, lawBonus, availableLaws, ascensionInfo,
     raceInfo: { current: raceData, next: nextRace },
     enchantsBySlot,
-    combatStats: getCombatStats(player),
+    computedCombatStats: getCombatStats(player),
     logs: player.logs.slice(-20).reverse(), lastTick: player.lastTick,
     canChooseJob: player.level >= 11 && !player.jobPath,
     canEvolve: nextRace ? (player.level >= nextRace.reqLevel) : false,
@@ -126,7 +128,11 @@ function getPlayerView(player) {
     pvpStats: player.pvpStats,
     combatStats: player.combatStats,
     attrPresets: player.attrPresets || [],
-    tutorialStep: normalizeTutorialStep(player.tutorialStep), tutorialDone: normalizeTutorialStep(player.tutorialStep) === 6
+    tutorialStep: normalizeTutorialStep(player.tutorialStep), tutorialDone: normalizeTutorialStep(player.tutorialStep) === 6,
+    expedition: _sanitizeExpedition ? _sanitizeExpedition(player.expedition) : (player.expedition || null),
+    expeditionHistory: Array.isArray(player.expeditionHistory) ? player.expeditionHistory.slice(0,20) : [],
+    expeditionReports: player.expeditionReports || {},
+    expeditionCodex: player.expeditionCodex || {}
   };
 }
 
