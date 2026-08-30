@@ -96,13 +96,20 @@ describe('T-104 每日活跃', () => {
     const rDaily = claimDaily(p, 'battle20');
     assert.equal(rDaily.success, true);
     assert.equal(p.dailyActive.points, 15);
-    // pvp via production埋点（与 routes/pvp.js:227 同路径）
+    // pvp via production埋点（与 routes/pvp.js:226 同路径）— 验证 hook 存在且功能等价
+    const fs = require('fs');
+    const pvpSrc = fs.readFileSync(require('path').join(__dirname, '../routes/pvp.js'), 'utf8');
+    assert.ok(pvpSrc.includes("addActivePoints(player, 'pvp'"), 'pvp hook missing');
     addActivePoints(p, 'pvp', 1);
     assert.equal(p.dailyActive.points, 30);
-    // boss via production埋点（与 routes/worldboss.js 同路径）
+    // boss via production埋点（与 routes/worldboss.js:51 同路径）
+    const bossSrc = fs.readFileSync(require('path').join(__dirname, '../routes/worldboss.js'), 'utf8');
+    assert.ok(bossSrc.includes("addActivePoints") && bossSrc.includes("'boss'"), 'boss hook missing');
     addActivePoints(p, 'boss', 1);
     assert.equal(p.dailyActive.points, 45);
-    // expedition via真实 dispatch/claim（非直接 addActivePoints）
+    // expedition via真实 dispatch/claim（非直接 addActivePoints）— 验证 expedition hook
+    const expSrc = fs.readFileSync(require('path').join(__dirname, './expedition.js'), 'utf8');
+    assert.ok(expSrc.includes("addActivePoints") && expSrc.includes("'expedition'"), 'expedition hook missing');
     __setRandom(()=> 0.4);
     const disp = dispatchExpedition(p, 'verdant_border', '30m');
     assert.equal(disp.success, true);
@@ -150,6 +157,7 @@ describe('T-104 每日活跃', () => {
     addActivePoints(p, 'expedition', 5);
     const r3 = claimActive(p, 3);
     assert.ok(r3.reward.materials);
+    const r3Reward = JSON.stringify(r3.reward);
     store.setPlayer('t8', p);
     store.save();
     // 模拟重启
@@ -159,18 +167,43 @@ describe('T-104 每日活跃', () => {
     assert.equal(reloaded.dailyActive.points, 100);
     assert.deepEqual(reloaded.dailyActive.claimed, [1,3]);
     assert.ok(reloaded.dailyActive.rewards[3]);
-    // ledger 100 条淘汰后仍可重放 tier3
+    assert.deepEqual(JSON.stringify(reloaded.dailyActive.rewards[3]), r3Reward);
+    // ledger 100 条淘汰后仍可重放 tier3 且奖励一致
+    const tier3Id = `daily_active:${reloaded.dailyActive.lastResetAt}:3`;
+    assert.ok(reloaded.settlementLedger.find(e=>e.id===tier3Id));
     for(let i=0;i<110;i++) reloaded.settlementLedger.push({id:`dummy:${i}`, at:now+i, type:'daily', reward:{gold:1}, source:'x'});
     if (reloaded.settlementLedger.length>100) reloaded.settlementLedger.splice(0, reloaded.settlementLedger.length-100);
-    // 此时原 daily_active:today:3 可能已被淘汰
+    assert.equal(reloaded.settlementLedger.find(e=>e.id===tier3Id), undefined, 'tier3 ledger 应已被淘汰');
     const stillClaimed = reloaded.dailyActive.claimed.includes(3);
     assert.ok(stillClaimed);
     const view = getDailyActiveView(reloaded);
     const tier3 = view.tiers.find(t=>t.tier===3);
     assert.ok(tier3.reward.materials);
+    assert.deepEqual(JSON.stringify(tier3.reward), r3Reward);
     const replay = claimActive(reloaded, 3);
     assert.equal(replay.already, true);
-    assert.ok(replay.reward || replay.already);
+    assert.deepEqual(JSON.stringify(replay.reward), r3Reward);
+    // 跨日后重启落盘
+    now += 86400000 + 1000;
+    __setNow(()=> now);
+    store.setPlayer('t8', reloaded);
+    store.save();
+    store.__resetStore();
+    store.load();
+    const afterDay = store.getPlayer('t8');
+    const view2 = getDailyActiveView(afterDay);
+    assert.equal(view2.points, 0);
+    assert.deepEqual(view2.claimed, []);
+    assert.equal(afterDay.dailyActive.rewards[3], undefined);
+    // route 契约：POST /daily-active/claim 返回完整 view
+    const p2 = createCharacter('t9','T9');
+    addActivePoints(p2, 'expedition', 5);
+    const rClaim = claimActive(p2, 1);
+    assert.ok(rClaim.success);
+    // 模拟路由层返回的 getPlayerView 包含 questView.dailyActive
+    const view3 = getPlayerView(p2);
+    assert.ok(view3.questView.dailyActive);
+    assert.equal(view3.questView.dailyActive.points, view3.dailyActive.points);
     try { fs.unlinkSync(tmp); fs.unlinkSync(tmp+'.bak'); } catch(_){}
     store.__setDbPath(require('path').join(__dirname, '../db.json'));
     store.__resetStore();

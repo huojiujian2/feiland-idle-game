@@ -3,10 +3,10 @@
 // @module data-active
 // @description 每日活跃 3 档阈值与 5 来源权重（T-104 v2）
 //
-// 本文件结构：
-// 1. 三档阈值配置 DAILY_ACTIVE_TIERS (L5-L9)
-// 2. 来源权重 DAILY_ACTIVE_SOURCES (L10-L16)
-// 3. 导出 (L18)
+// 本文件结构（已模块化拆分后主文件 ~23 行）：
+// 1. 三档阈值配置 DAILY_ACTIVE_TIERS (L10-L14)
+// 2. 来源权重 DAILY_ACTIVE_SOURCES (L15-L21)
+// 3. 导出 (L23)
 const DAILY_ACTIVE_TIERS = [
   { tier: 1, need: 20, reward: { gold: 100 } },
   { tier: 2, need: 50, reward: { exp: 200, materials: [{ name: '草药', count: 2 }] } },

@@ -3,6 +3,10 @@
 // @module routes-active
 // @description 每日活跃领取接口（T-104 v2），返回完整 getPlayerView
 //
+// 本文件结构（已模块化拆分后主文件 ~45 行）：
+// 1. 注册 POST /daily-active/claim (L13-L38)
+// 2. 导出 registerActiveRoutes (L40-L45)
+//
 // 本文件结构：
 // 1. 注册 POST /daily-active/claim (L9-L38)
 // 2. 导出 registerActiveRoutes (L40)
