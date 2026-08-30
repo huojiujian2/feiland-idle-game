@@ -5,10 +5,11 @@
 //
 // 本文件结构（已模块化拆分后主文件 ~155 行）：
 // 1. 注入与工具 setGrantHandlers/getTodayKeyActive (L12-L30)
-// 2. 刷新与视图 refreshIfNeeded/getDailyActiveView (L32-L81)
+// 2. 刷新 refreshIfNeeded (L32-L51)
 // 3. 计分 addActivePoints (L53-L58)
-// 4. 领取 claimActive (L90-L150)
-// 5. 导出 (L152-L155)
+// 4. 视图 getDailyActiveView (L60-L88)
+// 5. 领取 claimActive (L90-L150)
+// 6. 导出 (L152-L155)
 const { getNow, getRand } = require('./state');
 const { DAILY_ACTIVE_TIERS, DAILY_ACTIVE_SOURCES, INITIAL_MATERIAL_POOL } = require('../data');
 const { assertSettlementReward } = require('./settlement');

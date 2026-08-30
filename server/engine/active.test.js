@@ -119,6 +119,63 @@ describe('T-104 每日活跃', () => {
     assert.equal(rExp.success, true);
     assert.equal(p.dailyActive.points, 65);
   });
+  it('PvP/Boss 真实 HTTP 链路计分', async () => {
+    const store = require('../store');
+    const path = require('path');
+    const os = require('os');
+    const fs = require('fs');
+    const tmp = path.join(os.tmpdir(), 'test-active-http-'+Date.now()+'.json');
+    store.__setDbPath(tmp);
+    store.__resetStore();
+    store.load();
+    const express = require('express');
+    const { registerPvpRoutes } = require('../routes/pvp');
+    const { registerWorldBossRoutes } = require('../routes/worldboss');
+    const { registerActiveRoutes } = require('../routes/active');
+    const http = require('http');
+    const app = express();
+    app.use(express.json());
+    const eng = require('./index');
+    eng.setStore(store);
+    registerPvpRoutes(app, store);
+    registerWorldBossRoutes(app, store);
+    registerActiveRoutes(app, store);
+    let now = Date.now();
+    __setNow(()=> now);
+    __setRandom(()=> 0.5);
+    const p = createCharacter('httpT','HttpT');
+    p.level = 10;
+    store.setPlayer('httpT', p);
+    store.setAccount('httpT', {username:'httpT', password:'x', hasCharacter:true});
+    // 需要对手
+    const q = createCharacter('httpOpp','Opp');
+    q.level = 10;
+    store.setPlayer('httpOpp', q);
+    store.setAccount('httpOpp', {username:'httpOpp', password:'x', hasCharacter:true});
+    await new Promise((resolve, reject)=>{
+      const srv = http.createServer(app);
+      srv.listen(0, async ()=>{
+        const port = srv.address().port;
+        try {
+          // pvp
+          const r1 = await fetch(`http://127.0.0.1:${port}/api/arena/challenge`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:'httpT', targetUsername:'httpOpp', isBot:false, requestId:'req-http-1'})});
+          const b1 = await r1.json();
+          assert.equal(b1.success, true);
+          assert.equal(store.getPlayer('httpT').dailyActive.points, 15);
+          // boss
+          const r2 = await fetch(`http://127.0.0.1:${port}/api/player/httpT/worldboss/attack`, {method:'POST'});
+          const b2 = await r2.json();
+          if (b2.success) assert.equal(store.getPlayer('httpT').dailyActive.points, 30);
+          srv.close(()=> resolve());
+        } catch(e){ srv.close(()=> reject(e)); }
+      });
+    });
+    try { fs.unlinkSync(tmp); fs.unlinkSync(tmp+'.bak'); } catch(_){}
+    store.__setDbPath(path.join(__dirname, '../db.json'));
+    store.__resetStore();
+    store.load();
+    eng.setStore(store);
+  });
   it('旧存档 tier3 已领取但 rewards 缺失应回填', () => {
     let now = Date.now();
     __setNow(()=> now);
@@ -168,25 +225,28 @@ describe('T-104 每日活跃', () => {
     assert.deepEqual(reloaded.dailyActive.claimed, [1,3]);
     assert.ok(reloaded.dailyActive.rewards[3]);
     assert.deepEqual(JSON.stringify(reloaded.dailyActive.rewards[3]), r3Reward);
-    // ledger 100 条淘汰后仍可重放 tier3 且奖励一致
+    // ledger 100 条淘汰后仍可重放 tier3 且奖励一致（经 save/reload 持久化）
     const tier3Id = `daily_active:${reloaded.dailyActive.lastResetAt}:3`;
     assert.ok(reloaded.settlementLedger.find(e=>e.id===tier3Id));
     for(let i=0;i<110;i++) reloaded.settlementLedger.push({id:`dummy:${i}`, at:now+i, type:'daily', reward:{gold:1}, source:'x'});
     if (reloaded.settlementLedger.length>100) reloaded.settlementLedger.splice(0, reloaded.settlementLedger.length-100);
-    assert.equal(reloaded.settlementLedger.find(e=>e.id===tier3Id), undefined, 'tier3 ledger 应已被淘汰');
-    const stillClaimed = reloaded.dailyActive.claimed.includes(3);
-    assert.ok(stillClaimed);
-    const view = getDailyActiveView(reloaded);
-    const tier3 = view.tiers.find(t=>t.tier===3);
-    assert.ok(tier3.reward.materials);
-    assert.deepEqual(JSON.stringify(tier3.reward), r3Reward);
-    const replay = claimActive(reloaded, 3);
+    store.setPlayer('t8', reloaded);
+    store.save();
+    store.__resetStore();
+    store.load();
+    const afterEvict = store.getPlayer('t8');
+    assert.equal(afterEvict.settlementLedger.find(e=>e.id===tier3Id), undefined, 'tier3 ledger 应已被淘汰');
+    assert.ok(afterEvict.dailyActive.claimed.includes(3));
+    const viewEv = getDailyActiveView(afterEvict);
+    assert.ok(viewEv.tiers.find(t=>t.tier===3).reward.materials);
+    assert.deepEqual(JSON.stringify(viewEv.tiers.find(t=>t.tier===3).reward), r3Reward);
+    const replay = claimActive(afterEvict, 3);
     assert.equal(replay.already, true);
     assert.deepEqual(JSON.stringify(replay.reward), r3Reward);
     // 跨日后重启落盘
     now += 86400000 + 1000;
     __setNow(()=> now);
-    store.setPlayer('t8', reloaded);
+    store.setPlayer('t8', afterEvict);
     store.save();
     store.__resetStore();
     store.load();
