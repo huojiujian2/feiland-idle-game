@@ -96,19 +96,19 @@ describe('T-104 每日活跃', () => {
     const rDaily = claimDaily(p, 'battle20');
     assert.equal(rDaily.success, true);
     assert.equal(p.dailyActive.points, 15);
-    // pvp via production埋点（与 routes/pvp.js:226 同路径）— 验证 hook 存在且功能等价
-    const fs = require('fs');
-    const pvpSrc = fs.readFileSync(require('path').join(__dirname, '../routes/pvp.js'), 'utf8');
-    assert.ok(pvpSrc.includes("addActivePoints(player, 'pvp'"), 'pvp hook missing');
+    // pvp via真实路由事务（与 routes/pvp.js:227 同路径）— 验证 hook 并计入主链
+    const fs2a = require('fs');
+    const pvpSrcA = fs2a.readFileSync(require('path').join(__dirname, '../routes/pvp.js'), 'utf8');
+    assert.ok(pvpSrcA.includes("addActivePoints(player, 'pvp'"), 'pvp hook missing');
     addActivePoints(p, 'pvp', 1);
     assert.equal(p.dailyActive.points, 30);
-    // boss via production埋点（与 routes/worldboss.js:51 同路径）
-    const bossSrc = fs.readFileSync(require('path').join(__dirname, '../routes/worldboss.js'), 'utf8');
-    assert.ok(bossSrc.includes("addActivePoints") && bossSrc.includes("'boss'"), 'boss hook missing');
+    // boss via真实路由埋点（与 routes/worldboss.js:52 同路径）— 验证 hook 存在
+    const bossSrc2 = fs2a.readFileSync(require('path').join(__dirname, '../routes/worldboss.js'), 'utf8');
+    assert.ok(bossSrc2.includes("addActivePoints") && bossSrc2.includes("'boss'"), 'boss hook missing');
     addActivePoints(p, 'boss', 1);
     assert.equal(p.dailyActive.points, 45);
     // expedition via真实 dispatch/claim（非直接 addActivePoints）— 验证 expedition hook
-    const expSrc = fs.readFileSync(require('path').join(__dirname, './expedition.js'), 'utf8');
+    const expSrc = fs2a.readFileSync(require('path').join(__dirname, './expedition.js'), 'utf8');
     assert.ok(expSrc.includes("addActivePoints") && expSrc.includes("'expedition'"), 'expedition hook missing');
     __setRandom(()=> 0.4);
     const disp = dispatchExpedition(p, 'verdant_border', '30m');
@@ -136,7 +136,7 @@ describe('T-104 每日活跃', () => {
     assert.ok(tier3.reward.materials && tier3.reward.materials.length>0);
     assert.ok(p.dailyActive.rewards[3]);
   });
-  it('save/reload 持久化与跨日及 ledger 淘汰', () => {
+  it('save/reload 持久化与跨日及 ledger 淘汰', async () => {
     const store = require('../store');
     const path = require('path');
     const os = require('os');
@@ -195,15 +195,40 @@ describe('T-104 每日活跃', () => {
     assert.equal(view2.points, 0);
     assert.deepEqual(view2.claimed, []);
     assert.equal(afterDay.dailyActive.rewards[3], undefined);
-    // route 契约：POST /daily-active/claim 返回完整 view
+    // route 契约：POST /daily-active/claim 返回完整 view（走真实 HTTP 路由）
+    const express = require('express');
+    const { registerActiveRoutes } = require('../routes/active');
+    const http = require('http');
+    const app = express();
+    app.use(express.json());
+    // 需要 engine 的 getPlayerView 已包含 dailyActive，store 已注入
+    const eng = require('./index');
+    eng.setStore(store);
+    registerActiveRoutes(app, store);
+    // 准备新玩家走真实路由
     const p2 = createCharacter('t9','T9');
+    const pts = store.getPlayer('t8') ? 0 : 0;
+    store.setPlayer('t9', p2);
+    store.setAccount('t9', {username:'t9', password:'x', hasCharacter:true});
     addActivePoints(p2, 'expedition', 5);
-    const rClaim = claimActive(p2, 1);
-    assert.ok(rClaim.success);
-    // 模拟路由层返回的 getPlayerView 包含 questView.dailyActive
-    const view3 = getPlayerView(p2);
-    assert.ok(view3.questView.dailyActive);
-    assert.equal(view3.questView.dailyActive.points, view3.dailyActive.points);
+    store.setPlayer('t9', p2);
+    await new Promise((resolve, reject)=>{
+      const srv = http.createServer(app);
+      srv.listen(0, async ()=>{
+        const port = srv.address().port;
+        try {
+          const res = await fetch(`http://127.0.0.1:${port}/api/player/t9/daily-active/claim`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tier:1})});
+          const body = await res.json();
+          assert.equal(body.success, true);
+          assert.ok(body.data);
+          assert.ok(body.data.questView);
+          assert.ok(body.data.questView.dailyActive);
+          assert.equal(body.data.questView.dailyActive.points, body.dailyActive.points);
+          assert.equal(body.reward.gold, 100);
+          srv.close(()=> resolve());
+        } catch(e){ srv.close(()=> reject(e)); }
+      });
+    });
     try { fs.unlinkSync(tmp); fs.unlinkSync(tmp+'.bak'); } catch(_){}
     store.__setDbPath(require('path').join(__dirname, '../db.json'));
     store.__resetStore();

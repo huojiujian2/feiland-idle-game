@@ -6,10 +6,6 @@
 // 本文件结构（已模块化拆分后主文件 ~45 行）：
 // 1. 注册 POST /daily-active/claim (L13-L38)
 // 2. 导出 registerActiveRoutes (L40-L45)
-//
-// 本文件结构：
-// 1. 注册 POST /daily-active/claim (L9-L38)
-// 2. 导出 registerActiveRoutes (L40)
 const { claimDailyActive, getDailyActiveView } = require('../engine');
 const { getPlayerView } = require('../engine');
 const { ok, fail } = require('./_helpers');
