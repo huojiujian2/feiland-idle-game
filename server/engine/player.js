@@ -59,7 +59,7 @@ function createCharacter(username, charName) {
     dailyQuests: createDailyQuests(),
     dailyResetAt: getTodayKey(),
     dailyChestClaimed: false,
-    dailyActive: { points: 0, claimed: [], lastResetAt: getTodayKey() },
+    dailyActive: { points: 0, claimed: [], lastResetAt: getTodayKey(), rewards: {} },
     achievements: {},
     questStats: { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] },
     titles: {},
@@ -254,14 +254,10 @@ function migratePlayer(player) {
   }
   // T-104 每日活跃
   if (!player.dailyActive || typeof player.dailyActive !== 'object' || Array.isArray(player.dailyActive)) {
-    try {
-      const { getTodayKeyActive } = require('./active');
-      player.dailyActive = { points: 0, claimed: [], lastResetAt: getTodayKeyActive() };
-    } catch (_) {
-      const { getTodayKey } = require('./daily');
-      player.dailyActive = { points: 0, claimed: [], lastResetAt: getTodayKey() };
-    }
+    const { getTodayKey } = require('./daily');
+    player.dailyActive = { points: 0, claimed: [], lastResetAt: getTodayKey(), rewards: {} };
   }
+  if (!player.dailyActive.rewards || typeof player.dailyActive.rewards !== 'object' || Array.isArray(player.dailyActive.rewards)) player.dailyActive.rewards = {};
   try {
     require('./active').getDailyActiveView(player);
   } catch (_) {

@@ -32,15 +32,17 @@ function getTodayKeyActive() {
 function refreshIfNeeded(player) {
   const today = getTodayKeyActive();
   if (!player.dailyActive || typeof player.dailyActive !== 'object' || Array.isArray(player.dailyActive)) {
-    player.dailyActive = { points: 0, claimed: [], lastResetAt: today };
+    player.dailyActive = { points: 0, claimed: [], lastResetAt: today, rewards: {} };
   }
   if (typeof player.dailyActive.lastResetAt !== 'string') {
     player.dailyActive.lastResetAt = today;
   } else if (player.dailyActive.lastResetAt !== today) {
     player.dailyActive.points = 0;
     player.dailyActive.claimed = [];
+    player.dailyActive.rewards = {};
     player.dailyActive.lastResetAt = today;
   }
+  if (!player.dailyActive.rewards || typeof player.dailyActive.rewards !== 'object' || Array.isArray(player.dailyActive.rewards)) player.dailyActive.rewards = {};
   // 清洗 claimed：仅 1/2/3 去重排序
   if (!Array.isArray(player.dailyActive.claimed)) player.dailyActive.claimed = [];
   player.dailyActive.claimed = [...new Set(player.dailyActive.claimed.filter(v => [1,2,3].includes(v)))].sort((a,b)=>a-b);
@@ -67,9 +69,14 @@ function getDailyActiveView(player) {
       if (!isClaimed) {
         rewardView = { materials: [{ name: '随机材料', count: 3 }] };
       } else {
-        const sid = `daily_active:${getTodayKeyActive()}:${t.tier}`;
-        const entry = (player.settlementLedger || []).find(e => e.id === sid);
-        if (entry && entry.reward && entry.reward.materials) rewardView = entry.reward;
+        // 已领取：优先取 dailyActive.rewards 快照（ledger 超 100 淘汰后仍可用），其次 ledger
+        const snap = player.dailyActive.rewards && player.dailyActive.rewards[t.tier];
+        if (snap) rewardView = snap;
+        else {
+          const sid = `daily_active:${getTodayKeyActive()}:${t.tier}`;
+          const entry = (player.settlementLedger || []).find(e => e.id === sid);
+          if (entry && entry.reward && entry.reward.materials) rewardView = entry.reward;
+        }
       }
     }
     return { tier: t.tier, need: t.need, reward: rewardView, canClaim, claimed: isClaimed };
@@ -89,9 +96,16 @@ function claimActive(player, tier) {
       player.dailyActive.claimed.push(tier);
       player.dailyActive.claimed.sort((a,b)=>a-b);
     }
+    if (!player.dailyActive.rewards) player.dailyActive.rewards = {};
+    if (!player.dailyActive.rewards[tier]) player.dailyActive.rewards[tier] = existing.reward;
     return { success: true, status: 200, already: true, report: existing.fullResult, reward: existing.reward };
   }
-  if (player.dailyActive.claimed.includes(tier)) return { success: true, status: 200, already: true };
+  if (player.dailyActive.claimed.includes(tier)) {
+    // ledger 已淘汰但 claimed 仍标记：从 rewards 快照恢复
+    const snap = player.dailyActive.rewards && player.dailyActive.rewards[tier];
+    if (snap) return { success: true, status: 200, already: true, report: { tier, need: DAILY_ACTIVE_TIERS.find(t=>t.tier===tier).need, points: player.dailyActive.points, reward: snap }, reward: snap };
+    return { success: true, status: 200, already: true };
+  }
   const tpl = DAILY_ACTIVE_TIERS.find(t => t.tier === tier);
   if (!tpl) return { success: false, status: 404, message: '档位不存在' };
   if ((player.dailyActive.points || 0) < tpl.need) return { success: false, status: 409, message: '积分不足' };
@@ -126,6 +140,8 @@ function claimActive(player, tier) {
   }
   player.dailyActive.claimed.push(tier);
   player.dailyActive.claimed.sort((a,b)=>a-b);
+  if (!player.dailyActive.rewards) player.dailyActive.rewards = {};
+  player.dailyActive.rewards[tier] = reward;
   const fullResult = { tier, need: tpl.need, points: player.dailyActive.points, reward };
   if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
   const entry = { id: settlementId, at: getNow(), type: 'daily_active', reward, source: 'daily_active', fullResult };
@@ -134,4 +150,4 @@ function claimActive(player, tier) {
   return { success: true, status: 200, reward, report: fullResult };
 }
 
-module.exports = { getTodayKeyActive, addActivePoints, getDailyActiveView, claimActive, setGrantHandlers };
+module.exports = { refreshIfNeeded, addActivePoints, getDailyActiveView, claimActive, setGrantHandlers };
