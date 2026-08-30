@@ -157,10 +157,11 @@ describe('T-104 每日活跃', () => {
           const b1 = await r1.json();
           assert.equal(b1.success, true);
           assert.equal(store.getPlayer('httpT').dailyActive.points, 15);
-          // boss
+          // boss — 必须成功且 +15（失败则测试失败，不放过）
           const r2 = await fetch(`http://127.0.0.1:${port}/api/player/httpT/worldboss/attack`, {method:'POST'});
           const b2 = await r2.json();
-          if (b2.success) assert.equal(store.getPlayer('httpT').dailyActive.points, 30);
+          assert.equal(b2.success, true, 'worldboss attack should succeed: '+JSON.stringify(b2));
+          assert.equal(store.getPlayer('httpT').dailyActive.points, 30);
           srv.close(()=> resolve());
         } catch(e){ srv.close(()=> reject(e)); }
       });
@@ -263,10 +264,9 @@ describe('T-104 每日活跃', () => {
     registerActiveRoutes(app, store);
     // 准备新玩家走真实路由
     const p2 = createCharacter('t9','T9');
-    const pts = store.getPlayer('t8') ? 0 : 0;
     store.setPlayer('t9', p2);
     store.setAccount('t9', {username:'t9', password:'x', hasCharacter:true});
-    addActivePoints(p2, 'expedition', 5);
+    addActivePoints(p2, 'expedition', 1);
     store.setPlayer('t9', p2);
     await new Promise((resolve, reject)=>{
       const srv = http.createServer(app);
@@ -279,8 +279,15 @@ describe('T-104 每日活跃', () => {
           assert.ok(body.data);
           assert.ok(body.data.questView);
           assert.ok(body.data.questView.dailyActive);
+          assert.ok(body.data.dailyActive);
           assert.equal(body.data.questView.dailyActive.points, body.dailyActive.points);
+          assert.equal(body.data.dailyActive.points, 20);
+          assert.equal(body.data.dailyActive.claimed.includes(1), true);
           assert.equal(body.reward.gold, 100);
+          // 完整 view 契约：data 应等价于 getPlayerView
+          const expectedView = getPlayerView(store.getPlayer('t9'));
+          assert.deepEqual(body.data.dailyActive, expectedView.dailyActive);
+          assert.deepEqual(body.data.questView.dailyActive, expectedView.questView.dailyActive);
           srv.close(()=> resolve());
         } catch(e){ srv.close(()=> reject(e)); }
       });
