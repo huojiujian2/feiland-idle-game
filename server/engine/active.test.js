@@ -240,9 +240,13 @@ describe('T-104 每日活跃', () => {
     const replay = claimActive(afterEvict, 3);
     assert.equal(replay.already, true);
     assert.deepEqual(JSON.stringify(replay.reward), r3Reward);
-    // 跨日后重启落盘
+    // 跨日后重启落盘 — 需再次 save/reload 证明磁盘清零（非仅内存）
     now += 86400000 + 1000;
     __setNow(()=> now);
+    // 先触发内存刷新
+    const memView = getDailyActiveView(afterEvict);
+    assert.equal(memView.points, 0);
+    // 再落盘并重载验证
     store.setPlayer('t8', afterEvict);
     store.save();
     store.__resetStore();
@@ -252,6 +256,14 @@ describe('T-104 每日活跃', () => {
     assert.equal(view2.points, 0);
     assert.deepEqual(view2.claimed, []);
     assert.equal(afterDay.dailyActive.rewards[3], undefined);
+    // 二次落盘验证
+    store.setPlayer('t8', afterDay);
+    store.save();
+    store.__resetStore();
+    store.load();
+    const afterDay2 = store.getPlayer('t8');
+    assert.equal(afterDay2.dailyActive.points, 0);
+    assert.deepEqual(afterDay2.dailyActive.claimed, []);
     // route 契约：POST /daily-active/claim 返回完整 view（走真实 HTTP 路由）
     const express = require('express');
     const { registerActiveRoutes } = require('../routes/active');
@@ -284,10 +296,14 @@ describe('T-104 每日活跃', () => {
           assert.equal(body.data.dailyActive.points, 20);
           assert.equal(body.data.dailyActive.claimed.includes(1), true);
           assert.equal(body.reward.gold, 100);
-          // 完整 view 契约：data 应等价于 getPlayerView
+          // 完整 view 契约：data 应等价于 getPlayerView（除时间外）
           const expectedView = getPlayerView(store.getPlayer('t9'));
           assert.deepEqual(body.data.dailyActive, expectedView.dailyActive);
           assert.deepEqual(body.data.questView.dailyActive, expectedView.questView.dailyActive);
+          assert.deepEqual(body.data.settlementLedger.slice(-1)[0].id, expectedView.settlementLedger.slice(-1)[0].id);
+          assert.equal(body.data.questView.dailyActive.tiers.length, expectedView.questView.dailyActive.tiers.length);
+          assert.ok(body.data.questView.dailyQuests);
+          assert.ok(body.data.inventory);
           srv.close(()=> resolve());
         } catch(e){ srv.close(()=> reject(e)); }
       });
