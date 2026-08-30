@@ -206,7 +206,9 @@ function calculateIdle(player) {
   }
 
   player.lastTick = now;
-  try { require('./active').addActivePoints(player, 'idle_claim', 1); } catch (_) {}
+  if (expGain > 0 || goldGain > 0) {
+    try { require('./active').addActivePoints(player, 'idle_claim', 1); } catch (e) { console.error('active idle_claim', e.message); }
+  }
   return { logEntry, levelUps };
 }
 
@@ -325,7 +327,9 @@ function _calculateIdleBatch(player, area, elapsed) {
   checkAchievements(player);
 
   player.lastTick = getNow();
-  try { require('./active').addActivePoints(player, 'idle_claim', 1); } catch (_) {}
+  if (totalExp > 0 || totalGold > 0) {
+    try { require('./active').addActivePoints(player, 'idle_claim', 1); } catch (e) { console.error('active idle_claim batch', e.message); }
+  }
   return { logEntry, levelUps: Array(levelUps).fill(0).map((_, i) => player.level - levelUps + i + 1) };
 }
 

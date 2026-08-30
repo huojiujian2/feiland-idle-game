@@ -263,8 +263,7 @@ function migratePlayer(player) {
     }
   }
   try {
-    const { refreshIfNeeded } = require('./active');
-    refreshIfNeeded(player);
+    require('./active').getDailyActiveView(player);
   } catch (_) {
     // active 模块未加载时跳过（测试环境）
   }

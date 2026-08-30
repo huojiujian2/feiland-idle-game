@@ -411,7 +411,7 @@ function claimExpedition(player, expeditionId) {
   // progress
   _updateDailyProgress(player, 'expedition1', 1);
   _checkAchievements(player);
-  try { require('./active').addActivePoints(player, 'expedition', 1); } catch (_) {}
+  try { require('./active').addActivePoints(player, 'expedition', 1); } catch (e) { console.error('active expedition', e.message); }
   // ledger
   const ledgerEntry = { id: settlementId, at: now, type: 'expedition', reward: rewardForLedger, source: `expedition:${exp.areaId}:${exp.durationKey}`, fullResult: report };
   if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];

@@ -1,4 +1,11 @@
 // ====== 每日活跃路由 ======
+// @file server/routes/active.js
+// @module routes-active
+// @description 每日活跃领取接口（T-104 v2），返回完整 getPlayerView
+//
+// 本文件结构：
+// 1. 注册 POST /daily-active/claim (L6-L38)
+// 2. 导出 registerActiveRoutes (L38)
 const { claimDailyActive, getDailyActiveView } = require('../engine');
 const { getPlayerView } = require('../engine');
 const { ok, fail } = require('./_helpers');

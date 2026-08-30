@@ -132,7 +132,7 @@ function claimDaily(player, questId) {
     else player.inventory.push({ name: mat, count: c, type: 'material' });
   }
   dq.claimed = true;
-  try { require('./active').addActivePoints(player, 'daily_claim', 1); } catch (_) {}
+  try { require('./active').addActivePoints(player, 'daily_claim', 1); } catch (e) { console.error('active daily_claim', e.message); }
   if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
   const entry = { id: `daily:${getTodayKey()}:${questId}`, at: getNow(), type: 'daily', reward, source: `/api/player/:username/quest/daily/${questId}/claim` };
   const vv = assertSettlementReward(entry.type, entry.reward);
@@ -151,7 +151,7 @@ function claimChest(player) {
   const v = assertSettlementReward('chest', reward);
   if (!v.valid) return { success: false, status: 500, message: v.message };
   player.dailyChestClaimed = true;
-  try { require('./active').addActivePoints(player, 'daily_claim', 1); } catch (_) {}
+  try { require('./active').addActivePoints(player, 'daily_claim', 1); } catch (e) { console.error('active daily_claim chest', e.message); }
   if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];
   const entry = { id: `chest:${getTodayKey()}`, at: getNow(), type: 'chest', reward, source: `/api/player/:username/quest/chest/claim` };
   player.settlementLedger.push(entry);

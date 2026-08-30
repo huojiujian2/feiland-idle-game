@@ -1,7 +1,14 @@
 // ====== 每日活跃：积分累加与三档领取 ======
-// @file engine/active
+// @file server/engine/active.js
 // @module active
 // @description T-104 v2 每日活跃核心（5来源、封顶100、3档幂等、随机材料持久化）
+//
+// 本文件结构：
+// 1. 注入与工具 getTodayKeyActive (L9-L23)
+// 2. 刷新与视图 refreshIfNeeded/getDailyActiveView (L25-L65)
+// 3. 计分 addActivePoints (L67-L71)
+// 4. 领取 claimActive (L73-L117)
+// 5. 导出 (L119)
 const { getNow, getRand } = require('./state');
 const { DAILY_ACTIVE_TIERS, DAILY_ACTIVE_SOURCES, INITIAL_MATERIAL_POOL } = require('../data');
 const { assertSettlementReward } = require('./settlement');
@@ -27,7 +34,9 @@ function refreshIfNeeded(player) {
   if (!player.dailyActive || typeof player.dailyActive !== 'object' || Array.isArray(player.dailyActive)) {
     player.dailyActive = { points: 0, claimed: [], lastResetAt: today };
   }
-  if (player.dailyActive.lastResetAt !== today) {
+  if (typeof player.dailyActive.lastResetAt !== 'string') {
+    player.dailyActive.lastResetAt = today;
+  } else if (player.dailyActive.lastResetAt !== today) {
     player.dailyActive.points = 0;
     player.dailyActive.claimed = [];
     player.dailyActive.lastResetAt = today;
@@ -53,10 +62,15 @@ function getDailyActiveView(player) {
   const tiers = DAILY_ACTIVE_TIERS.map(t => {
     const isClaimed = claimed.includes(t.tier);
     const canClaim = points >= t.need && !isClaimed;
-    // 未领取时 tier3 显示“随机材料×3”，已领取显示真实材料在 reward 视图由 claim 结果展示
     let rewardView = t.reward;
-    if (t.tier === 3 && !isClaimed) {
-      rewardView = { materials: [{ name: '随机材料', count: 3 }] };
+    if (t.tier === 3) {
+      if (!isClaimed) {
+        rewardView = { materials: [{ name: '随机材料', count: 3 }] };
+      } else {
+        const sid = `daily_active:${getTodayKeyActive()}:${t.tier}`;
+        const entry = (player.settlementLedger || []).find(e => e.id === sid);
+        if (entry && entry.reward && entry.reward.materials) rewardView = entry.reward;
+      }
     }
     return { tier: t.tier, need: t.need, reward: rewardView, canClaim, claimed: isClaimed };
   });
@@ -120,4 +134,4 @@ function claimActive(player, tier) {
   return { success: true, status: 200, reward, report: fullResult };
 }
 
-module.exports = { getTodayKeyActive, refreshIfNeeded, addActivePoints, getDailyActiveView, claimActive, setGrantHandlers, DAILY_ACTIVE_TIERS, DAILY_ACTIVE_SOURCES };
+module.exports = { getTodayKeyActive, addActivePoints, getDailyActiveView, claimActive, setGrantHandlers };

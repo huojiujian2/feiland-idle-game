@@ -223,6 +223,9 @@ function registerPvpRoutes(app, store) {
 
       if (!Array.isArray(meta.pvpRecords)) meta.pvpRecords = [];
 
+      // 每日活跃：首次成功挑战 +15（重放已在上方 early return，不会重复加分）— 必须在构造 fullResult（含 getPlayerView）前累加，保证快照包含最新活跃分
+      try { require('../engine/active').addActivePoints(player, 'pvp', 1); } catch (e) { console.error('active pvp', e.message); }
+
       const fullResult = {
         battle,
         isWin,
@@ -275,8 +278,6 @@ function registerPvpRoutes(app, store) {
         type: 'pvp',
         text: isWin ? `竞技场胜利！击败了 ${target.name || target.username}，+${gold}金币 +${exp}经验 +${coinsEarned}竞技币` : isDraw ? `竞技场平局，与 ${target.name || target.username} 战至力竭，+${gold}金币 +${exp}经验 +${coinsEarned}竞技币` : `竞技场失败...被 ${target.name || target.username} 击败，+${coinsEarned}竞技币`,
       });
-      // 每日活跃：首次成功挑战 +15（重放已在上方 early return，不会重复加分）
-      try { require('../engine/active').addActivePoints(player, 'pvp', 1); } catch (_) {}
       // meta and player already mutated in data, no need setPlayer/setMeta separately because data is reference
       // But call setMeta/setPlayer to trigger markDirty? Not needed inside transaction because save will be done.
       // However for consistency, ensure data.players and data.meta are updated (they already are)
