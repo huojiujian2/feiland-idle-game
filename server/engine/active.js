@@ -3,13 +3,13 @@
 // @module active
 // @description T-104 v2 每日活跃核心（5来源、封顶100、3档幂等、随机材料持久化）
 //
-// 本文件结构（已模块化拆分后主文件 ~155 行）：
+// 本文件结构（已模块化拆分后主文件 ~156 行）：
 // 1. 注入与工具 setGrantHandlers/getTodayKeyActive (L12-L30)
 // 2. 刷新 refreshIfNeeded (L32-L51)
 // 3. 计分 addActivePoints (L53-L58)
 // 4. 视图 getDailyActiveView (L60-L88)
-// 5. 领取 claimActive (L90-L150)
-// 6. 导出 (L152-L155)
+// 5. 领取 claimActive (L91-L153)
+// 6. 导出 (L155-L156)
 const { getNow, getRand } = require('./state');
 const { DAILY_ACTIVE_TIERS, DAILY_ACTIVE_SOURCES, INITIAL_MATERIAL_POOL } = require('../data');
 const { assertSettlementReward } = require('./settlement');

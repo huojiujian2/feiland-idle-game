@@ -77,7 +77,7 @@ describe('T-104 每日活跃', () => {
     assert.equal(view.questView.dailyActive.points, view.dailyActive.points);
     assert.ok(view.questView.dailyActive.tiers.find(t=>t.tier===1).claimed);
   });
-  it('五来源真实调用链（idle/daily/pvp/boss/expedition）', () => {
+  it('五来源真实调用链（idle/daily/expedition + pvp/boss hook 存在性）', () => {
     let now = Date.now();
     __setNow(()=> now);
     __setRandom(()=> 0.3);
@@ -96,20 +96,15 @@ describe('T-104 每日活跃', () => {
     const rDaily = claimDaily(p, 'battle20');
     assert.equal(rDaily.success, true);
     assert.equal(p.dailyActive.points, 15);
-    // pvp via真实路由事务（与 routes/pvp.js:227 同路径）— 验证 hook 并计入主链
+    // pvp/boss hook 存在性（真实 HTTP 链路在下个用例单独覆盖）
     const fs2a = require('fs');
     const pvpSrcA = fs2a.readFileSync(require('path').join(__dirname, '../routes/pvp.js'), 'utf8');
     assert.ok(pvpSrcA.includes("addActivePoints(player, 'pvp'"), 'pvp hook missing');
-    addActivePoints(p, 'pvp', 1);
-    assert.equal(p.dailyActive.points, 30);
-    // boss via真实路由埋点（与 routes/worldboss.js:52 同路径）— 验证 hook 存在
     const bossSrc2 = fs2a.readFileSync(require('path').join(__dirname, '../routes/worldboss.js'), 'utf8');
     assert.ok(bossSrc2.includes("addActivePoints") && bossSrc2.includes("'boss'"), 'boss hook missing');
-    addActivePoints(p, 'boss', 1);
-    assert.equal(p.dailyActive.points, 45);
-    // expedition via真实 dispatch/claim（非直接 addActivePoints）— 验证 expedition hook
     const expSrc = fs2a.readFileSync(require('path').join(__dirname, './expedition.js'), 'utf8');
     assert.ok(expSrc.includes("addActivePoints") && expSrc.includes("'expedition'"), 'expedition hook missing');
+    // expedition via真实 dispatch/claim
     __setRandom(()=> 0.4);
     const disp = dispatchExpedition(p, 'verdant_border', '30m');
     assert.equal(disp.success, true);
@@ -117,7 +112,7 @@ describe('T-104 每日活跃', () => {
     __setNow(()=> now);
     const rExp = claimExpedition(p, disp.expedition.id);
     assert.equal(rExp.success, true);
-    assert.equal(p.dailyActive.points, 65);
+    assert.equal(p.dailyActive.points, 35);
   });
   it('PvP/Boss 真实 HTTP 链路计分', async () => {
     const store = require('../store');
@@ -230,6 +225,7 @@ describe('T-104 每日活跃', () => {
     assert.ok(reloaded.settlementLedger.find(e=>e.id===tier3Id));
     for(let i=0;i<110;i++) reloaded.settlementLedger.push({id:`dummy:${i}`, at:now+i, type:'daily', reward:{gold:1}, source:'x'});
     if (reloaded.settlementLedger.length>100) reloaded.settlementLedger.splice(0, reloaded.settlementLedger.length-100);
+    // 经 save/reload 证明淘汰持久化
     store.setPlayer('t8', reloaded);
     store.save();
     store.__resetStore();
