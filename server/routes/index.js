@@ -15,6 +15,7 @@ const { registerTitleRoutes } = require('./titles');
 const { registerCockfightRoutes } = require('./cockfight');
 const { registerExpeditionRoutes } = require('./expedition');
 const { registerActiveRoutes } = require('./active');
+const { registerGuildRoutes } = require('./guild');
 
 function registerRoutes(app, store) {
   registerAuthRoutes(app, store);
@@ -33,6 +34,7 @@ function registerRoutes(app, store) {
   registerCockfightRoutes(app, store);
   registerExpeditionRoutes(app, store);
   registerActiveRoutes(app, store);
+  registerGuildRoutes(app, store);
 }
 
 module.exports = { registerRoutes };

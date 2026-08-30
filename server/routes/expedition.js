@@ -78,7 +78,7 @@ function registerExpeditionRoutes(app, store) {
     const result = store.withTransaction((data) => {
       const player = data.players[username];
       if (!player) return { status: 404, message: '角色不存在' };
-      const r = claimExpedition(player, expeditionId);
+      const r = claimExpedition(player, expeditionId, data);
       if (!r.success) return { status: r.code || 400, message: r.message, already: r.already };
       if (r.already) return { status: 200, data: { already: true, report: r.report, settlementId: r.settlementId } };
       return { status: 200, data: { report: r.report, settlementId: r.settlementId } };
