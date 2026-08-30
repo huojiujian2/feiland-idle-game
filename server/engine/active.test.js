@@ -77,4 +77,76 @@ describe('T-104 每日活跃', () => {
     assert.equal(view.questView.dailyActive.points, view.dailyActive.points);
     assert.ok(view.questView.dailyActive.tiers.find(t=>t.tier===1).claimed);
   });
+  it('五来源真实调用链（idle/daily/pvp/boss/expedition）', () => {
+    let now = Date.now();
+    __setNow(()=> now);
+    __setRandom(()=> 0.3);
+    const p = createCharacter('t6','T6');
+    p.level = 5;
+    p.lastTick = now - 4000;
+    const { calculateIdle } = require('./idle');
+    const { claimDaily } = require('./daily');
+    const idleRes = calculateIdle(p);
+    assert.ok(idleRes);
+    assert.equal(p.dailyActive.points, 5);
+    // daily
+    const dq = p.dailyQuests.find(q=>q.id==='battle20');
+    dq.done = true;
+    const rDaily = claimDaily(p, 'battle20');
+    assert.equal(rDaily.success, true);
+    assert.equal(p.dailyActive.points, 15);
+    // pvp / boss / expedition via addActivePoints as production埋点
+    addActivePoints(p, 'pvp', 1);
+    assert.equal(p.dailyActive.points, 30);
+    addActivePoints(p, 'boss', 1);
+    assert.equal(p.dailyActive.points, 45);
+    addActivePoints(p, 'expedition', 1);
+    assert.equal(p.dailyActive.points, 65);
+  });
+  it('旧存档 tier3 已领取但 rewards 缺失应回填', () => {
+    let now = Date.now();
+    __setNow(()=> now);
+    __setRandom(()=> 0.5);
+    const p = createCharacter('t7','T7');
+    addActivePoints(p, 'expedition', 5);
+    const r3 = claimActive(p, 3);
+    assert.equal(r3.success, true);
+    // 模拟 814 旧存档：claimed 含 3 但 rewards 未持久化
+    delete p.dailyActive.rewards[3];
+    assert.equal(p.dailyActive.rewards[3], undefined);
+    const view = getDailyActiveView(p);
+    const tier3 = view.tiers.find(t=>t.tier===3);
+    assert.ok(tier3.claimed);
+    assert.ok(tier3.reward.materials && tier3.reward.materials.length>0);
+    assert.ok(p.dailyActive.rewards[3]);
+  });
+  it('save/reload 持久化与跨日', () => {
+    const store = require('../store');
+    const path = require('path');
+    const os = require('os');
+    const fs = require('fs');
+    const tmp = path.join(os.tmpdir(), 'test-active-'+Date.now()+'.json');
+    store.__setDbPath(tmp);
+    store.__resetStore();
+    store.load();
+    let now = Date.now();
+    __setNow(()=> now);
+    const p = createCharacter('t8','T8');
+    store.setPlayer('t8', p);
+    store.setAccount('t8', {username:'t8', password:'x', hasCharacter:true});
+    addActivePoints(p, 'pvp', 2);
+    claimActive(p, 1);
+    store.setPlayer('t8', p);
+    store.save();
+    // 模拟重启
+    store.__resetStore();
+    store.load();
+    const reloaded = store.getPlayer('t8');
+    assert.equal(reloaded.dailyActive.points, 30);
+    assert.deepEqual(reloaded.dailyActive.claimed, [1]);
+    try { fs.unlinkSync(tmp); fs.unlinkSync(tmp+'.bak'); } catch(_){}
+    store.__setDbPath(require('path').join(__dirname, '../db.json'));
+    store.__resetStore();
+    store.load();
+  });
 });

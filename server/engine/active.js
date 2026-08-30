@@ -2,13 +2,6 @@
 // @file server/engine/active.js
 // @module active
 // @description T-104 v2 每日活跃核心（5来源、封顶100、3档幂等、随机材料持久化）
-//
-// 本文件结构：
-// 1. 注入与工具 getTodayKeyActive (L9-L23)
-// 2. 刷新与视图 refreshIfNeeded/getDailyActiveView (L25-L65)
-// 3. 计分 addActivePoints (L67-L71)
-// 4. 领取 claimActive (L73-L117)
-// 5. 导出 (L119)
 const { getNow, getRand } = require('./state');
 const { DAILY_ACTIVE_TIERS, DAILY_ACTIVE_SOURCES, INITIAL_MATERIAL_POOL } = require('../data');
 const { assertSettlementReward } = require('./settlement');
@@ -66,16 +59,18 @@ function getDailyActiveView(player) {
     const canClaim = points >= t.need && !isClaimed;
     let rewardView = t.reward;
     if (t.tier === 3) {
-      if (!isClaimed) {
-        rewardView = { materials: [{ name: '随机材料', count: 3 }] };
-      } else {
-        // 已领取：优先取 dailyActive.rewards 快照（ledger 超 100 淘汰后仍可用），其次 ledger
+      if (!isClaimed) rewardView = { materials: [{ name: '随机材料', count: 3 }] };
+      else {
         const snap = player.dailyActive.rewards && player.dailyActive.rewards[t.tier];
         if (snap) rewardView = snap;
         else {
           const sid = `daily_active:${getTodayKeyActive()}:${t.tier}`;
           const entry = (player.settlementLedger || []).find(e => e.id === sid);
-          if (entry && entry.reward && entry.reward.materials) rewardView = entry.reward;
+          if (entry && entry.reward && entry.reward.materials) {
+            rewardView = entry.reward;
+            if (!player.dailyActive.rewards) player.dailyActive.rewards = {};
+            player.dailyActive.rewards[t.tier] = entry.reward;
+          }
         }
       }
     }

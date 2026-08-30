@@ -42,19 +42,20 @@ DAILY_ACTIVE_SOURCES = {
 
 ```js
 // player 扩展（migratePlayer 默认）
-dailyActive: { points:number, claimed:Array<number>, lastResetAt:string } // claimed 存已领 tier，如 [1,2]，仅 1/2/3 且去重
+dailyActive: { points:number, claimed:Array<number>, lastResetAt:string, rewards:Record<tier,reward> } // claimed 1/2/3 去重，rewards 持久化 tier3 随机材料（ledger 100 条淘汰后仍可重放）
 dailyQuests/dailyResetAt/dailyChestClaimed 复用既有日切
 settlementLedger: 追加 { id:`daily_active:${today}:${tier}`, at, type:'daily_active', reward:{gold?,exp?,materials?}, source:'daily_active', fullResult:{tier,need,points,reward} }
 // view 透出
 // getPlayerView 追加 questView.dailyActive:{points, claimed, tiers:[{tier,need,reward,canClaim,claimed}], progressPct}
+// 已领取 tier3 的 rewards 快照写入 dailyActive.rewards[tier]，旧存档首次展示时从 ledger 回填
 ```
 
-- `migratePlayer`：缺字段补 `{points:0,claimed:[],lastResetAt:getTodayKey()}`，`points` 非有限数或 <0 置 0 且封顶 100；`claimed` 过滤非 1/2/3、去重、排序；`lastResetAt` 非字符串置今日
+- `migratePlayer`：缺字段补 `{points:0,claimed:[],lastResetAt:getTodayKey(),rewards:{}}`，`points` 非有限数或 <0 置 0 且封顶 100；`claimed` 过滤非 1/2/3、去重、排序；`lastResetAt` 非字符串仅规范化不清空进度；`rewards` 非对象置 `{}`；旧存档已领取 tier3 若 `rewards[3]` 缺失则下次 `getDailyActiveView` 从 `ledger` 回填
 - `getPlayerView` 新增 `questView.dailyActive` 与顶层 `dailyActive`（同视图，避免前端破坏性变更，见 §6）
 
 ## 5. 后端设计
 
-### 5.1 模块 `server/engine/active.js`（新增，≤120行）
+### 5.1 模块 `server/engine/active.js`（新增，≤160行，含 5 导出）
 
 - `getDailyActiveView(player)` — 计算 `tiers` 视图（含 `canClaim=points>=need && !claimed.includes(tier)`，`progressPct`）
 - `addActivePoints(player, source, inc=1)` — `DAILY_ACTIVE_SOURCES[source]*inc` 累加并封顶 100，`refreshIfNeeded` 先日切（`lastResetAt !== today` 则重置 `points=0,claimed=[]`）
