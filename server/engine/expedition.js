@@ -265,7 +265,7 @@ function chooseEventOption(player, eventId, choiceId) {
   return { success: true, expedition: exp };
 }
 
-function claimExpedition(player, expeditionId) {
+function claimExpedition(player, expeditionId, ctx) {
   if (!expeditionId || typeof expeditionId !== 'string') return { success: false, message: '缺少 expeditionId', code: 400 };
   const settlementId = `expedition:${expeditionId}`;
   // 1) 先查 ledger 重放
@@ -412,6 +412,21 @@ function claimExpedition(player, expeditionId) {
   _updateDailyProgress(player, 'expedition1', 1);
   _checkAchievements(player);
   try { require('./active').addActivePoints(player, 'expedition', 1); } catch (e) { console.error('active expedition', e.message); }
+  // T-103 公会贡献（同事务一次且仅一次，already 分支已提前返回不进此处）
+  if (ctx && ctx.meta) {
+    if (player.guildId && ctx.meta.guilds && ctx.meta.guilds[player.guildId]) {
+      try {
+        const g = require('./guild');
+        g.addGuildContribution(player, 10, `expedition:${exp.areaId}`, ctx);
+      } catch (e) {
+        // 抛错让外层 withTransaction 回滚远征，避免静默丢失
+        throw e;
+      }
+    } else if (player.guildId && ctx.meta.guilds && !ctx.meta.guilds[player.guildId]) {
+      // 自愈：guild 已解散，清理三字段保留 lifetime
+      player.guildId = null; player.guildRole = null; player.guildJoinAt = null;
+    }
+  }
   // ledger
   const ledgerEntry = { id: settlementId, at: now, type: 'expedition', reward: rewardForLedger, source: `expedition:${exp.areaId}:${exp.durationKey}`, fullResult: report };
   if (!Array.isArray(player.settlementLedger)) player.settlementLedger = [];

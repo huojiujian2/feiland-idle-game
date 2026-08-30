@@ -78,6 +78,12 @@ function createCharacter(username, charName) {
     expeditionCodex: {},
     // 灵鸡斗场（完全独立玩法，不与主游戏资源交互）
     cockfight: { points: 0, wins: 0, streak: 0, played: 0, loseStreak: 0, dayKey: '', usedToday: 0, banNext: null, current: null, history: [] },
+    // T-103 工会
+    guildId: null,
+    guildRole: null,
+    guildContribution: 0,
+    guildDonateDaily: { dayKey: getTodayKey(), counts: {} },
+    guildJoinAt: null,
   };
   p.achievements['first'] = { unlocked: true, claimed: false, unlockAt: now };
   return p;
@@ -263,6 +269,41 @@ function migratePlayer(player) {
   } catch (_) {
     // active 模块未加载时跳过（测试环境）
   }
+  // T-103 工会投影自愈
+  if (typeof player.guildId !== 'string' && player.guildId !== null) player.guildId = null;
+  if (player.guildId !== null && typeof player.guildId !== 'string') player.guildId = null;
+  if (!['leader','vice','officer','member',null].includes(player.guildRole)) player.guildRole = null;
+  if (!Number.isFinite(player.guildContribution) || player.guildContribution < 0) player.guildContribution = 0;
+  if (!player.guildDonateDaily || typeof player.guildDonateDaily !== 'object' || Array.isArray(player.guildDonateDaily)) {
+    player.guildDonateDaily = { dayKey: getTodayKey(), counts: {} };
+  }
+  if (player.guildDonateDaily.dayKey !== getTodayKey()) {
+    player.guildDonateDaily = { dayKey: getTodayKey(), counts: {} };
+  }
+  if (!player.guildDonateDaily.counts || typeof player.guildDonateDaily.counts !== 'object') player.guildDonateDaily.counts = {};
+  if (player.guildJoinAt !== null && !Number.isFinite(player.guildJoinAt)) player.guildJoinAt = null;
+  // 懒取 meta 自愈 guildId 指向不存在公会
+  try {
+    let meta = null;
+    try { meta = require('../store').getMeta(); } catch(_) {}
+    if (!meta) try { meta = require('./index')._getStoreMeta?.(); } catch(_) {}
+    if (meta && typeof player.guildId === 'string' && player.guildId) {
+      const g = meta.guilds && meta.guilds[player.guildId];
+      if (!g) {
+        player.guildId = null; player.guildRole = null; player.guildJoinAt = null;
+      } else {
+        const m = g.members && g.members.find(x=>x.username===player.username);
+        if (!m) {
+          player.guildId = null; player.guildRole = null; player.guildJoinAt = null;
+        } else if (player.guildRole !== m.role) {
+          player.guildRole = m.role;
+        }
+      }
+    } else if (!player.guildId) {
+      if (player.guildRole !== null) player.guildRole = null;
+      if (player.guildJoinAt !== null) player.guildJoinAt = null;
+    }
+  } catch (_) {}
   if (!player.achievements['first']) {
     player.achievements['first'] = { unlocked: true, claimed: false, unlockAt: player.createdAt || getNow() };
   }

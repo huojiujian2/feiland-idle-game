@@ -195,6 +195,26 @@ export default {
   chooseExpeditionEvent(username, eventId, choiceId) { return request(`/player/${username}/expedition/event/choose`, { method: 'POST', body: JSON.stringify({ eventId, choiceId }) }) },
   claimExpedition(username, expeditionId) { return request(`/player/${username}/expedition/claim`, { method: 'POST', body: JSON.stringify({ expeditionId }) }) },
 
+  // 公会（T-103）
+  getGuilds(q, page, pageSize) {
+    const qs = new URLSearchParams();
+    if (q) qs.set('q', q);
+    if (page) qs.set('page', String(page));
+    if (pageSize) qs.set('pageSize', String(pageSize));
+    const s = qs.toString();
+    return request(`/guilds${s ? `?${s}` : ''}`);
+  },
+  getMyGuild(username) { return request(`/player/${username}/guild`) },
+  createGuild(username, name) { return request(`/player/${username}/guild/create`, { method: 'POST', body: JSON.stringify({ name }) }) },
+  joinGuild(username, guildId) { return request(`/player/${username}/guild/join`, { method: 'POST', body: JSON.stringify({ guildId }) }) },
+  leaveGuild(username) { return request(`/player/${username}/guild/leave`, { method: 'POST' }) },
+  kickGuildMember(username, targetUsername) { return request(`/player/${username}/guild/kick`, { method: 'POST', body: JSON.stringify({ targetUsername }) }) },
+  updateGuildRole(username, targetUsername, role) { return request(`/player/${username}/guild/role`, { method: 'POST', body: JSON.stringify({ targetUsername, role }) }) },
+  transferGuild(username, targetUsername) { return request(`/player/${username}/guild/transfer`, { method: 'POST', body: JSON.stringify({ targetUsername }) }) },
+  updateGuildAnnouncement(username, text) { return request(`/player/${username}/guild/announcement`, { method: 'POST', body: JSON.stringify({ text }) }) },
+  donateGuild(username, donateId) { return request(`/player/${username}/guild/donate`, { method: 'POST', body: JSON.stringify({ donateId }) }) },
+  disbandGuild(username) { return request(`/player/${username}/guild/disband`, { method: 'POST' }) },
+
   // 任务/委托
   claimDaily(username, questId) { return request(`/player/${username}/quest/daily/${questId}/claim`, { method: 'POST' }) },
   claimChest(username) { return request(`/player/${username}/quest/chest/claim`, { method: 'POST' }) },

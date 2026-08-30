@@ -11,8 +11,10 @@ const { refreshDailyIfNeeded, findAffix, getJobStage, getPassiveSlots, getAvaila
 const { migratePlayer, getReadonlyPlayer } = require('./player');
 let _sanitizeExpedition = null;
 let _getDailyActiveView = null;
+let _guildHelpers = null;
 try { _sanitizeExpedition = require('./expedition').sanitizeExpedition; } catch (_) {}
 try { _getDailyActiveView = require('./active').getDailyActiveView; } catch (_) {}
+try { _guildHelpers = require('./guild'); } catch (_) {}
 
 function getPowerScore(player) {
   const total = getTotalStats(player);
@@ -103,6 +105,21 @@ function getPlayerView(player) {
   });
   const dailyActiveView = _getDailyActiveView ? _getDailyActiveView(player) : null;
   const questView = { dailyQuests: dailyQuestsView, chest: chestView, achievements: achievementsView, titles: player.titles || {}, currentTitle: player.currentTitle || null, dailyActive: dailyActiveView };
+  // T-103 公会轻量摘要（轮询仅透出 summary，不含 members/logs/store）
+  let guildSummary = null;
+  try {
+    if (player.guildId && _guildHelpers && _guildHelpers.toGuildSummary) {
+      let meta = null;
+      try { meta = require('../store').getMeta(); } catch(_) {}
+      if (!meta) try { meta = require('./index')._getStoreMeta?.(); } catch(_) {}
+      if (meta && meta.guilds && meta.guilds[player.guildId]) {
+        const playersMap = (()=>{ try{ return require('../store').__getRawData().players; } catch(_){ return {}; } })();
+        guildSummary = _guildHelpers.toGuildSummary(meta.guilds[player.guildId], playersMap);
+      } else {
+        guildSummary = null;
+      }
+    }
+  } catch (_) { guildSummary = null; }
 
   return {
     username: player.username, name: player.name, avatar: player.avatar || '', race: player.race, raceStage: player.raceStage,
@@ -136,7 +153,8 @@ function getPlayerView(player) {
     expeditionHistory: Array.isArray(player.expeditionHistory) ? player.expeditionHistory.slice(0,20) : [],
     expeditionReports: player.expeditionReports || {},
     expeditionCodex: player.expeditionCodex || {},
-    dailyActive: _getDailyActiveView ? _getDailyActiveView(player) : null
+    dailyActive: _getDailyActiveView ? _getDailyActiveView(player) : null,
+    guild: guildSummary
   };
 }
 

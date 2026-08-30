@@ -37,7 +37,7 @@
           <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
             @select="handleAreaChange" @strategy-change="handleStrategyChange"
             @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" @goBoss="activeTab = 'boss'"
-            @goCock="activeTab = 'cock'" @goExpedition="activeTab = 'expedition'" />
+            @goCock="activeTab = 'cock'" @goExpedition="activeTab = 'expedition'" @goGuild="activeTab = 'guild'" />
           <CodexView v-else-if="activeTab === 'codex'" :player="player" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             :initialSubTab="reincarnHint ? 'reinc' : undefined"
@@ -52,6 +52,8 @@
           <CockfightArena v-else-if="activeTab === 'cock'" :player="player" :currentUser="currentUserRef"
             @goBack="activeTab = 'map'" />
           <ExpeditionView v-else-if="activeTab === 'expedition'" :player="player" :currentUser="currentUserRef"
+            @goBack="activeTab = 'map'" />
+          <GuildView v-else-if="activeTab === 'guild'" :player="player" :currentUser="currentUserRef"
             @goBack="activeTab = 'map'" />
           <GenesisView v-else-if="activeTab === 'genesis'" :player="player" />
         </div>
@@ -133,6 +135,7 @@ import PvPView from './components/PvPView.vue';
 import WorldBossView from './components/WorldBossView.vue';
 import CockfightArena from './components/CockfightArena.vue';
 import ExpeditionView from './components/ExpeditionView.vue';
+import GuildView from './components/GuildView.vue';
 import GenesisView from './components/GenesisView.vue';
 import TutorialOverlay from './components/TutorialOverlay.vue';
 
@@ -183,7 +186,7 @@ const activeTab = ref('char');
 const showShop = ref(false);
 
 const transitionName = ref('slide-left');
-const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'cock', 'expedition', 'genesis'];
+const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'cock', 'expedition', 'guild', 'genesis'];
 
 let pollTimer = null;
 let prevLevel = 0;

@@ -18,6 +18,7 @@ const cockfight = require('./cockfight');
 const settlement = require('./settlement');
 const expedition = require('./expedition');
 const active = require('./active');
+const guild = require('./guild');
 
 // ====== 绑定循环引用 ======
 // recalcMaxStats：与原 engine.js 行为一致（基于词条加成的 baseHp）
@@ -77,6 +78,8 @@ function setStore(store) {
   // 启动期把已存档的自创装备同步注册回装备模板表
   genesis.rehydrateFromMeta(store.getMeta());
 }
+function _getStoreMeta(){ try{ return _store ? _store.getMeta() : null; } catch(_){ return null; } }
+function _getRawData(){ try{ if(_store && _store.__getRawData) return _store.__getRawData(); const s=require('../store'); return s.__getRawData(); } catch(_){ return { players:{}, meta:{} }; } }
 function withTransaction(fn) {
   if (_store && typeof _store.withTransaction === 'function') return _store.withTransaction(fn);
   const s = require('../store');
@@ -295,5 +298,28 @@ module.exports = {
   addActivePoints: active.addActivePoints,
   claimDailyActive: active.claimActive,
   refreshDailyActive: active.refreshIfNeeded,
+  // 公会
+  createGuild: guild.createGuild,
+  listGuilds: guild.listGuilds,
+  getMyGuild: guild.getMyGuild,
+  joinGuild: guild.joinGuild,
+  leaveGuild: guild.leaveGuild,
+  kickGuildMember: guild.kickMember,
+  kickMember: guild.kickMember,
+  updateGuildRole: guild.updateRole,
+  updateRole: guild.updateRole,
+  transferGuild: guild.transferGuild,
+  updateGuildAnnouncement: guild.updateAnnouncement,
+  updateAnnouncement: guild.updateAnnouncement,
+  donateGuild: guild.donate,
+  donate: guild.donate,
+  disbandGuild: guild.disbandGuild,
+  addGuildContribution: guild.addGuildContribution,
+  ensureGuildConsistency: guild.ensureGuildConsistency,
+  toGuildSummary: guild.toGuildSummary,
+  toGuildDetail: guild.toGuildDetail,
+  toGuildViewer: guild.toViewer,
   setStore,
+  _getStoreMeta,
+  _getRawData,
 };

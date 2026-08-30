@@ -63,6 +63,17 @@ function load() {
   if (!data.meta.arenaRewards) data.meta.arenaRewards = { daily:{}, weekly:{}, monthly:{} };
   if (!data.meta.arenaCursors) data.meta.arenaCursors = null;
   if (!data.meta.arenaSkipped) data.meta.arenaSkipped = { daily:{}, weekly:{}, monthly:{} };
+  if (!isPlainObject(data.meta.guilds)) data.meta.guilds = {};
+  if (!isPlainObject(data.meta.guildNameIndex)) data.meta.guildNameIndex = {};
+  if (!isPlainObject(data.meta.guildArchive)) data.meta.guildArchive = {};
+  // 重建 guildNameIndex
+  try {
+    data.meta.guildNameIndex = {};
+    for (const [gid, g] of Object.entries(data.meta.guilds)) {
+      if (g && typeof g.name === 'string') data.meta.guildNameIndex[g.name.trim().toLowerCase()] = gid;
+    }
+  } catch (_) {}
+  try { trimGuilds(); } catch (_) {}
   const playerKeys = Object.keys(data.players);
   if (playerKeys.length > 0 && Object.keys(data.accounts).length === 0) {
     for (const key of playerKeys) {
@@ -72,6 +83,23 @@ function load() {
   // 修剪 arenaRewards 保留上限 30/12/12（防止无限增长）
   try { trimArenaRewards(); } catch(_){}
   console.log(`已加载 ${Object.keys(data.accounts).length} 个账号, ${Object.keys(data.players).length} 个角色`);
+}
+function trimGuilds(){
+  const gs = data.meta && data.meta.guilds;
+  if (!isPlainObject(gs)) return;
+  const ga = data.meta.guildArchive;
+  if (isPlainObject(ga)){
+    const keys = Object.keys(ga);
+    if (keys.length > 50){
+      keys.sort((a,b)=> (ga[a].disbandedAt||0)-(ga[b].disbandedAt||0));
+      for(let i=0;i<keys.length-50;i++) delete ga[keys[i]];
+    }
+  }
+  for(const g of Object.values(gs)){
+    if (!g || !Array.isArray(g.logs)) continue;
+    if (g.logs.length > 30) g.logs.splice(0, g.logs.length-30);
+    if (g.members && g.members.length > 40) g.members.splice(40);
+  }
 }
 function trimArenaRewards(){
   const ar = data.meta && data.meta.arenaRewards;
@@ -113,6 +141,7 @@ function save() {
   const tmpPath = DB_PATH + '.tmp';
   try {
     trimArenaRewards();
+    try { trimGuilds(); } catch(_){}
     fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
     const nowMs = _getNow();
     if (fs.existsSync(DB_PATH) && nowMs - _lastBakAt > 60 * 60 * 1000) {
