@@ -199,6 +199,7 @@ export default {
   claimDaily(username, questId) { return request(`/player/${username}/quest/daily/${questId}/claim`, { method: 'POST' }) },
   claimChest(username) { return request(`/player/${username}/quest/chest/claim`, { method: 'POST' }) },
   claimAchievement(username, achId) { return request(`/player/${username}/quest/achievement/${achId}/claim`, { method: 'POST' }) },
+  claimDailyActive(username, tier) { return request(`/player/${username}/daily-active/claim`, { method: 'POST', body: JSON.stringify({ tier }) }) },
 
   // 引导
   updateTutorial(username, step) { return request(`/player/${username}/tutorial`, { method: 'POST', body: JSON.stringify({ step }) }) },

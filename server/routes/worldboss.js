@@ -48,6 +48,8 @@ function registerWorldBossRoutes(app, store) {
         else if (msg.includes('今日')) status = 409;
         return { status, message: msg };
       }
+      // 每日活跃：首次成功攻击 +15（重放为 409，不会进入此分支）
+      try { require('../engine/active').addActivePoints(data.players[username], 'boss', 1); } catch (e) { console.error('active boss', e.message); }
       const updated = data.players[username];
       const playerView = updated ? getPlayerView(updated) : null;
       const payload = {

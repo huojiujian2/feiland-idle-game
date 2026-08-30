@@ -32,6 +32,7 @@ function assertSettlementReward(type, reward) {
     cock_round: ['pointsDelta','points','title'],
     cock_exchange: ['title','cost','points'],
     expedition: ['gold','exp','materials','equips'],
+    daily_active: ['gold','exp','materials'],
   };
   const allowed = allowedByType[type];
   if (!allowed) return { valid:false, message:`未知 type ${type}` };
@@ -103,6 +104,24 @@ function assertSettlementReward(type, reward) {
       if (!Array.isArray(reward.equips)) return { valid:false, message:'equips 非数组' };
       for (const e of reward.equips) if (!isPlainObject(e) || !isNonEmptyString(e.templateId)) return { valid:false, message:'equips 元素非法' };
     }
+  } else if (type === 'daily_active') {
+    // 允许 {gold} | {exp,materials} | {materials} 三种组合，至少其一
+    const hasGold = 'gold' in reward;
+    const hasExp = 'exp' in reward;
+    const hasMats = 'materials' in reward;
+    if (!hasGold && !hasExp && !hasMats) return { valid:false, message:'daily_active 至少含 gold/exp/materials 其一' };
+    if (hasGold && !isNonNegativeNumber(reward.gold)) return { valid:false, message:'gold 非法' };
+    if (hasExp && !isNonNegativeNumber(reward.exp)) return { valid:false, message:'exp 非法' };
+    if (hasMats) {
+      if (!Array.isArray(reward.materials) || reward.materials.length===0) return { valid:false, message:'materials 非空' };
+      for (const m of reward.materials) {
+        if (!isPlainObject(m) || !isNonEmptyString(m.name) || !isNonNegativeNumber(m.count) || m.count===0) return { valid:false, message:'materials 元素非法' };
+      }
+    }
+    // 精确组合校验：tier1 {gold} | tier2 {exp,materials} | tier3 {materials}
+    const keys = Object.keys(reward).sort().join(',');
+    const ok = keys==='gold' || keys==='exp,materials' || keys==='materials';
+    if (!ok) return { valid:false, message:'daily_active 组合非法，仅允许 {gold}|{exp,materials}|{materials}' };
   }
   return { valid:true };
 }

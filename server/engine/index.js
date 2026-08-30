@@ -17,6 +17,7 @@ const genesis = require('./genesis');
 const cockfight = require('./cockfight');
 const settlement = require('./settlement');
 const expedition = require('./expedition');
+const active = require('./active');
 
 // ====== 绑定循环引用 ======
 // recalcMaxStats：与原 engine.js 行为一致（基于词条加成的 baseHp）
@@ -61,6 +62,9 @@ pvp.setBotCharacterDeps({
 // 远征注入
 expedition.setGrantHandlers({ grantGold: (p, a) => player.grantGold(p, a), grantExpWithLevelUp: (p, e) => player.grantExpWithLevelUp(p, e) });
 expedition.setProgressHandlers({ updateDailyProgress: (p, id, inc) => daily.updateDailyProgress(p, id, inc), checkAchievements: (p) => daily.checkAchievements(p) });
+
+// 每日活跃注入
+active.setGrantHandlers({ grantGold: (p, a) => player.grantGold(p, a), grantExpWithLevelUp: (p, e) => player.grantExpWithLevelUp(p, e) });
 
 // 创世系统：把 store.getMeta 注入到 idle/genesis 两个引擎
 let _store = null;
@@ -286,5 +290,10 @@ module.exports = {
   getExpeditionStatus: expedition.getExpeditionStatus,
   sanitizeExpedition: expedition.sanitizeExpedition,
   simulateExpeditionBossBattle: expedition.simulateExpeditionBossBattle,
+  // 每日活跃
+  getDailyActiveView: active.getDailyActiveView,
+  addActivePoints: active.addActivePoints,
+  claimDailyActive: active.claimActive,
+  refreshDailyActive: active.refreshIfNeeded,
   setStore,
 };

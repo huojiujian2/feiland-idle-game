@@ -223,6 +223,9 @@ function registerPvpRoutes(app, store) {
 
       if (!Array.isArray(meta.pvpRecords)) meta.pvpRecords = [];
 
+      // 每日活跃：首次成功挑战 +15（重放已在上方 early return，不会重复加分）— 必须在构造 fullResult（含 getPlayerView）前累加，保证快照包含最新活跃分
+      try { require('../engine/active').addActivePoints(player, 'pvp', 1); } catch (e) { console.error('active pvp', e.message); }
+
       const fullResult = {
         battle,
         isWin,

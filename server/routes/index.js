@@ -14,6 +14,7 @@ const { registerGenesisRoutes } = require('./genesis');
 const { registerTitleRoutes } = require('./titles');
 const { registerCockfightRoutes } = require('./cockfight');
 const { registerExpeditionRoutes } = require('./expedition');
+const { registerActiveRoutes } = require('./active');
 
 function registerRoutes(app, store) {
   registerAuthRoutes(app, store);
@@ -31,6 +32,7 @@ function registerRoutes(app, store) {
   registerTitleRoutes(app, store);
   registerCockfightRoutes(app, store);
   registerExpeditionRoutes(app, store);
+  registerActiveRoutes(app, store);
 }
 
 module.exports = { registerRoutes };

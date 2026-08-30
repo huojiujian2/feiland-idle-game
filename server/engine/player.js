@@ -59,6 +59,7 @@ function createCharacter(username, charName) {
     dailyQuests: createDailyQuests(),
     dailyResetAt: getTodayKey(),
     dailyChestClaimed: false,
+    dailyActive: { points: 0, claimed: [], lastResetAt: getTodayKey(), rewards: {} },
     achievements: {},
     questStats: { totalGoldEarned: 0, affixSeen: [], seenEquipTemplates: [] },
     titles: {},
@@ -250,6 +251,17 @@ function migratePlayer(player) {
       if (!Number.isFinite(player.expeditionCodex[_aid].lastAt)) player.expeditionCodex[_aid].lastAt = 0;
       if (!Number.isFinite(player.expeditionCodex[_aid].bossKills)) player.expeditionCodex[_aid].bossKills = 0;
     }
+  }
+  // T-104 每日活跃
+  if (!player.dailyActive || typeof player.dailyActive !== 'object' || Array.isArray(player.dailyActive)) {
+    const { getTodayKey } = require('./daily');
+    player.dailyActive = { points: 0, claimed: [], lastResetAt: getTodayKey(), rewards: {} };
+  }
+  if (!player.dailyActive.rewards || typeof player.dailyActive.rewards !== 'object' || Array.isArray(player.dailyActive.rewards)) player.dailyActive.rewards = {};
+  try {
+    require('./active').getDailyActiveView(player);
+  } catch (_) {
+    // active 模块未加载时跳过（测试环境）
   }
   if (!player.achievements['first']) {
     player.achievements['first'] = { unlocked: true, claimed: false, unlockAt: player.createdAt || getNow() };
