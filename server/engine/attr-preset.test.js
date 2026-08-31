@@ -25,8 +25,14 @@ describe('T-008 applyAttrPreset 两阶段补齐+分配', () => {
     // 总分配 = 30，attrPoints 全部用完
     const a = r.allocated;
     assert.equal(a.atk + a.def + a.hp + a.agi, 30);
-    // 余数全给权重最大的 atk：atk 一定比其它非 0 项多
-    assert.ok(a.atk > a.def, `atk(${a.atk}) 应该 > def(${a.def})`);
+    // v1.03 修复 Bug：余数改为按权重循环分配，不再"全给 atk"
+    //   30 / 当前 {3,1,2,1} / 预设 {8,4,4,4}
+    //   阶段 A 补齐：k=max(3/8,1/4,2/4,1/4)=0.5，目标 {4,2,2,2}，缺口 {1,1,0,1}=3
+    //   给 3 点补齐到 {4,2,2,2}，剩 27
+    //   阶段 B 按 27 分配：m = {floor(27*0.4), floor(27*0.2)*3} = {10,5,5,5}
+    //   rem=2 循环给 atk(权重 8)、def(权重 4 并列) → {11,6,5,5}
+    //   总分配：{1+11, 1+6, 0+5, 1+5} = {12, 7, 5, 6}
+    assert.deepEqual(a, { atk: 12, def: 7, hp: 5, agi: 6 });
     assert.equal(p.attrPoints, 0);
   });
 
@@ -58,11 +64,14 @@ describe('T-008 applyAttrPreset 两阶段补齐+分配', () => {
     assert.equal(p.attrPoints, 0);
   });
 
-  it('第二阶段：剩余按比例分配，余数全给预设权重最大的维度', () => {
+  it('第二阶段：剩余按比例分配，余数循环分配给权重最大的几个维度', () => {
     // 当前 {4,2,2,2}，预设 {8,4,4,4}（40/20/20/20%）
     // 阶段 A 补齐：k=0.5，缺口全 0，无补齐动作
     // 阶段 B 按 28 分配：m = {floor(28*0.4), floor(28*0.2)*3} = {11,5,5,5}
-    // rem=2 全给 atk → {13,5,5,5}
+    // v1.03 修复 Bug：余数 rem=2 改为循环分配给权重最大的前 2 个维度
+    //   修复前：rem 全给 atk → {13,5,5,5}
+    //   修复后：rem 循环给 atk(权重 8 第 1)、def(权重 4 并列第 2) → {12,6,5,5}
+    //   这样 def/hp/agi 同权时不会"全被 atk 吞掉"，更公平
     const p = createCharacter('u3', 'n3');
     p.attributes = { atk: 4, def: 2, hp: 2, agi: 2 };
     p.attrPoints = 28;
@@ -75,9 +84,10 @@ describe('T-008 applyAttrPreset 两阶段补齐+分配', () => {
 
     const r = applyAttrPreset(p, 'preset_test_3');
     assert.equal(r.success, true);
-    assert.deepEqual(r.allocated, { atk: 13, def: 5, hp: 5, agi: 5 });
-    assert.equal(p.attributes.atk, 17);
-    assert.equal(p.attributes.def, 7);
+    // 修复后：余数按权重循环分配
+    assert.deepEqual(r.allocated, { atk: 12, def: 6, hp: 5, agi: 5 });
+    assert.equal(p.attributes.atk, 16);
+    assert.equal(p.attributes.def, 8);
     assert.equal(p.attributes.hp, 7);
     assert.equal(p.attributes.agi, 7);
     assert.equal(p.attrPoints, 0);

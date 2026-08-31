@@ -5,6 +5,7 @@
 // POST /api/player/:username/cockfight/exchange { titleKey }     → 积分兑换称号
 const { ok, fail } = require('./_helpers');
 const engine = require('../engine');
+const { getNow } = require('../engine/state');
 
 function registerCockfightRoutes(app, store) {
   // 状态视图 — 事务化（跨日重置）
@@ -45,17 +46,21 @@ function registerCockfightRoutes(app, store) {
     return ok(res, result.data);
   });
 
-  // 结算一局（押注 + 干预 + 擂台赛 + 积分）— 需 createdAt
+  // 结算一局（押注 + 干预 + 擂台赛 + 积分）— createdAt 由服务端生成（v1.03 P1 1.6）
+//   客户端不再传 createdAt（防止脚本"先知"伪造时间戳影响过期判定）
+//   保留兼容：若客户端仍传 createdAt，服务端忽略并警告
   app.post('/api/player/:username/cockfight/resolve', (req, res) => {
     const username = req.params.username;
     if (!username) return fail(res, '缺少参数', 400);
     const existing = store.getPlayer(username);
     if (!existing) return fail(res, '角色不存在', 404);
-    const { bet, intervention, createdAt } = req.body || {};
+    const { bet, intervention, createdAt: clientCreatedAt } = req.body || {};
     if (bet === undefined || bet === null) return fail(res, '缺少参数', 400);
-    if (createdAt === undefined || createdAt === null) return fail(res, '缺少参数', 400);
-    const createdNum = Number(createdAt);
-    if (!Number.isFinite(createdNum)) return fail(res, 'createdAt 非法', 400);
+    // v1.03：createdAt 服务端生成（防伪造）
+    const createdNum = getNow();
+    if (clientCreatedAt !== undefined && clientCreatedAt !== null && process.env.NODE_ENV !== 'production') {
+      console.warn(`[cockfight] 客户端传 createdAt=${clientCreatedAt} 已被忽略，使用服务端时间`);
+    }
     const result = store.withTransaction((data) => {
       const player = data.players[username];
       if (!player) return { status: 404, message: '角色不存在' };

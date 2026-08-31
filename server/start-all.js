@@ -4,11 +4,28 @@
 //   前端页面: node server/web-server.js -> 固定 3000
 // 任何一个进程退出，另一个也会被终止（避免留下半死状态）。
 // 零第三方依赖，Docker 的 --prod 安装也能直接用。
+//
+// v1.03 内存优化：传递 NODE_OPTIONS 给后端，限制 V8 堆上限 + 按需启用 --expose-gc
+//   - 默认 NODE_MAX_OLD_SPACE_SIZE=512 MB（可通过环境变量调整）
+//   - 如果传了 ENABLE_EXPOSE_GC=1，会加 --expose-gc（让内存监控可以主动触发 major GC）
 
 const { spawn } = require('child_process');
 const path = require('path');
 
 const children = [];
+
+// v1.03：默认带 --max-old-space-size=512（生产推荐 512-1024，根据服务器规格）
+//   可通过 NODE_MAX_OLD_SPACE_SIZE 环境变量覆盖
+const MAX_OLD_SPACE = process.env.NODE_MAX_OLD_SPACE_SIZE || '512';
+const EXPOSE_GC = process.env.ENABLE_EXPOSE_GC === '1';
+const nodeOptions = [
+  `--max-old-space-size=${MAX_OLD_SPACE}`,
+  ...(EXPOSE_GC ? ['--expose-gc'] : []),
+].join(' ');
+if (!process.env.NODE_OPTIONS || !process.env.NODE_OPTIONS.includes('--max-old-space-size')) {
+  process.env.NODE_OPTIONS = (process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + ' ' : '') + nodeOptions;
+  console.log(`[start-all] 已设置 Node 启动参数: ${nodeOptions}`);
+}
 
 function start(name, script) {
   const child = spawn(process.execPath, [path.join(__dirname, script)], {

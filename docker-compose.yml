@@ -9,14 +9,38 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DB_PATH=/app/data/db.json
+      # v1.03：默认走 SQLite WAL 后端（异步落盘 + epoch 守卫，防并发丢失）
+      # store.js 启动时自动检测 db.sqlite 是否存在，存在就走 SQLite
+      - DB_PATH=/app/data/db
       - HOST=0.0.0.0
+      # v1.03：内存优化
+      #   NODE_MAX_OLD_SPACE_SIZE - V8 堆上限（防 OOM 被系统 kill）
+      #   ENABLE_EXPOSE_GC=1 - 启用 --expose-gc（让内存监控可以主动触发 major GC）
+      #   HEAP_WARN_PCT - 内存监控阈值（heapPct ≥ 此值打 warn + 尝试 GC）
+      - NODE_MAX_OLD_SPACE_SIZE=${NODE_MAX_OLD_SPACE_SIZE:-384}
+      - ENABLE_EXPOSE_GC=${ENABLE_EXPOSE_GC:-1}
+      - HEAP_WARN_PCT=${HEAP_WARN_PCT:-80}
+      # v1.03：CORS 白名单（生产域名）
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000,http://127.0.0.1:3000}
+      # v1.03：审计日志（生产推荐开 all；高负载可改 error 只记失败）
+      - AUDIT_LOG=${AUDIT_LOG:-on}
+      # v1.03：JWT 密钥（生产环境必传！未传会拒绝启动）
+      #   生成方法：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      - JWT_SECRET=${JWT_SECRET:?生产环境必须设置 JWT_SECRET（用 crypto.randomBytes(32).toString('hex') 生成）}
     restart: unless-stopped
+    # v1.03：容器内存上限建议 ≥ 512MB（生产推荐 1GB）
+    #   deploy.resources.limits.memory 是 Swarm 模式，docker-compose 普通模式用 mem_limit
+    mem_limit: ${MEM_LIMIT:-512m}
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      # v1.03 P2 3.5：同时检查前端 3000 + 后端 3001（防后端挂掉还判 healthy）
+      # 顺带检查 /api/diag/health（轻量 endpoint，确认 API 正常）
+      test:
+        - "CMD-SHELL"
+        - "wget -q --spider http://localhost:3000/ || exit 1"
+        - "wget -q --spider http://localhost:3001/api/diag/health || exit 1"
       interval: 30s
       timeout: 5s
-      start_period: 10s
+      start_period: 15s
       retries: 3
 
 volumes:

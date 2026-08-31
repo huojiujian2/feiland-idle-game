@@ -72,6 +72,10 @@ function registerProgressionRoutes(app, store) {
   });
 
   // 内测：一键转生（金币按高级经验卷轴购买力速升等级后连续转生，后续随经验卷轴一起删除）
+// v1.03 P0 1.5 修复：生产模式移除此路由（注释保持以便回溯）
+//    NODE_ENV=production 时返回 404，防借名攻击 + 防玩家滥用刷金币/经验
+//    开发/测试环境保留（默认 NODE_ENV !== 'production'）
+if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_AUTO_REINCARNATE === 'true') {
   app.post('/api/player/:username/auto-reincarnate', (req, res) => {
     const r = loadPlayer(store, req.params.username);
     if (r.error) return fail(res, r.error);
@@ -86,6 +90,7 @@ function registerProgressionRoutes(app, store) {
       message: result.message,
     });
   });
+}
 
   // v0.9：标记"满百级转生提醒"已弹出（避免每次启动都弹）
   app.post('/api/player/:username/reincarn-hint-shown', (req, res) => {

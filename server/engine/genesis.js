@@ -60,6 +60,15 @@ function commitEquipToWorld(world, areaId, slot, equipPts) {
   if (equipPts > prev) world.equipsMax[areaId][slot] = equipPts;
 }
 
+// v1.03 P1 1.9：每日衰减世界最强装备点数（防止恶意锁死后续玩家预算）
+//   每天 UTC 0 点衰减 5%（受 LIMITS.equipDecayFloor 限制，最低保底为参考预算的 60%）
+function decayEquipsMax(world, areaId, slot, baseBudget) {
+  const cur = world.equipsMax[areaId] && world.equipsMax[areaId][slot];
+  if (!cur) return;
+  const floor = baseBudget ? Math.floor(baseBudget * 0.6) : 0;
+  world.equipsMax[areaId][slot] = Math.max(floor, Math.floor(cur * 0.95));
+}
+
 // 工具：玩家是否二转
 function isUnlocked(player) {
   return (player?.reincarnation || 0) >= 2;
@@ -80,6 +89,14 @@ function setMetaGetter(fn) { if (typeof fn === 'function') _getMeta = fn; }
 // ============================================================
 // 降生：捏怪物
 // ============================================================
+// v1.03 P2 3.3：创世名称字符白名单（防 XSS / 控制字符注入）
+function isValidGenesisName(s) {
+  if (typeof s !== 'string') return false;
+  // 允许：中文、字母、数字、空格、常见标点 (.,!?-:;'")
+  // 禁止：HTML 标签字符 < > &、控制字符、反斜杠
+  return /^[一-龥\w\s.,!?\-:;'"\u3000-\u303f\u3001\u3002()（）【】、。，！？；：""''…—–]+$/.test(s);
+}
+
 function birthMonster(player, draft, meta) {
   player = migratePlayer(player);
   if (!isUnlocked(player)) return { success: false, message: '创世之书需要二转后才可翻阅' };
@@ -89,6 +106,7 @@ function birthMonster(player, draft, meta) {
   const name = (draft.name || '').trim();
   const desc = (draft.desc || '').trim();
   if (!name) return { success: false, message: '请为它赋予一个真名' };
+  if (!isValidGenesisName(name)) return { success: false, message: '真名包含非法字符（仅允许中文/字母/数字/常见标点）' };
   if (name.length > LIMITS.nameMax) return { success: false, message: `真名不可超过 ${LIMITS.nameMax} 字` };
   if (desc.length > LIMITS.descMax) return { success: false, message: `描述不可超过 ${LIMITS.descMax} 字` };
 
@@ -214,6 +232,7 @@ function forgeEquip(player, draft, meta) {
   const name = (draft.name || '').trim();
   const desc = (draft.desc || '').trim();
   if (!name) return { success: false, message: '请为它赋予一个真名' };
+  if (!isValidGenesisName(name)) return { success: false, message: '真名包含非法字符（仅允许中文/字母/数字/常见标点）' };
   if (name.length > LIMITS.nameMax) return { success: false, message: `真名不可超过 ${LIMITS.nameMax} 字` };
   if (desc.length > LIMITS.descMax) return { success: false, message: `描述不可超过 ${LIMITS.descMax} 字` };
 
@@ -243,7 +262,14 @@ function forgeEquip(player, draft, meta) {
   let total = 0;
   for (const k of statKeys) {
     if (!EQUIP_STAT_KEYS[k]) return { success: false, message: `属性 ${k} 不可锻造` };
-    const v = Math.max(0, Math.floor(Number(stats[k] || 0)));
+    // v1.03 P0 1.4 修复：Number() 对 'abc' 返回 NaN，Math.floor(NaN)=NaN，
+    //   Math.max(0, NaN)=NaN → 之前 NaN 直接进 cleanStats 绕过预算校验
+    //   必须用 Number.isFinite 显式拒绝非数字 + NaN
+    const n = Number(stats[k]);
+    if (!Number.isFinite(n)) {
+      return { success: false, message: `属性 ${k} 必须是有限数字` };
+    }
+    const v = Math.max(0, Math.floor(n));
     if (v === 0) continue;   // 0 值视为不写
     cleanStats[k] = v;
     total += v;
@@ -421,4 +447,8 @@ module.exports = {
   birthMonster, forgeEquip, deleteCustom,
   rehydrateFromMeta,
   setMetaGetter,
+  // v1.03 P1 1.9：每日世界最强装备衰减（每天 0 点调用一次）
+  decayEquipsMax,
+  // v1.03 P0 1.4 修复：暴露 equipStatTotal 供测试与 commitEquipToWorld 复用
+  equipStatTotal,
 };

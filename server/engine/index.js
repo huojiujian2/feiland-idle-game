@@ -277,6 +277,29 @@ module.exports = {
   forgeEquip: genesis.forgeEquip,
   deleteGenesis: genesis.deleteCustom,
   rehydrateGenesis: genesis.rehydrateFromMeta,
+  // v1.03 P1 1.9：每日世界最强装备衰减（按 dayKey 跳过；内部判定）
+  maybeDecayGenesisEquips: function maybeDecayGenesisEquips(store) {
+    const meta = store.getMeta();
+    const today = state.getDayKey ? state.getDayKey() : (function () {
+      const d = new Date();
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+    })();
+    if (meta.lastDecayDayKey === today) return; // 今日已跑
+    const genesisMod = require('./genesis');
+    const dataMod = require('../data');
+    const w = (meta.genesis && meta.genesis.equipsMax) || {};
+    for (const areaId of Object.keys(w)) {
+      for (const slot of Object.keys(w[areaId])) {
+        // 取参考预算作为 floor（用 epic 品质基准）
+        const baseBudget = (() => {
+          try { return dataMod.getEquipBudget(areaId, slot, 'epic', w); } catch (_) { return null; }
+        })();
+        genesisMod.decayEquipsMax(meta.genesis, areaId, slot, baseBudget);
+      }
+    }
+    meta.lastDecayDayKey = today;
+    store.setMeta(meta);
+  },
 
   // 灵鸡斗场（完全独立玩法）
   getCockfightStatus: cockfight.getCockfightStatus,

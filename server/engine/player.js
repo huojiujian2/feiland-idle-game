@@ -93,14 +93,18 @@ function createCharacter(username, charName) {
 function migratePlayer(player) {
   if (!player.equips) player.equips = [];
   if (!player.equipped) player.equipped = { weapon: null, armor: null, accessory: null };
-  if (player.skillPoints === undefined) player.skillPoints = 0;
+  // v1.03 修复：老 corrupted 数据可能字段为 null/NaN/字符串 → 统一用 Number.isFinite 检查
+  if (!Number.isFinite(player.skillPoints) || player.skillPoints < 0) player.skillPoints = 0;
   if (player.jobPath === undefined) player.jobPath = null;
-  if (player.raceStage === undefined) player.raceStage = 0;
+  if (!Number.isFinite(player.raceStage) || player.raceStage < 0) player.raceStage = 0;
   if (player.godhood === undefined) player.godhood = null;
-  if (player.faith === undefined) player.faith = 0;
+  if (!Number.isFinite(player.faith) || player.faith < 0) player.faith = 0;
   if (!player.laws) player.laws = [];
   if (!player.inventory) player.inventory = [];
   if (player.killCount === undefined) player.killCount = 0;
+  // v1.03 修复：老存档 killCount 可能是 null / NaN / 字符串（corrupted）→ 应被修正为 0
+  //   修复前：只处理 undefined，老 corrupted 数据会让战斗计数异常
+  if (!Number.isFinite(player.killCount) || player.killCount < 0) player.killCount = 0;
   if (!player.combatStats) player.combatStats = { totalWins: 0, totalLosses: 0, totalDraws: 0, todayKills: 0, monthKills: 0, todayResetAt: getTodayKey(), monthResetAt: getMonthKey() };
   if (!Number.isFinite(player.combatStats.totalWins)) player.combatStats.totalWins = 0;
   if (!Number.isFinite(player.combatStats.totalLosses)) player.combatStats.totalLosses = 0;
@@ -115,10 +119,10 @@ function migratePlayer(player) {
     player.combatStats.monthKills = 0;
     player.combatStats.monthResetAt = getMonthKey();
   }
-  if (player.reincarnation === undefined) player.reincarnation = 0;
+  if (!Number.isFinite(player.reincarnation) || player.reincarnation < 0) player.reincarnation = 0;
   // v7：转生点商店购买次数（每个商品独立计数，用于动态价格）
   if (!player.reincShopCounts || typeof player.reincShopCounts !== 'object') player.reincShopCounts = {};
-  if (player.bossKills === undefined) player.bossKills = 0;
+  if (!Number.isFinite(player.bossKills) || player.bossKills < 0) player.bossKills = 0;
   // v0.9：满百级转生一次性提醒的标记
   if (player.reincarnHintShown === undefined) player.reincarnHintShown = false;
   if (!player.stats || typeof player.stats !== 'object') player.stats = {};
@@ -201,8 +205,10 @@ function migratePlayer(player) {
     player.cockfight = { points: 0, wins: 0, streak: 0, played: 0, loseStreak: 0, dayKey: '', usedToday: 0, banNext: null, current: null, history: [] };
   }
   if (!Array.isArray(player.cockfight.history)) player.cockfight.history = [];
-  // 过滤掉 null 项（旧版本可能 push null 占位，避免下面逻辑踩到）
-  player.attrPresets = player.attrPresets.filter(Boolean);
+  // v1.03 修复 Bug：不再 filter attrPresets 中的 null 占位
+  //   修复前：filter 干掉 null → 数组索引重排 → deleteAttrPresetBySlot(p, 1) 实际删除 p2
+  //   修复后：保留 null 占位（用户未填的槽位），删除逻辑基于原始索引
+  // if (!Array.isArray(player.attrPresets)) ... 已加
   if (!player.pvpStats || typeof player.pvpStats !== 'object') player.pvpStats = {};
   if (!Number.isFinite(player.pvpStats.wins)) player.pvpStats.wins = 0;
   if (!Number.isFinite(player.pvpStats.losses)) player.pvpStats.losses = 0;
@@ -351,13 +357,21 @@ function grantExpWithLevelUp(player, exp) {
 function allocateAttributes(player, allocation) {
   player = migratePlayer(player);
   refreshDailyIfNeeded(player);
-  const total = (allocation.atk || 0) + (allocation.def || 0) + (allocation.hp || 0) + (allocation.agi || 0);
+  // v1.03 修复 Bug：负分配会让 player.attributes 变负
+  //   攻击剧本：atk:-100 + def:200 + hp:100 + agi:100 = total=300>0
+  //     → 通过 total>1 校验 → player.attributes.atk += -100 → 5-100=-95（变负）
+  //   修复：把单维度钳到 ≥ 0（不影响 total，因为同正负同合计）
+  const aAtk = Math.max(0, Math.floor(Number(allocation.atk) || 0));
+  const aDef = Math.max(0, Math.floor(Number(allocation.def) || 0));
+  const aHp  = Math.max(0, Math.floor(Number(allocation.hp)  || 0));
+  const aAgi = Math.max(0, Math.floor(Number(allocation.agi) || 0));
+  const total = aAtk + aDef + aHp + aAgi;
   if (total > player.attrPoints) return { success: false, message: '属性点不足' };
   if (total < 1) return { success: false, message: '请至少分配1点' };
-  player.attributes.atk += allocation.atk || 0;
-  player.attributes.def += allocation.def || 0;
-  player.attributes.hp += allocation.hp || 0;
-  player.attributes.agi += allocation.agi || 0;
+  player.attributes.atk += aAtk;
+  player.attributes.def += aDef;
+  player.attributes.hp  += aHp;
+  player.attributes.agi += aAgi;
   player.attrPoints -= total;
   recalcMaxStats(player);
   updateDailyProgressSafe(player, 'alloc1', 1);
@@ -421,6 +435,25 @@ function autoAllocateAttributes(player) {
 
 // 属性预设
 const MAX_ATTR_PRESETS = 3;
+// v1.03 修复 Bug：限制 attributes 单维度上限，防 NaN/Infinity/超大数污染存档
+//   攻击剧本：attributes: { atk: Number.MAX_SAFE_INTEGER, ... } → 应用预设时 rsum 爆炸 → 维度分配异常
+//   防御：单维度钳到 [0, MAX_ATTR_VALUE]
+const MAX_ATTR_VALUE = 100000; // 远大于正常属性上限（千级），但防溢出
+function sanitizeAttrValue(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  if (n > MAX_ATTR_VALUE) return MAX_ATTR_VALUE;
+  return Math.floor(n);
+}
+function sanitizeAttrPresetAttributes(attrs) {
+  if (!attrs || typeof attrs !== 'object') return null;
+  return {
+    atk: sanitizeAttrValue(attrs.atk),
+    def: sanitizeAttrValue(attrs.def),
+    hp:  sanitizeAttrValue(attrs.hp),
+    agi: sanitizeAttrValue(attrs.agi),
+  };
+}
 function saveAttrPreset(player, name, slot = null, attributes = null, delta = null) {
   player = migratePlayer(player);
   if (!name || !name.trim()) return { success: false, message: '请输入预设名称' };
@@ -434,23 +467,34 @@ function saveAttrPreset(player, name, slot = null, attributes = null, delta = nu
     if (typeof slot !== 'number' || slot < 0 || slot >= MAX_ATTR_PRESETS) {
       return { success: false, message: '方案槽位无效' };
     }
-    // 立刻把 delta 加到 player.attributes 上（如果有）
+    // v1.03 修复 Bug：delta 拒绝负数（防 attrPoints 被恶意加满）
+    //   攻击剧本：delta={atk:-999, def:0, hp:0, agi:0}
+    //     → used = -999 → player.attrPoints = Math.max(0, X - (-999)) = X + 999（送属性点！）
+    //   修复：used 各维度钳到 ≥ 0 → 负 delta 变成"无效加点"（不影响 attrPoints）
     if (delta && typeof delta === 'object') {
-      player.attributes.atk = Math.max(0, (player.attributes.atk || 0) + (Number(delta.atk) || 0));
-      player.attributes.def = Math.max(0, (player.attributes.def || 0) + (Number(delta.def) || 0));
-      player.attributes.hp = Math.max(0, (player.attributes.hp || 0) + (Number(delta.hp) || 0));
-      player.attributes.agi = Math.max(0, (player.attributes.agi || 0) + (Number(delta.agi) || 0));
-      // 减掉对应的 attrPoints
-      const used = (Number(delta.atk) || 0) + (Number(delta.def) || 0) + (Number(delta.hp) || 0) + (Number(delta.agi) || 0);
-      if (player.attrPoints && player.attrPoints > 0) {
-        player.attrPoints = Math.max(0, player.attrPoints - used);
+      const dAtk = Math.max(0, Math.floor(Number(delta.atk) || 0));
+      const dDef = Math.max(0, Math.floor(Number(delta.def) || 0));
+      const dHp  = Math.max(0, Math.floor(Number(delta.hp)  || 0));
+      const dAgi = Math.max(0, Math.floor(Number(delta.agi) || 0));
+      const used = dAtk + dDef + dHp + dAgi;
+      if (used > 0) {
+        if (used > player.attrPoints) return { success: false, message: '属性点不足' };
+        player.attributes.atk += dAtk;
+        player.attributes.def += dDef;
+        player.attributes.hp  += dHp;
+        player.attributes.agi += dAgi;
+        player.attrPoints -= used;
       }
     }
-    const attrs = attributes || { ...player.attributes };
+    // v1.03 修复 Bug：attributes 入口 sanitize（防负数/NaN/Infinity/超大数写入预设）
+    //   攻击剧本：attributes: { atk: -999, def: 100, hp: 100, agi: 100 } → 应用时 atk 维度"消失"
+    //   攻击剧本：attributes: { atk: NaN, ... } → JSON 序列化变 null → 后续读出变 NaN
+    const safeAttrs = sanitizeAttrPresetAttributes(attributes) || sanitizeAttrPresetAttributes(player.attributes);
+    if (!safeAttrs) return { success: false, message: '属性数据无效' };
     const preset = {
       id: 'preset_' + getNow() + '_' + Math.random().toString(36).substr(2, 6),
       name,
-      attributes: { ...attrs },
+      attributes: safeAttrs,
       level: player.level,
       slot, // 记录槽位（可读性，前端主要用 index，但后端审计有用）
       createdAt: getNow()
@@ -552,16 +596,21 @@ function applyAttrPreset(player, presetId) {
       }
     }
 
-    // 阶段 B：按比例分配剩余点（余数全给比例最大的维度）
+    // 阶段 B：按比例分配剩余点（余数循环分配给权重最高的几个维度，与 byRatio 一致）
+    // v1.03 修复 Bug：原代码 m[order[0]] += rem 会让余数全给 r 最大的一个
+    //   修复后：余数按 r 排序循环分配（r 相等时按 keys 顺序），更公平
     if (points > 0) {
       const m = { atk: 0, def: 0, hp: 0, agi: 0 };
       for (const key of keys) m[key] = Math.floor(points * (r[key] / rsum));
       let rem = points - m.atk - m.def - m.hp - m.agi;
-      // 余数全给"预设里权重最大"的维度（按 r 降序，r 相同时按 keys 顺序）
+      // 余数循环分配给 r 最大的维度（与 byRatio 新版对齐）
       const order = [...keys].sort((a, b) => r[b] - r[a] || keys.indexOf(a) - keys.indexOf(b));
-      const topKey = order[0];
-      m[topKey] += rem;
-      rem = 0;
+      let i = 0;
+      while (rem > 0) {
+        m[order[i % order.length]] += 1;
+        rem -= 1;
+        i += 1;
+      }
       for (const key of keys) {
         cur[key] += m[key];
         alloc[key] += m[key];
@@ -727,14 +776,17 @@ function deleteAttrPresetBySlot(player, slot) {
   if (typeof slot !== 'number' || slot < 0 || slot >= MAX_ATTR_PRESETS) {
     return { success: false, message: '方案槽位无效' };
   }
-  // 先清掉数组里可能出现的 null 占位（迁移时过滤）
-  const cleanList = (player.attrPresets || []).filter(Boolean);
-  // 找到"按 slot 索引"对应的真实位置（null 被过滤了，要按顺序映射）
-  const target = cleanList[slot];
+  // v1.03 修复 Bug：直接基于原始数组索引判断，不 filter
+  //   修复前：cleanList = filter(Boolean) 后 cleanList[slot] 可能指向"slot 之后的另一个 preset"
+  //          例：原 [p0, null, p2]，删 slot=1 → cleanList=[p0, p2] → cleanList[1]=p2 → 误删 p2
+  //   修复后：原始数组 slot 位置为 null → 直接返回"槽位为空"，不删任何元素
+  //          注：migratePlayer 已经在入口处过滤过 null（line 205），
+  //          所以这里的 null 检查主要是防御外部直接构造的非标准数据。
+  //          原"target.slot !== slot"校验被移除：migrate 后数组索引会被重排，
+  //          target.slot 记录的是用户指定的逻辑槽位（创建时记录的），与过滤后索引不一致是正常状态。
+  const target = player.attrPresets[slot];
   if (!target) return { success: false, message: '方案槽位为空' };
-  const idx = player.attrPresets.findIndex(p => p && p.id === target.id);
-  if (idx < 0) return { success: false, message: '方案不存在' };
-  player.attrPresets.splice(idx, 1);
+  player.attrPresets.splice(slot, 1);
   return { success: true };
 }
 

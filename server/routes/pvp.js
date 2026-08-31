@@ -11,6 +11,8 @@ const { PVP_CD_MS, PVP_LEVEL_RANGE, PVP_CURRENCY_KEY, ARENA_EQUIPMENT, ARENA_TIT
 const { ok, fail } = require('./_helpers');
 const { isTestMode } = require('../engine/state');
 const { assertSettlementReward, assertPvpChallengeResult } = require('../engine/settlement');
+const { buildServerRequestId, getDayKey } = require('../middleware/nonce');
+const auditLog = require('../middleware/audit-log');
 
 function nextDailyKey(key) {
   const d = new Date(key + 'T00:00:00');
@@ -49,7 +51,11 @@ function getCurKeyForPeriod(period) {
   return '';
 }
 
-function registerPvpRoutes(app, store) {
+function registerPvpRoutes(app, store, deps = {}) {
+  const auth = deps.auth || {};
+  const requireAuth = auth.requireAuth || ((req, res, next) => next());
+  const requireSelfFromBody = auth.requireSelfFromBody || ((req, res, next) => next());
+  const requireAdmin = auth.requireAdmin || ((req, res, next) => next());
   // 获取对手列表
   app.get('/api/arena/opponents/:username', (req, res) => {
     const player = store.getPlayer(req.params.username);
@@ -57,11 +63,10 @@ function registerPvpRoutes(app, store) {
     const myLevel = player.level || 1;
     const myRating = (player.pvpStats && player.pvpStats.rating) || 1000;
     const bots = generateArenaBots(myLevel, myRating);
-    // 缓存本次生成的机器人，保证玩家看到的对手与实际挑战到的是同一个
-    const metaForCache = store.getMeta();
-    if (!metaForCache.arenaBots || typeof metaForCache.arenaBots !== 'object') metaForCache.arenaBots = {};
-    metaForCache.arenaBots[player.username] = { time: getNow(), bots };
-    store.setMeta(metaForCache);
+    // v1.03 内存优化：缓存从 store meta 搬到进程内存（store.arenaBotsCacheSet）
+    //   修复前：每次 opponents 调用都改 store.meta，触发 withTransaction 写盘 + 序列化整个 data
+    //   修复后：纯进程内存 Map，不参与序列化，不参与 SQLite/JSON 落盘
+    store.arenaBotsCacheSet(player.username, { time: getNow(), bots });
     const realOpponents = store.getAllPlayers()
       .filter(p => p.username !== player.username && p.level)
       .filter(p => Math.abs((p.level || 1) - myLevel) <= PVP_LEVEL_RANGE)
@@ -105,13 +110,25 @@ function registerPvpRoutes(app, store) {
     });
   });
 
-  // 挑战
-  app.post('/api/arena/challenge', (req, res) => {
-    const { username, targetUsername, isBot, requestId } = req.body || {};
+  // 挑战（受保护：必须登录 + body.username === req.user.username）
+  app.post('/api/arena/challenge', requireAuth, requireSelfFromBody, auditLog('pvp_challenge'), (req, res) => {
+    const { username, targetUsername, isBot, requestId: clientRequestId, clientNonce } = req.body || {};
     if (!username || !targetUsername) return fail(res, '缺少参数', 400);
-    if (!requestId) return fail(res, '缺少参数', 400);
     if (username === targetUsername) return fail(res, '不能挑战自己', 409);
-    const ledgerId = `pvp:challenge:${requestId}`;
+    // v1.03 P1 1.5：服务端用 HMAC 签名生成 ledgerId（客户端 requestId 仅作为兼容 + 调试日志）
+    //   同 clientNonce + 同 target → 同 ledgerId（幂等去重）
+    //   改 target → 不同 ledgerId（防跨目标重放）
+    const ledgerId = buildServerRequestId({
+      username,
+      targetUsername,
+      isBot: !!isBot,
+      clientNonce: clientNonce || clientRequestId, // 兼容旧客户端
+      dayKey: getDayKey(),
+    });
+    // 日志：若客户端 requestId 与服务端签名不一致，说明客户端伪造
+    if (clientRequestId && clientRequestId !== ledgerId && process.env.NODE_ENV !== 'production') {
+      console.warn(`[pvp] client requestId 不匹配服务端签名（可能伪造）: cli=${clientRequestId} srv=${ledgerId}`);
+    }
     // quick existence check for replay before heavy logic (also checked inside transaction for atomicity)
     const playerPre = store.getPlayer(username);
     if (!playerPre) return fail(res, '角色不存在', 404);
@@ -161,8 +178,9 @@ function registerPvpRoutes(app, store) {
 
       let target;
       if (isBot) {
-        const cached = meta.arenaBots && meta.arenaBots[username];
-        const cacheValid = cached && Array.isArray(cached.bots) && (getNow() - cached.time) < 10 * 60 * 1000;
+        // v1.03 内存优化：从进程内存缓存读，不再走 store.meta
+        const cached = store.arenaBotsCacheGet(username);
+        const cacheValid = cached && Array.isArray(cached.bots);
         target = cacheValid ? cached.bots.find(b => b.username === targetUsername) || null : null;
         if (!target) {
           const myLevel = player.level || 1;
@@ -252,7 +270,7 @@ function registerPvpRoutes(app, store) {
         at: getNow(),
         type: 'pvp_challenge',
         reward,
-        source: `pvp:challenge:${requestId}`,
+        source: `pvp:challenge:${ledgerId}`,
         fullResult,
         requestContext: { username, targetUsername, isBot: !!isBot },
       });
@@ -335,7 +353,7 @@ function registerPvpRoutes(app, store) {
     const titles = ARENA_TITLES.map(t => ({ ...t, owned: ownedKeys.includes(t.titleKey) }));
     res.json({ success: true, data: { items: ARENA_EQUIPMENT, grouped, titles } });
   });
-  app.post('/api/arena/buy', (req, res) => {
+  app.post('/api/arena/buy', requireAuth, requireSelfFromBody, (req, res) => {
     const { username, itemId } = req.body || {};
     if (!username || !itemId) return fail(res, '缺少参数', 400);
     const existing = store.getPlayer(username);
@@ -484,12 +502,10 @@ function registerPvpRoutes(app, store) {
     });
   });
 
-  // 手动结算 — 鉴权 + periodKey 校验 + 事务
-  app.post('/api/arena/settle', (req, res) => {
-    const adminToken = req.headers['x-admin-token'];
+  // 手动结算 — admin token + periodKey 校验 + 事务
+  app.post('/api/arena/settle', requireAdmin, (req, res) => {
     const isTest = isTestMode();
-    const expected = process.env.ADMIN_TOKEN;
-    if (!(isTest || (expected && adminToken === expected))) return fail(res, '无权限', 403);
+    if (isTest) { /* 测试模式跳过 admin token（向后兼容） */ }
     const { period, periodKey } = req.body || {};
     if (!['daily', 'weekly', 'monthly'].includes(period)) return fail(res, '无效的奖励周期', 400);
     const curKey = getCurKeyForPeriod(period);

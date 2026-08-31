@@ -3,7 +3,9 @@ const { getActiveBoss, attackWorldBoss, spawnWorldBoss, getBossRanking, getPlaye
 const { getNow } = require('../engine/state');
 const { ok, fail } = require('./_helpers');
 
-function registerWorldBossRoutes(app, store) {
+function registerWorldBossRoutes(app, store, deps = {}) {
+  const auth = deps.auth || {};
+  const requireAdmin = auth.requireAdmin || ((req, res, next) => next());
   // 获取当前活跃 BOSS + 排行榜 + 过期时间 + 当前玩家今日是否已挑战 — 事务化
   app.get('/api/worldboss/active', (req, res) => {
     const username = req.query.username || '';
@@ -85,8 +87,8 @@ function registerWorldBossRoutes(app, store) {
     });
   });
 
-  // 调试：强制刷新（不变更日期，但会清掉当前 boss 重新按最新玩家生成）
-  app.post('/api/worldboss/spawn', (req, res) => {
+  // 调试：强制刷新（admin only — 防玩家调此接口操纵 BOSS 数值）
+  app.post('/api/worldboss/spawn', requireAdmin, (req, res) => {
     const result = store.withTransaction((data) => {
       const meta = data.meta;
       meta.worldBoss = null;

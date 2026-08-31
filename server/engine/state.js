@@ -7,7 +7,7 @@ let _uidSeq = 0;
 let _testMode = false;
 
 function getNow() { return _now(); }
-function __setNow(fn) { _now = fn; }
+function __setNow(fn) { _now = fn; _testMode = true; }
 function __setRandom(fn) { _rand = fn; _testMode = true; }
 function __setDropRandom(fn) { _dropRand = fn; _testMode = true; }
 function __resetSeams() {

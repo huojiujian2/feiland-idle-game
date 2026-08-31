@@ -165,6 +165,8 @@ function registerGuildRoutes(app, store) {
     const { text } = req.body || {};
     if (!username) return fail(res, '缺少参数', 400);
     if (typeof text !== 'string') return fail(res, '缺少 text', 400);
+    // v1.03 P2 3.2：公告长度上限（防撑爆 db.json）
+    if (text.length > 500) return fail(res, `公告最多 500 字符（当前 ${text.length}）`, 400);
     const existing = store.getPlayer(username);
     if (!existing) return fail(res, '角色不存在', 404);
     const result = store.withTransaction((data) => {

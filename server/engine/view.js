@@ -137,7 +137,10 @@ function getPlayerView(player) {
     raceInfo: { current: raceData, next: nextRace },
     enchantsBySlot,
     computedCombatStats: getCombatStats(player),
-    logs: player.logs.slice(-20).reverse(), lastTick: player.lastTick,
+    // v1.03 修复：老存档缺 logs 字段 → getPlayerView 崩溃
+    //   修复前：player.logs.slice(-20) → TypeError: Cannot read 'slice' of undefined
+    //   修复后：fallback 到 []，migratePlayer 也已保证 logs 字段存在（line 196）
+    logs: Array.isArray(player.logs) ? player.logs.slice(-20).reverse() : [], lastTick: player.lastTick,
     canChooseJob: player.level >= 11 && !player.jobPath,
     canEvolve: nextRace ? (player.level >= nextRace.reqLevel) : false,
     jobInfo,

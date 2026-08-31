@@ -49,23 +49,50 @@ function resolveDistPath(pathname) {
 }
 
 // 把请求原样转发给后端：请求体直接管道传过去，响应体再管道传回来
+// v1.03 P1 1.7：加超时（防慢请求耗连接）+ body 大小限制（防恶意大 body）
 function proxyApi(req, res) {
   const target = new URL(req.url, API_ORIGIN);
   const apiReq = http.request(target, {
     method: req.method,
-    headers: { ...req.headers, host: `127.0.0.1:${API_PORT}` }
+    headers: { ...req.headers, host: `127.0.0.1:${API_PORT}` },
+    timeout: 30000, // 30s 超时（防慢请求占用连接）
   }, (apiRes) => {
     res.writeHead(apiRes.statusCode, apiRes.headers);
     apiRes.pipe(res);
   });
+  apiReq.on('timeout', () => {
+    apiReq.destroy(new Error('upstream timeout'));
+  });
   apiReq.on('error', (err) => {
     if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+      const status = err.message === 'upstream timeout' ? 504 : 502;
+      res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
     }
     res.end(JSON.stringify({
       success: false,
-      message: `无法连接后端(${API_PORT})：${err.message}。请确认后端已启动。`
+      message: err.message === 'upstream timeout'
+        ? '后端响应超时（30s）'
+        : `无法连接后端(${API_PORT})：${err.message}。请确认后端已启动。`
     }));
+  });
+  // body 大小限制：默认 1MB（超过直接断连 + 413）
+  const MAX_BODY = parseInt(process.env.WEB_MAX_BODY || '1048576', 10);
+  let total = 0;
+  let aborted = false;
+  req.on('data', (chunk) => {
+    if (aborted) return;
+    total += chunk.length;
+    if (total > MAX_BODY) {
+      aborted = true;
+      apiReq.destroy();
+      if (!res.headersSent) {
+        res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8' });
+      }
+      res.end(JSON.stringify({
+        success: false,
+        message: `请求体超过最大尺寸 ${MAX_BODY} 字节`,
+      }));
+    }
   });
   req.pipe(apiReq);
 }

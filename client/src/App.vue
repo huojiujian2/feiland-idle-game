@@ -113,7 +113,7 @@
 // 5. 业务事件：加点、装备、商店、登神、转生、竞技场等
 // 6. 组合 10+ 子组件：LoginScreen / TopBar / TabBar / 9 个业务页 / 3 个弹窗
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue';
-import api from './api.js';
+import api, { getToken, getUsername, setUnauthorizedHandler, clearAuth } from './api.js';
 import { toast, modalAlert, modalConfirm } from './ui-bridge.js';
 import UIBridge from './components/UIBridge.vue';
 import LoginScreen from './components/LoginScreen.vue';
@@ -165,6 +165,48 @@ onMounted(() => {
   vv.addEventListener('scroll', update);
   update();
   vvCleanup = () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+
+  // v1.03：注册 401 全局回调 — token 失效时跳回登录页
+  setUnauthorizedHandler(() => {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    player.value = null;
+    hasHydrated = false;
+    currentUser = '';
+    currentUserRef.value = '';
+    offlineSummary.value = { visible: false, data: null };
+    activeTab.value = 'char';
+    try { toast('登录已过期，请重新登录'); } catch (_) {}
+  });
+
+  // v1.03：自动恢复登录态（localStorage 中的 token + username）
+  const savedToken = getToken();
+  const savedUser = getUsername();
+  if (savedToken && savedUser) {
+    currentUser = savedUser;
+    currentUserRef.value = savedUser;
+    hasHydrated = true;
+    // 后台静默拉数据（不阻塞 UI）
+    (async () => {
+      try {
+        const r = await api.getPlayer(savedUser);
+        if (r && r.success && r.data && r.data.player) {
+          player.value = r.data.player;
+          if (r.data.offlineSummary) offlineSummary.value = { visible: true, data: r.data.offlineSummary };
+        } else if (r && !r.success && /登录|token|未登录/.test(r.message || '')) {
+          // token 已被服务端拒绝 → 回调已自动清掉 → 回到登录页
+        }
+      } catch (_) { /* 网络问题，保留 token 让用户重试 */ }
+    })();
+    // 5s 轮询
+    pollTimer = setInterval(async () => {
+      try {
+        const r = await api.getPlayer(currentUser);
+        if (r && r.success && r.data && r.data.player) {
+          player.value = r.data.player;
+        }
+      } catch (_) {}
+    }, 5000);
+  }
 });
 onUnmounted(() => { if (vvCleanup) vvCleanup(); });
 
@@ -576,6 +618,8 @@ function logout() {
   offlineSummary.value = { visible: false, data: null };
   levelUpNotice.value = null;
   activeTab.value = 'char';
+  // v1.03：清除持久化 token + username
+  try { clearAuth(); } catch (_) {}
 }
 
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });

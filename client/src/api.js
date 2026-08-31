@@ -1,43 +1,110 @@
-// API 请求封装
+// API 请求封装 · v1.03 · JWT 鉴权支持
+// 登录成功后服务端返回 { token, username }，这里保存到 localStorage，
+// 每次请求自动附带 Authorization: Bearer <token>。
+// 401 响应 → 清除 + 触发回调（让 App.vue 跳回登录页）。
+
 const BASE = '/api'
+const TOKEN_KEY = 'ferland-jwt'
+const USERNAME_KEY = 'ferland-username'
+
+// 全局 401 回调（由 App.vue 设置）
+let onUnauthorized = () => {
+  try {
+    // 默认 fallback：清掉 token，让下次跳到登录页
+    clearAuth()
+  } catch (_) {}
+}
+
+export function setUnauthorizedHandler(fn) { onUnauthorized = fn }
+export function getToken() { try { return localStorage.getItem(TOKEN_KEY) } catch (_) { return null } }
+export function getUsername() { try { return localStorage.getItem(USERNAME_KEY) } catch (_) { return null } }
+export function clearAuth() {
+  try { localStorage.removeItem(TOKEN_KEY) } catch (_) {}
+  try { localStorage.removeItem(USERNAME_KEY) } catch (_) {}
+}
+export function setAuth(token, username) {
+  try {
+    localStorage.setItem(TOKEN_KEY, token)
+    if (username) localStorage.setItem(USERNAME_KEY, username)
+  } catch (_) {}
+}
 
 async function request(url, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {})
+  }
+  // 自动附带 Authorization header
+  const tok = getToken()
+  if (tok) headers['Authorization'] = `Bearer ${tok}`
+
+  let res
   try {
-    const res = await fetch(BASE + url, {
-      headers: { 'Content-Type': 'application/json' },
-      ...options
+    res = await fetch(BASE + url, {
+      ...options,
+      headers
     })
-    // 先解析 body（服务器出错时 body 里也可能带 message）
-    let data = null
-    try { data = await res.json() } catch (_) { data = null }
-    if (!res.ok) {
-      return { success: false, message: (data && data.message) || `请求失败 (${res.status})` }
+  } catch (e) {
+    // v1.03 P2 3.6：网络异常打印真实信息（debug 用）+ 友好的用户提示
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[api] 网络异常:', url, e && e.message);
     }
-    if (!data || typeof data.success === 'undefined') {
-      return { success: false, message: '服务器响应格式异常' }
-    }
-    return data
-  } catch (_) {
-    // 断网 / 后端未启动 / DNS 失败等：统一转为可提示的错误结果，避免 unhandled rejection
     return { success: false, message: '网络异常：无法连接服务器，请确认后端已启动' }
   }
+  // 401 → token 无效/过期 → 清掉 + 回调
+  if (res.status === 401) {
+    try { clearAuth() } catch (_) {}
+    try { onUnauthorized() } catch (_) {}
+    let data = null
+    try { data = await res.json() } catch (_) {}
+    return { success: false, message: (data && data.message) || '未登录或登录已过期' }
+  }
+  let data = null
+  try { data = await res.json() } catch (_) { data = null }
+  if (!res.ok) {
+    // 5xx 服务端错误 → console.error 打印详情（便于排查）+ 用户友好提示
+    if (res.status >= 500 && typeof console !== 'undefined' && console.error) {
+      console.error('[api] 服务端错误:', url, res.status, data && data.message);
+    }
+    return { success: false, message: (data && data.message) || `请求失败 (${res.status})` }
+  }
+  if (!data || typeof data.success === 'undefined') {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[api] 响应格式异常:', url, data);
+    }
+    return { success: false, message: '服务器响应格式异常' }
+  }
+  return data
 }
 
 export default {
   // 账号
-  register(username, password) { return request('/register', { method: 'POST', body: JSON.stringify({ username, password }) }) },
-  login(username, password) { return request('/login', { method: 'POST', body: JSON.stringify({ username, password }) }) },
-  createCharacter(username, charName) { return request(`/player/${username}/create-character`, { method: 'POST', body: JSON.stringify({ charName }) }) },
+  register(username, password) {
+    return request('/register', { method: 'POST', body: JSON.stringify({ username, password }) })
+  },
+  async login(username, password) {
+    const r = await request('/login', { method: 'POST', body: JSON.stringify({ username, password }) })
+    // 登录成功后保存 token
+    if (r && r.success && r.token) {
+      setAuth(r.token, r.username || username)
+    }
+    return r
+  },
+  async createCharacter(username, charName) {
+    const r = await request(`/player/${username}/create-character`, { method: 'POST', body: JSON.stringify({ charName }) })
+    // 创建角色成功后 token 可能不变（已在登录时拿到）；若服务端同时返回新 token 也覆盖
+    if (r && r.success && r.token) setAuth(r.token, r.username || username)
+    return r
+  },
 
-  // 角色
+  // 玩家
   getPlayer(username) { return request(`/player/${username}`) },
   changeArea(username, areaId) { return request(`/player/${username}/area`, { method: 'POST', body: JSON.stringify({ areaId }) }) },
   allocateAttributes(username, allocation) { return request(`/player/${username}/attributes`, { method: 'POST', body: JSON.stringify(allocation) }) },
   autoAllocate(username) { return request(`/player/${username}/auto-allocate`, { method: 'POST' }) },
   applyPresetRatio(username, ratio) { return request(`/player/${username}/attr-presets/apply-by-ratio`, { method: 'POST', body: JSON.stringify({ ratio }) }) },
 
-  // 属性预设（v0.8+：payload 可能是 string 也可能是 {name, slot, attributes, delta} 对象）
-  // v1.02：更新玩家头像 emoji
+  // 属性预设
   setAvatar(username, avatar) {
     return request(`/player/${username}/avatar`, { method: 'POST', body: JSON.stringify({ avatar: avatar || '' }) })
   },
@@ -46,27 +113,23 @@ export default {
     if (typeof payload === 'string') {
       body = { name: payload };
     } else {
-      body = payload; // { name, slot, attributes, delta }
+      body = payload;
     }
     return request(`/player/${username}/attr-presets`, {
       method: 'POST', body: JSON.stringify(body)
     })
   },
-  // 应用预设：按 presetId（后端保存返回的 id 字段）
   applyAttrPreset(username, presetId) {
     return request(`/player/${username}/attr-presets/${presetId}/apply`, { method: 'POST' })
   },
-  // 按 slot 索引删除预设（CharacterView 只有 slot 0/1/2 索引）
   deleteAttrPresetBySlot(username, slot) {
     return request(`/player/${username}/attr-presets/delete-by-slot`, { method: 'POST', body: JSON.stringify({ slot }) })
   },
-  // 按 presetId 删除预设（备用）
   deleteAttrPreset(username, presetId) {
     return request(`/player/${username}/attr-presets/${presetId}`, { method: 'DELETE' })
   },
 
   // 转生点商店
-  // v7：传 username 拿到"该玩家"的动态价格（已买次数 + 1）
   getReincShop(username) {
     return request(`/reinc-shop${username ? `?username=${encodeURIComponent(username)}` : ''}`)
   },
@@ -89,7 +152,7 @@ export default {
   equip(username, itemUid) { return request(`/player/${username}/equip`, { method: 'POST', body: JSON.stringify({ itemUid }) }) },
   unequip(username, slot) { return request(`/player/${username}/unequip`, { method: 'POST', body: JSON.stringify({ slot }) }) },
 
-  // 商店（携带用户名，后端按等级过滤材料货架）
+  // 商店
   getShop(username) { return request(`/shop${username ? `?username=${encodeURIComponent(username)}` : ''}`) },
   buy(username, itemId, count) { return request(`/player/${username}/buy`, { method: 'POST', body: JSON.stringify({ itemId, count }) }) },
   useItem(username, itemId, count) { return request(`/player/${username}/use`, { method: 'POST', body: JSON.stringify({ itemId, count }) }) },
@@ -123,7 +186,6 @@ export default {
     return request(`/leaderboard${q}`)
   },
   reincarnate(username) { return request(`/player/${username}/reincarnate`, { method: 'POST' }) },
-  // 内测：一键转生（后续随经验卷轴一起删除）
   autoReincarnate(username, times, targetLevel) {
     return request(`/player/${username}/auto-reincarnate`, { method: 'POST', body: JSON.stringify({ times, targetLevel }) })
   },
@@ -147,14 +209,13 @@ export default {
       body: JSON.stringify({ itemUid })
     })
   },
-  // v1.02：背包排序持久化
   sortInventory(username) {
     return request(`/player/${username}/inventory/sort`, {
       method: 'POST',
       body: JSON.stringify({})
     })
   },
-  // 世界 BOSS（v2.9 重构：按全服最强 10 倍、每日 1 次、5 回合战报、伤害前三 24h 称号）
+  // 世界 BOSS
   getWorldBoss(username) {
     const q = username ? `?username=${encodeURIComponent(username)}` : '';
     return request(`/worldboss/active${q}`);
@@ -163,11 +224,11 @@ export default {
     return request(`/player/${username}/worldboss/attack`, { method: 'POST' })
   },
 
-  // 称号系统（v2.9 新增）
+  // 称号
   getTitles(username) { return request(`/player/${username}/titles`) },
   equipTitle(username, key) { return request(`/player/${username}/titles/equip`, { method: 'POST', body: JSON.stringify({ key }) }) },
 
-  // 灵鸡斗场（完全独立玩法：不消耗主游戏资源，唯一产出斗鸡积分换外观称号）
+  // 灵鸡斗场
   getCockfight(username) { return request(`/player/${username}/cockfight`) },
   enterCockArena(username) { return request(`/player/${username}/cockfight/enter`, { method: 'POST' }) },
   resolveCockRound(username, bet, intervention, createdAt) {
@@ -177,25 +238,24 @@ export default {
     return request(`/player/${username}/cockfight/exchange`, { method: 'POST', body: JSON.stringify({ titleKey }) })
   },
 
-  // 创世之书（二转解锁）
+  // 创世之书
   getGenesis(username) { return request(`/player/${username}/genesis`) },
   birthMonster(username, draft) { return request(`/player/${username}/genesis/monster`, { method: 'POST', body: JSON.stringify(draft) }) },
   forgeEquip(username, draft) { return request(`/player/${username}/genesis/equip`, { method: 'POST', body: JSON.stringify(draft) }) },
   deleteGenesis(username, kind, id) { return request(`/player/${username}/genesis/delete`, { method: 'POST', body: JSON.stringify({ kind, id }) }) },
-  // 全服玩家名册（username → name 映射，用于显示"X造"）
   getPlayerNames() { return request('/players/names') },
 
   // 战斗策略
   setStrategy(username, strategy) { return request(`/player/${username}/strategy`, { method: 'POST', body: JSON.stringify({ strategy }) }) },
 
-  // 远征（T-102）
+  // 远征
   getExpeditionConfig() { return request('/expedition/config') },
   getExpedition(username) { return request(`/player/${username}/expedition`) },
   dispatchExpedition(username, areaId, durationKey) { return request(`/player/${username}/expedition/dispatch`, { method: 'POST', body: JSON.stringify({ areaId, durationKey }) }) },
   chooseExpeditionEvent(username, eventId, choiceId) { return request(`/player/${username}/expedition/event/choose`, { method: 'POST', body: JSON.stringify({ eventId, choiceId }) }) },
   claimExpedition(username, expeditionId) { return request(`/player/${username}/expedition/claim`, { method: 'POST', body: JSON.stringify({ expeditionId }) }) },
 
-  // 公会（T-103）
+  // 公会
   getGuilds(q, page, pageSize) {
     const qs = new URLSearchParams();
     if (q) qs.set('q', q);
@@ -215,7 +275,7 @@ export default {
   donateGuild(username, donateId) { return request(`/player/${username}/guild/donate`, { method: 'POST', body: JSON.stringify({ donateId }) }) },
   disbandGuild(username) { return request(`/player/${username}/guild/disband`, { method: 'POST' }) },
 
-  // 任务/委托
+  // 任务
   claimDaily(username, questId) { return request(`/player/${username}/quest/daily/${questId}/claim`, { method: 'POST' }) },
   claimChest(username) { return request(`/player/${username}/quest/chest/claim`, { method: 'POST' }) },
   claimAchievement(username, achId) { return request(`/player/${username}/quest/achievement/${achId}/claim`, { method: 'POST' }) },
@@ -249,12 +309,4 @@ export default {
     const q = username ? `?username=${encodeURIComponent(username)}` : '';
     return request(`/arena/rewards/${period}${q}`)
   },
-  // settleArena 已废弃：竞技场奖励改为自动结算，前端不再调用
-  // （接口保留以便日后排查/管理员手动触发）
-  // settleArena(period) {
-  //   return request('/arena/settle', {
-  //     method: 'POST',
-  //     body: JSON.stringify({ period })
-  //   })
-  // }
 }

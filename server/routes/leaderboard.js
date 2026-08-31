@@ -42,6 +42,9 @@ function registerLeaderboardRoutes(app, store) {
   app.get('/api/leaderboard', (req, res) => {
     const type = req.query.type || 'level';
     if (!LEADERBOARD_CONFIG[type]) return fail(res, '无效的排行类型');
+    // v1.03 P2 2.10：分页（page + pageSize），默认前 100 条
+    const page = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
+    const pageSize = Math.min(200, Math.max(1, parseInt(req.query.pageSize || '100', 10) || 100));
     const players = store.getAllPlayers().map(p => {
       const rp = getReadonlyPlayer(p);
       const power = getPowerScore(rp);
@@ -91,10 +94,22 @@ function registerLeaderboardRoutes(app, store) {
     });
     const sorted = [...players].sort(LEADERBOARD_CONFIG[type].sort);
     const rankedFull = sorted.map((p, idx) => ({ rank: idx + 1, ...p }));
-    const ranked = rankedFull.slice(0, 100);
+    // v1.03 P2 2.10：分页切片（保留 myRank 在全榜中查找）
+    const startIdx = (page - 1) * pageSize;
+    const ranked = rankedFull.slice(startIdx, startIdx + pageSize);
     let myRank = null;
     if (req.query.username) myRank = rankedFull.find(p => p.username === req.query.username) || null;
-    res.json({ success: true, data: { type, total: players.length, list: ranked, myRank } });
+    res.json({
+      success: true,
+      data: {
+        type,
+        total: players.length,
+        page,
+        pageSize,
+        list: ranked,
+        myRank,
+      },
+    });
   });
 }
 
