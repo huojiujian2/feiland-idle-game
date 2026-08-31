@@ -8,11 +8,65 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const { __getSecret } = require('../middleware/auth');
 
 function registerDiagRoutes(app, store) {
   // 健康检查（极轻量，无 process.memoryUsage 调用）
   app.get('/api/diag/health', (req, res) => {
     res.json({ success: true, data: { ok: true, ts: Date.now() } });
+  });
+
+  // v1.03 诊断：分析 401 错误来源（生产环境排查）
+  //   GET /api/diag/auth-debug?token=<=<token>>>
+  //   返回 JWT_SECRET 指纹 + token 验证结果（不返回 secret 本身）
+  //   用于排查"服务器重启后 SECRET 改了导致所有 token 失效"等问题
+  app.get('/api/diag/auth-debug', (req, res) => {
+    try {
+      const token = req.query.token || (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+      const secret = __getSecret();
+      // 算 SECRET 指纹（不暴露原值，只暴露 SHA256 前 8 位）
+      const secretHash = crypto.createHash('sha256').update(secret).digest('hex').slice(0, 12);
+      const result = {
+        secretFingerprint: secretHash,
+        secretLength: secret.length,
+        isDevSecret: secret === 'feiland-dev-secret-DO-NOT-USE-IN-PROD',
+        tokenProvided: !!token,
+        tokenLength: token ? token.length : 0,
+        tokenValid: false,
+        tokenError: null,
+        tokenClaims: null,
+        nodeEnv: process.env.NODE_ENV || 'development',
+        authMode: process.env.AUTH_MODE || 'enforce',
+        jwtSecretEnvSet: !!process.env.JWT_SECRET,
+        uptimeSeconds: Math.floor(process.uptime()),
+        ts: Date.now(),
+      };
+      if (token) {
+        try {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const [h, b, s] = parts;
+            const expectedSig = crypto.createHmac('sha256', secret).update(`${h}.${b}`).digest();
+            const actualSig = Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+            const sigMatch = expectedSig.length === actualSig.length && crypto.timingSafeEqual(expectedSig, actualSig);
+            const claims = JSON.parse(Buffer.from(b.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8'));
+            result.tokenClaims = { username: claims.username, iat: claims.iat, exp: claims.exp };
+            result.tokenExpired = claims.exp < Date.now();
+            result.tokenValid = sigMatch && !result.tokenExpired;
+            if (!sigMatch) result.tokenError = 'signature_mismatch（SECRET 改了！）';
+            else if (result.tokenExpired) result.tokenError = 'token_expired（7 天 TTL 已过）';
+          } else {
+            result.tokenError = 'malformed（不是合法 JWT 格式）';
+          }
+        } catch (e) {
+          result.tokenError = 'parse_error: ' + e.message;
+        }
+      }
+      res.json({ success: true, data: result });
+    } catch (e) {
+      res.status(500).json({ success: false, message: e.message });
+    }
   });
 
   // 内存监控

@@ -53,6 +53,11 @@ describe('/api/diag/* 诊断路由', () => {
     app.use(express.json());
     registerDiagRoutes(app, store);
   });
+  afterEach(() => {
+    // 每个用例后恢复 JWT_SECRET 到测试环境的默认值
+    // 防止 SECRET 污染到其他测试或共享 dev server 进程
+    try { require('../middleware/auth').__resetSecret(); } catch (_) {}
+  });
   after(() => {
     store.__setDisableSave(false);
     delete process.env.DB_ENGINE;
@@ -98,5 +103,58 @@ describe('/api/diag/* 诊断路由', () => {
     const bodyStr = JSON.stringify(res.body);
     assert.equal(bodyStr.indexOf('should_not_leak'), -1, '不应包含 token');
     assert.equal(bodyStr.indexOf('SecretPlayer'), -1, '不应包含玩家 name');
+  });
+
+  // ===== /api/diag/auth-debug：401 排查工具 =====
+  it('/api/diag/auth-debug 返回 secret 指纹（不暴露原值）', async () => {
+    const res = await makeRequest(app, 'GET', '/api/diag/auth-debug');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.success, true);
+    const d = res.body.data;
+    assert.equal(typeof d.secretFingerprint, 'string');
+    assert.equal(d.secretFingerprint.length, 12);
+    assert.equal(typeof d.secretLength, 'number');
+    assert.equal(typeof d.isDevSecret, 'boolean');
+    assert.equal(typeof d.tokenProvided, 'boolean');
+    assert.equal(typeof d.authMode, 'string');
+    assert.equal(typeof d.jwtSecretEnvSet, 'boolean');
+    // 不应包含 secret 原文
+    assert.equal(JSON.stringify(res.body).indexOf('feiland-dev-secret'), -1, '不应暴露 secret 原文');
+  });
+
+  it('/api/diag/auth-debug 验证有效 token', async () => {
+    const { signToken } = require('../middleware/auth');
+    const tok = signToken({ username: 'alice' });
+    const res = await makeRequest(app, 'GET', `/api/diag/auth-debug?token=${encodeURIComponent(tok)}`);
+    assert.equal(res.status, 200);
+    const d = res.body.data;
+    assert.equal(d.tokenProvided, true);
+    assert.equal(d.tokenValid, true);
+    assert.equal(d.tokenError, null);
+    assert.equal(d.tokenClaims.username, 'alice');
+    assert.equal(d.tokenExpired, false);
+  });
+
+  it('/api/diag/auth-debug 识别伪造 token（SECRET 改了场景）', async () => {
+    const { signToken, __setSecret } = require('../middleware/auth');
+    __setSecret('original-secret');
+    const tok = signToken({ username: 'bob' });
+    // 模拟服务器重启后 SECRET 改了
+    __setSecret('new-secret-after-restart');
+    const res = await makeRequest(app, 'GET', `/api/diag/auth-debug?token=${encodeURIComponent(tok)}`);
+    const d = res.body.data;
+    assert.equal(d.tokenValid, false);
+    assert.equal(d.tokenError, 'signature_mismatch（SECRET 改了！）');
+  });
+
+  it('/api/diag/auth-debug 识别过期 token', async () => {
+    const { signToken } = require('../middleware/auth');
+    // TTL=-1000 = 已过期
+    const tok = signToken({ username: 'carol' }, -1000);
+    const res = await makeRequest(app, 'GET', `/api/diag/auth-debug?token=${encodeURIComponent(tok)}`);
+    const d = res.body.data;
+    assert.equal(d.tokenValid, false);
+    assert.equal(d.tokenExpired, true);
+    assert.match(d.tokenError, /token_expired/);
   });
 });
