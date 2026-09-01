@@ -146,8 +146,9 @@ function registerPvpRoutes(app, store, deps = {}) {
           if (ctx.username !== username || ctx.targetUsername !== targetUsername || !!ctx.isBot !== !!isBot) {
             return { status: 409, message: 'requestId 冲突' };
           }
+          // v1.03 冷数据归档：明细超 24h 已剥离 → 明细不可重放，但凭据有效（不可重复领奖）
           if (!found.fullResult) {
-            return { status: 500, message: '数据损坏' };
+            return { status: 410, message: '该战斗明细已归档', archived: true };
           }
           const v = assertPvpChallengeResult(found.fullResult);
           if (!v.valid) return { status: 500, message: '数据损坏:' + v.message };
@@ -162,8 +163,9 @@ function registerPvpRoutes(app, store, deps = {}) {
           if (ctx.username !== username || ctx.targetUsername !== targetUsername || !!ctx.isBot !== !!isBot) {
             return { status: 409, message: 'requestId 冲突' };
           }
+          // v1.03 冷数据归档：明细超 24h 已剥离
           if (!rec.fullResult) {
-            return { status: 500, message: '数据损坏' };
+            return { status: 410, message: '该战斗明细已归档', archived: true };
           }
           const v2 = assertPvpChallengeResult(rec.fullResult);
           if (!v2.valid) return { status: 500, message: '数据损坏:' + v2.message };
@@ -255,7 +257,15 @@ function registerPvpRoutes(app, store, deps = {}) {
         targetName: target.name || target.username,
         targetLevel: target.level,
         targetJob: target.job || '无',
-        player: getPlayerView(player),
+        // v1.03 冷数据优化：player 只保留校验器（assertPvpChallengeResult）要求的 4 个轻字段。
+        //   原来嵌完整 getPlayerView(player)，而 view 又含 settlementLedger.slice(-100)（内含
+        //   历史 fullResult）→ 递归嵌套，单条 ledger 可达 6.5MB。这是内存暴涨的主因之一。
+        player: {
+          username: player.username,
+          name: player.name,
+          level: player.level,
+          pvpStats: player.pvpStats,
+        },
       };
 
       // settlement ledger with strong-type validation

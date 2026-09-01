@@ -36,3 +36,6 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# v1.03 冷数据归档（玩家日志磁盘归档）
+server/logs-archive/

@@ -350,7 +350,7 @@ function startTimers() {
   ticker = setInterval(() => {
     if (remainingMs.value > 0) remainingMs.value = Math.max(0, remainingMs.value - 1000);
   }, 1000);
-  poller = setInterval(loadExpedition, 5000);
+  poller = setInterval(loadExpedition, 15000); // v1.03 优化：5s→15s（远征页面独立轮询）
 }
 
 onMounted(async () => {

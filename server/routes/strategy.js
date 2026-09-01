@@ -56,7 +56,7 @@ function registerStrategyRoute(app, store) {
       from: old, to: strategy, strategy,
       text: `策略切换：${STRATEGIES[old].name}→${STRATEGIES[strategy].name}`,
     });
-    if (player.logs.length > 30) player.logs = player.logs.slice(-30);
+    if (player.logs.length > 10) player.logs = player.logs.slice(-10); // v1.03：30→10
     store.setPlayer(player.username, player);
     store.safeSave();
     res.json({ success: true, data: getPlayerView(player) });

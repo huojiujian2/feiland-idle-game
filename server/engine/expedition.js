@@ -271,7 +271,8 @@ function claimExpedition(player, expeditionId, ctx) {
   // 1) 先查 ledger 重放
   const ledger = Array.isArray(player.settlementLedger) ? player.settlementLedger.find(e => e.id === settlementId) : null;
   if (ledger) {
-    if (!ledger.fullResult) return { success: false, message: '数据损坏', code: 500 };
+    // v1.03 冷数据归档：明细超 24h 已剥离（凭据仍有效，不可重复领取）
+    if (!ledger.fullResult) return { success: false, message: '该远征报告已归档', code: 410 };
     return { success: true, already: true, report: ledger.fullResult, settlementId };
   }
   // 2) 校验当前远征

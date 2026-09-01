@@ -86,6 +86,23 @@ app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '100kb' }));
       try { engine.maybeDecayGenesisEquips(store); } catch (e) { console.error('[genesis decay] 异常:', e.message); }
     }, 60 * 60 * 1000);
 
+    // v1.03 冷数据归档：每小时清扫一次（幂等，可重复执行）
+    //   - 玩家日志内存保留 10 条，旧的追加到磁盘 logs-archive/
+    //   - ledger / pvpRecords 的 fullResult 明细超 24h 剥离（防重放凭据保留）
+    setInterval(() => {
+      try {
+        const r = engine.runColdDataSweep(store);
+        if (r && (r.trimmedLogs + r.strippedLedger + r.strippedRecords) > 0) {
+          console.log(`[冷数据归档] 日志归档 ${r.trimmedLogs} 条 | ledger 明细剥离 ${r.strippedLedger} 条 | pvpRecords 明细剥离 ${r.strippedRecords} 条`);
+        }
+      } catch (e) { console.error('[冷数据归档] 异常:', e.message); }
+    }, 60 * 60 * 1000);
+    // 启动时先跑一次（把存量大数据清掉 —— 部署后 1 小时内生效）
+    try {
+      const r0 = engine.runColdDataSweep(store);
+      console.log(`[冷数据归档] 启动清扫完成: 日志 ${r0.trimmedLogs} 条, ledger ${r0.strippedLedger} 条, pvpRecords ${r0.strippedRecords} 条`);
+    } catch (e) { console.error('[冷数据归档] 启动清扫失败:', e.message); }
+
     // 每 30 秒持久化 — safeSave
     setInterval(() => store.safeSave(), 30000);
 

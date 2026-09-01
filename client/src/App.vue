@@ -197,7 +197,7 @@ onMounted(() => {
         }
       } catch (_) { /* 网络问题，保留 token 让用户重试 */ }
     })();
-    // 5s 轮询（v1.03 杠杆 2：用 getPlayerLight 替代 getPlayer，避开 withTransaction 序列化 120MB）
+    // 10s 轮询（v1.03 优化：5s→10s，QPS 减半；getPlayerLight 缓存命中 <1ms）
     pollTimer = setInterval(async () => {
       try {
         const r = await api.getPlayerLight(currentUser);
@@ -205,7 +205,7 @@ onMounted(() => {
           player.value = r.data.player;
         }
       } catch (_) {}
-    }, 5000);
+    }, 10000);
   }
 });
 onUnmounted(() => { if (vvCleanup) vvCleanup(); });
@@ -376,7 +376,7 @@ async function startPolling() {
       // v0.9：首次达到 Lv.100 且未转生 → 弹转生提醒弹窗（一次性）
       maybeShowReincarnHint(p);
     }
-  }, 5000);
+  }, 10000); // v1.03 优化：5s→10s，QPS 减半
 }
 
 // v0.9：检测是否需要弹出"满百级转生提醒"

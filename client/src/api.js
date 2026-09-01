@@ -66,7 +66,8 @@ async function request(url, options = {}) {
     if (res.status >= 500 && typeof console !== 'undefined' && console.error) {
       console.error('[api] 服务端错误:', url, res.status, data && data.message);
     }
-    return { success: false, message: (data && data.message) || `请求失败 (${res.status})` }
+    // v1.03：附带 status 码（客户端需要区分 409/410 等"请求已处理"状态来清理重试 ID）
+    return { success: false, status: res.status, message: (data && data.message) || `请求失败 (${res.status})` }
   }
   if (!data || typeof data.success === 'undefined') {
     if (typeof console !== 'undefined' && console.warn) {

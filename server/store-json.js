@@ -212,6 +212,13 @@ function markDirty() {
   }
 }
 
+// v1.03 冷数据归档：清扫器修改数据后立即落盘（同步，防测试环境数据丢失）
+function markDirtyForSweep() {
+  if (_disableSave) return;
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  safeSave();
+}
+
 let _lastBakAt = 0;
 function save() {
   if (_disableSave) return;
@@ -220,7 +227,10 @@ function save() {
     trimArenaRewards();
     try { trimGuilds(); } catch(_){}
     try { trimArenaBots(); } catch(_){}  // v1.03 P0：清理过期 arenaBots 缓存
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
+    // v1.03 冷数据归档：紧凑序列化（原 null,2 缩进格式空白占 70% —— 117MB 存档实际数据仅 35MB）。
+    //   落盘体积 -70% = 写盘量 -70%，且序列化时的临时字符串内存峰值同步下降。
+    //   兼容性：JSON.parse 读回完全一致，缩进只影响"人类可读性"（调试可临时改回 null,2）
+    fs.writeFileSync(tmpPath, JSON.stringify(data));
     const nowMs = _getNow();
     if (fs.existsSync(DB_PATH) && nowMs - _lastBakAt > 60 * 60 * 1000) {
       fs.copyFileSync(DB_PATH, DB_PATH + '.bak');
@@ -275,7 +285,7 @@ function getMeta() { return data.meta; }
 function setMeta(meta) { data.meta = meta; markDirty(); }
 
 // JSON 后端也支持 async load()（load 已返回 Promise.resolve，让 store.js 派发层统一 await）
-module.exports = { load, save, safeSave, withTransaction, snapshot, restore, getLastSaveError, clearLastSaveError, cancelSaveTimer, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, getMeta, setMeta, __setDisableSave, __setDbPath, __resetStore, __getRawData: () => data,
+module.exports = { load, save, safeSave, withTransaction, snapshot, restore, getLastSaveError, clearLastSaveError, cancelSaveTimer, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, getMeta, setMeta, markDirtyForSweep, __setDisableSave, __setDbPath, __resetStore, __getRawData: () => data,
   // v1.03：arenaBots 进程内存缓存 API（从 meta 搬出）
   arenaBotsCacheGet, arenaBotsCacheSet, arenaBotsCacheDelete, arenaBotsCacheClear, arenaBotsCacheStats,
   // v1.03 杠杆 4：view 缓存 API

@@ -173,7 +173,7 @@ function calculateIdle(player) {
     combatDodge: battle.combatStats.dodge
   };
   player.logs.push(logEntry);
-  if (player.logs.length > 30) player.logs = player.logs.slice(-30);
+  if (player.logs.length > 10) player.logs = player.logs.slice(-10); // v1.03：30→10，旧日志由 cold-archive 归档到磁盘
 
   const levelUps = [];
   while (player.exp >= expToNext(player.level)) {
@@ -318,7 +318,7 @@ function _calculateIdleBatch(player, area, elapsed) {
     batch: true, battles, wins, losses, draws,
   };
   player.logs.push(logEntry);
-  if (player.logs.length > 30) player.logs = player.logs.slice(-30);
+  if (player.logs.length > 10) player.logs = player.logs.slice(-10); // v1.03：30→10
   if (levelUps > 0) {
     player.logs.push({ time: getNow(), type: 'levelup', level: player.level, text: `离线结算升级！Lv.${player.level}` });
   }

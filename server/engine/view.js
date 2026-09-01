@@ -147,7 +147,8 @@ function getPlayerView(player) {
     strategy, strategyChangedAt, strategyCdRemaining, strategies,
     titles: player.titles || {}, titleExpiry: player.titleExpiry || {}, currentTitle: player.currentTitle || null,
     questView,
-    settlementLedger: Array.isArray(player.settlementLedger) ? player.settlementLedger.slice(-100) : [],
+    // v1.03 冷数据优化：settlementLedger 从 view 移除 —— 客户端零引用（纯服务端防重放凭据），
+    //   原来每次 view 响应携带 slice(-100)（含最大 6.5MB 的 fullResult 明细），纯浪费带宽和内存
     pvpStats: player.pvpStats,
     combatStats: player.combatStats,
     attrPresets: player.attrPresets || [],

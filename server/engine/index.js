@@ -109,6 +109,9 @@ function restore(snap) {
 
 // ====== 统一导出（与原 engine.js 保持兼容） ======
 module.exports = {
+  // v1.03 冷数据归档（日志裁剪 + fullResult 明细剥离）
+  runColdDataSweep: require('./cold-archive').runColdDataSweep,
+
   // 测试 seam
   getNow: state.getNow,
   __setNow: state.__setNow,

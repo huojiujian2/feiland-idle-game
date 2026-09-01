@@ -405,6 +405,12 @@ function markDirty() {
   _dirty = true;
 }
 
+// v1.03 冷数据归档：清扫器修改数据后标记脏 + 尽快落盘（复用 safeSave 防抖逻辑）
+function markDirtyForSweep() {
+  _dirty = true;
+  safeSave();
+}
+
 function withTransaction(fn) {
   const snap = snapshot();
   const epochAt = _epoch;
@@ -469,6 +475,7 @@ module.exports = {
   getAllPlayers,
   getMeta,
   setMeta,
+  markDirtyForSweep, // v1.03 冷数据归档清扫用
   __setDisableSave,
   __setDbPath,
   __resetStore,

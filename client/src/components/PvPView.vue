@@ -173,6 +173,8 @@ async function doChallenge(opp) {
       // network/server error message — keep pendingRequestId for retry if network-ish
       // only clear on business 409 etc? Keep for retry on network failure; clear on explicit business reject?
       // spec says retry should reuse same pendingRequestId until success, so keep it unless success
+      // v1.03：410 = 明细已归档（该请求已结算过）→ 清掉重试 ID，不再重试
+      if (res.status === 410) pendingRequestId.value = null;
       toast.error(res.message || '挑战失败');
     }
   } catch (e) {
