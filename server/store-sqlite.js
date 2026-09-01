@@ -36,6 +36,9 @@ let data = { accounts: {}, players: {}, meta: {} };
 //   修复前：meta.arenaBots 随每次 safeSave 整体序列化进 SQLite（500KB-2MB 永久驻留）
 //   修复后：纯进程内存 Map，TTL 过期删除，硬上限 200 LRU 淘汰
 //           不参与序列化（safeSave 跳过），不参与 SQLite 落盘
+// v1.04 性能修复：事务成功后的去抖落盘窗口（ms）
+//   旧逻辑每个写事务都立即全量落盘（~1.3s 同步阻塞）；新逻辑 2s 窗口内合并。
+const TX_SAVE_DEBOUNCE_MS = 2000;
 const _arenaBotsCache = new Map(); // username -> { time, bots }
 // v1.03 杠杆 4：view 缓存（按 player.lastTick 失效）
 //   写 player 时 invalidate；GET /view-light 时命中缓存则跳过 withTransaction + getPlayerView
@@ -83,6 +86,8 @@ let _pendingSave = false;
 let _disableSave = false;
 let _dirty = false;
 let _epoch = 0;
+// v1.04 性能修复：事务成功后的去抖落盘定时器（2s 合并突发写，替代事务内立即全量落盘）
+let _txSaveTimer = null;
 
 function __setDisableSave(v) {
   _disableSave = !!v;
@@ -105,6 +110,7 @@ function __resetStore() {
   _disableSave = false;
   _dirty = false;
   _epoch++; // 让任何 in-flight 写盘作废
+  if (_txSaveTimer) { clearTimeout(_txSaveTimer); _txSaveTimer = null; } // v1.04：清去抖定时器
   // v1.03：清内存 arenaBots 缓存（测试隔离）
   _arenaBotsCache.clear();
   _arenaBotsCacheState.hits = 0;
@@ -308,6 +314,17 @@ async function load() {
     delete data.meta.arenaBots;
     console.log(`[store-sqlite] 已把 ${Object.keys(old).length} 个旧 arenaBots 搬到进程内存缓存`);
   }
+  // v1.04 性能修复：pvpRecords 不再存 fullResult（客户端 PvPRecords.vue 只读轻字段
+  //   attackerName/defenderName/result/ratingChange/rewards/isBot；重放凭据在
+  //   settlementLedger 里，防重放四态判别的 1b 分支对 fullResult=null 返回 410 已归档）。
+  //   实测 200 条 × ~65KB = 13.16MB，占全量序列化的 40%。启动时一次性剥离存量。
+  if (data.meta && Array.isArray(data.meta.pvpRecords)) {
+    let stripped = 0;
+    for (const r of data.meta.pvpRecords) {
+      if (r && r.fullResult) { r.fullResult = null; r.archived = true; stripped++; }
+    }
+    if (stripped > 0) console.log(`[store-sqlite] 已剥离 ${stripped} 条 pvpRecords.fullResult（客户端不读，纯序列化浪费）`);
+  }
   console.log(`[store-sqlite] 已加载 ${Object.keys(data.accounts).length} 个账号, ${Object.keys(data.players).length} 个角色`);
 }
 
@@ -412,6 +429,11 @@ function markDirtyForSweep() {
 }
 
 function withTransaction(fn) {
+  // v1.04 性能修复：快照仍用 JSON.stringify（回滚保险），但事务成功后不再立即
+  //   全量落盘（旧逻辑：snapshot 序列化 320ms + _persistNowAsync 再序列化 320ms +
+  //   WASM export ≈ 1.3s 同步阻塞，60 用户在线时事件循环长期被卡 → 页面卡顿）。
+  //   新逻辑：成功只标脏 + 2s 去抖合并落盘（突发写合并为一次序列化），
+  //   失败/异常仍同步回滚（restore 快照），语义与 store-json.js 一致。
   const snap = snapshot();
   const epochAt = _epoch;
   let ret;
@@ -424,19 +446,37 @@ function withTransaction(fn) {
   if (!ret || typeof ret.status !== 'number') ret = { status: 500, message: '事务返回非法' };
   if (ret.status >= 200 && ret.status < 300) {
     _dirty = true;
-    _persistNowAsync(epochAt).then(() => {
-      _lastSaveError = null;
-    }).catch((e) => {
-      if (epochAt !== _epoch) return;
-      restore(snap);
-      _lastSaveError = { at: _getNow(), message: e.message, path: DB_PATH };
-      console.error('[store-sqlite] 事务落盘失败，已回滚:', e.message);
-    });
+    scheduleTxSave();
     return ret;
   } else {
     restore(snap);
     return ret;
   }
+}
+
+// v1.04：事务成功的去抖落盘（2s 窗口合并突发写，最终一致）
+//   期间崩溃最多丢 2s 数据（原实现每次事务都全量落盘也不保证崩溃零丢失——
+//   _persistNowAsync 本身就是异步链）。部署/停止用 flushPendingWrites() 兜底。
+function scheduleTxSave() {
+  if (_disableSave) return;
+  if (_txSaveTimer) return; // 已有定时器：本窗口内的写已覆盖（data 是同一引用，序列化时自然取最新）
+  _txSaveTimer = setTimeout(() => {
+    _txSaveTimer = null;
+    safeSave();
+  }, TX_SAVE_DEBOUNCE_MS);
+}
+
+// v1.04：立即落盘未保存的修改（优雅退出 / 部署前调用；返回 Promise）
+function flushPendingWrites() {
+  if (_txSaveTimer) {
+    clearTimeout(_txSaveTimer);
+    _txSaveTimer = null;
+  }
+  return new Promise((resolve) => {
+    if (!_dirty && !_saveInFlight) return resolve();
+    const epochAt = _epoch;
+    _persistNowAsync(epochAt).then(() => resolve()).catch(() => resolve());
+  });
 }
 
 function getAccount(username) { return data.accounts[username]; }
@@ -476,6 +516,7 @@ module.exports = {
   getMeta,
   setMeta,
   markDirtyForSweep, // v1.03 冷数据归档清扫用
+  flushPendingWrites, // v1.04：优雅退出/部署前落盘未保存修改
   __setDisableSave,
   __setDbPath,
   __resetStore,

@@ -286,6 +286,10 @@ function registerPvpRoutes(app, store, deps = {}) {
       });
       if (player.settlementLedger.length > 100) player.settlementLedger.splice(0, player.settlementLedger.length - 100);
 
+      // v1.04 性能修复：pvpRecords 不再存 fullResult（实测 200 条 × ~65KB = 13MB，
+      //   占每次全量序列化的 40%，而客户端 PvPRecords.vue 只读轻字段）。
+      //   重放凭据完整保留在 player.settlementLedger（上方已 push），
+      //   防重放四态判别的 1b 分支查 pvpRecords 命中时：fullResult 缺失 → 410 已归档（合法分支）。
       meta.pvpRecords.unshift({
         id: ledgerId,
         time: getNow(),
@@ -295,7 +299,6 @@ function registerPvpRoutes(app, store, deps = {}) {
         ratingChange,
         rewards: { gold, exp, coins: coinsEarned },
         isBot: !!isBot,
-        fullResult,
         requestContext: { username, targetUsername, isBot: !!isBot },
       });
       if (meta.pvpRecords.length > 200) meta.pvpRecords = meta.pvpRecords.slice(0, 200);

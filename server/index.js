@@ -194,6 +194,29 @@ app.use(express.static(distPath, {
       console.log(`  监听: ${HOST}:${PORT}`);
       console.log(`========================================\n`);
     });
+
+    // ====== v1.04 优雅退出：停服/部署前落盘未保存修改 ======
+    // 事务成功后是 2s 去抖落盘（scheduleTxSave），直接 kill 会丢窗口内数据。
+    // SIGTERM（systemd/docker stop）/ SIGINT（Ctrl+C）时先 flush 再退出。
+    let _shuttingDown = false;
+    async function gracefulShutdown(signal) {
+      if (_shuttingDown) return;
+      _shuttingDown = true;
+      console.log(`\n[退出] 收到 ${signal}，正在落盘未保存数据...`);
+      try {
+        if (typeof store.flushPendingWrites === 'function') {
+          await store.flushPendingWrites();
+        } else {
+          store.safeSave(); // JSON 后端兜底（无去抖窗口，直接保存）
+        }
+        console.log('[退出] 落盘完成');
+      } catch (e) {
+        console.error('[退出] 落盘失败:', e.message);
+      }
+      process.exit(0);
+    }
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   }
 })();
 

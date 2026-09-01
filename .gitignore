@@ -19,6 +19,9 @@ server/db.json.migrated.bak
 server/db.json.before-restore-*
 server/db.json.verify-test.bak
 
+# 双库清理归档（旧 db.json 系列，仅本地备份，不进版本库）
+server/db-archive-*/
+
 # Environment
 .env
 .env.local
