@@ -7,6 +7,7 @@ const path = require('path');
 const store = require('./store');
 const engine = require('./engine');
 const { registerRoutes } = require('./routes');
+const gzip = require('./middleware/gzip');
 
 const app = express();
 // 端口约定：后端 API 固定 3001；前端固定 3000（开发时由 Vite 提供，生产时由 server/web-server.js 提供）
@@ -31,6 +32,8 @@ app.use(cors({
 // v1.03 P1 1.8：express.json body 大小限制（防超大 body 占内存）
 //   默认 100KB（足够任何业务接口）；大文件上传应走专门 /upload 路由
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '100kb' }));
+// v1.04：HTTP 响应 gzip 压缩（只作用于 /api，减小 JSON 传输体积；大包自动跳过）
+app.use('/api', gzip);
 
 // load() 可能是异步（SQLite 后端）也可能是同步（JSON 后端）
 // 用 IIFE 把 store 初始化与后续启动逻辑串起来

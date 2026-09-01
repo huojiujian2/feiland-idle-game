@@ -160,7 +160,8 @@ test('并发 safeSave 不丢更新', async () => {
     store.getPlayer('frank').gold += 1;
     store.safeSave();
   }
-  await new Promise((r) => setTimeout(r, 500));
+  // worker 异步落盘是去抖合并的，不能靠固定 sleep；用 flushPendingWrites 确定性等待最终落盘
+  await store.flushPendingWrites();
   store = loadStoreWithRoot(root);
   await store.load();
   assert.ok(store.getPlayer('frank').gold >= 50, `expected >=50, got ${store.getPlayer('frank').gold}`);

@@ -21,6 +21,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { Worker } = require('worker_threads');
 const initSqlJs = require('sql.js');
 
 let _getNow = () => Date.now();
@@ -88,6 +89,10 @@ let _dirty = false;
 let _epoch = 0;
 // v1.04 性能修复：事务成功后的去抖落盘定时器（2s 合并突发写，替代事务内立即全量落盘）
 let _txSaveTimer = null;
+// v1.04 worker 落盘：持久化 worker + 请求表（把 SQLite export/写文件移出主线程）
+let _persistWorker = null;
+let _persistReqId = 0;
+const _persistPending = new Map(); // reqId -> { resolve, reject }
 
 function __setDisableSave(v) {
   _disableSave = !!v;
@@ -325,56 +330,66 @@ async function load() {
     }
     if (stripped > 0) console.log(`[store-sqlite] 已剥离 ${stripped} 条 pvpRecords.fullResult（客户端不读，纯序列化浪费）`);
   }
+  _ensurePersistWorker(); // v1.04：预热持久化 worker（load 阶段并行加载 sql.js，避免首次写盘延迟）
   console.log(`[store-sqlite] 已加载 ${Object.keys(data.accounts).length} 个账号, ${Object.keys(data.players).length} 个角色`);
 }
 
-let _lastBakAt = 0;
+// v1.04 worker 落盘：懒创建持久化 worker（首次落盘时创建）
+//   把 SQLite 写入 + export + 写文件移出主线程，主线程只保留 JSON.stringify（约 168ms）。
+function _ensurePersistWorker() {
+  if (_persistWorker) return _persistWorker;
+  const w = new Worker(path.join(__dirname, 'persist-worker.js'));
+  w.on('message', (msg) => {
+    if (msg && msg.type === 'done') {
+      const entry = _persistPending.get(msg.reqId);
+      if (!entry) return;
+      _persistPending.delete(msg.reqId);
+      if (msg.ok) {
+        _lastSaveError = null;
+        entry.resolve();
+      } else {
+        entry.reject(new Error(msg.error || '持久化 worker 写盘失败'));
+      }
+    }
+  });
+  w.on('error', (e) => {
+    for (const [, entry] of _persistPending) entry.reject(e);
+    _persistPending.clear();
+    _persistWorker = null;
+  });
+  w.on('exit', () => {
+    for (const [, entry] of _persistPending) entry.reject(new Error('持久化 worker 已退出'));
+    _persistPending.clear();
+    _persistWorker = null;
+  });
+  _persistWorker = w;
+  w.unref(); // 让 worker 不阻止主进程退出（否则 test/无监听场景会挂起）
+  w.postMessage({ type: 'init' });  // 预热 sql.js（load 阶段即可开始加载）
+  return w;
+}
 
 function _persistNowAsync(epochAt) {
   return new Promise((resolve, reject) => {
-    if (!_db) return reject(new Error('db not opened'));
     if (typeof epochAt === 'number' && epochAt !== _epoch) return resolve();
-    const dbRef = _db;
-    const pathOut = DB_PATH;
-    const bakOut = BAK_PATH;
+    // trim（改主线程 data，须在快照序列化之前）
+    try { trimArenaRewards(); } catch(_){}
+    try { trimGuilds(); } catch(_){}
+    try { trimArenaBots(); } catch(_){}  // v1.03 P0：清理过期 arenaBots 缓存
     let snapshotStr;
     try {
-      try { trimArenaRewards(); } catch(_){}
-      try { trimGuilds(); } catch(_){}
-      try { trimArenaBots(); } catch(_){}  // v1.03 P0：清理过期 arenaBots 缓存
-      snapshotStr = JSON.stringify(data);
+      snapshotStr = JSON.stringify(data);  // 主线程仅剩的同步成本
     } catch (e) { return reject(e); }
     try {
-      _rowPut(dbRef, 'snapshot', snapshotStr);
-      const bytes = Buffer.from(dbRef.export());
-      const tmpPath = pathOut + '.tmp';
-      fs.writeFile(tmpPath, bytes, (err) => {
-        if (err) return reject(err);
-        if (typeof epochAt === 'number' && epochAt !== _epoch) {
-          try { fs.unlinkSync(tmpPath); } catch(_) {}
-          return resolve();
-        }
-        const nowMs = _getNow();
-        const shouldBak = !fs.existsSync(bakOut) || (nowMs - _lastBakAt > 60 * 60 * 1000);
-        const doRename = () => {
-          fs.rename(tmpPath, pathOut, (rErr) => {
-            if (rErr) return reject(rErr);
-            _lastSaveError = null;
-            resolve();
-          });
-        };
-        if (shouldBak && fs.existsSync(pathOut)) {
-          fs.copyFile(pathOut, bakOut, (cErr) => {
-            if (cErr) {
-              console.error('[store-sqlite] .bak 备份失败（继续）:', cErr.message);
-              return doRename();
-            }
-            _lastBakAt = nowMs;
-            doRename();
-          });
-        } else {
-          doRename();
-        }
+      const w = _ensurePersistWorker();
+      const reqId = ++_persistReqId;
+      _persistPending.set(reqId, { resolve, reject });
+      w.postMessage({
+        type: 'persist',
+        reqId,
+        snapshotStr,
+        pathOut: DB_PATH,
+        bakOut: BAK_PATH,
+        epochAt,
       });
     } catch (e) {
       reject(e);
