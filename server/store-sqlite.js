@@ -37,6 +37,9 @@ let data = { accounts: {}, players: {}, meta: {} };
 //   修复后：纯进程内存 Map，TTL 过期删除，硬上限 200 LRU 淘汰
 //           不参与序列化（safeSave 跳过），不参与 SQLite 落盘
 const _arenaBotsCache = new Map(); // username -> { time, bots }
+// v1.03 杠杆 4：view 缓存（按 player.lastTick 失效）
+//   写 player 时 invalidate；GET /view-light 时命中缓存则跳过 withTransaction + getPlayerView
+const { invalidatePlayerView, invalidateAllViews, getViewCacheStats } = require('./middleware/view-cache');
 const _arenaBotsCacheState = { hits: 0, misses: 0, evictions: 0 };
 const _arenaBotsCache_TTL_MS = 10 * 60 * 1000;
 const _arenaBotsCache_MAX = 200;
@@ -435,7 +438,12 @@ function setAccount(username, account) { data.accounts[username] = account; mark
 function accountExists(username) { return !!data.accounts[username]; }
 
 function getPlayer(username) { return data.players[username]; }
-function setPlayer(username, player) { data.players[username] = player; markDirty(); }
+function setPlayer(username, player) {
+  data.players[username] = player;
+  markDirty();
+  // v1.03 杠杆 4：写入触发缓存失效
+  invalidatePlayerView(username);
+}
 function getAllPlayers() { return Object.values(data.players); }
 
 function getMeta() { return data.meta; }
@@ -473,4 +481,10 @@ module.exports = {
   arenaBotsCacheDelete,
   arenaBotsCacheClear,
   arenaBotsCacheStats,
+  // v1.03 杠杆 4：view 缓存 API（按 lastTick 失效）
+  viewCacheGet: (username, lastTick) => require('./middleware/view-cache').getCached(username, lastTick),
+  viewCacheSet: (username, view, offlineSnapshot, lastTick) => require('./middleware/view-cache').setCached(username, view, offlineSnapshot, lastTick),
+  viewCacheInvalidate: invalidatePlayerView,
+  viewCacheInvalidateAll: invalidateAllViews,
+  viewCacheStats: getViewCacheStats,
 };

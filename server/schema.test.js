@@ -1,6 +1,10 @@
 const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('fs'), path=require('path'), os=require('os');
+
+// 强制 schema.test.js 走 JSON 后端
+process.env.DB_ENGINE = 'json';
+delete require.cache[require.resolve('./store-sqlite')];
 function tmpPath(){ return path.join(os.tmpdir(),`test-schema-${Date.now()}-${Math.random().toString(36).slice(2,4)}.json`); }
 function clean(p){ try{fs.unlinkSync(p)}catch(_){} try{fs.unlinkSync(p+'.tmp')}catch(_){} try{fs.unlinkSync(p+'.bak')}catch(_){} }
 const _oST=global.setTimeout,_oCT=global.clearTimeout; let _fake=new Map(),_fid=0;

@@ -87,6 +87,14 @@ function registerDiagRoutes(app, store) {
         }
       } catch (_) {}
 
+      // v1.03 杠杆 4：view 缓存统计
+      let viewCacheStats = null;
+      try {
+        if (typeof store.viewCacheStats === 'function') {
+          viewCacheStats = store.viewCacheStats();
+        }
+      } catch (_) {}
+
       // 玩家数量 + 估算的 store 内存占用
       let playerCount = 0;
       try {
@@ -112,6 +120,7 @@ function registerDiagRoutes(app, store) {
           store: {
             playerCount,
             arenaBotsCache: arenaBotsStats,
+            viewCache: viewCacheStats,
             dbSizeMB: +(dbSizeBytes / 1024 / 1024).toFixed(2),
           },
           uptimeSeconds: Math.floor(process.uptime()),

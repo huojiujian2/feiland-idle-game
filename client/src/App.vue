@@ -197,10 +197,10 @@ onMounted(() => {
         }
       } catch (_) { /* 网络问题，保留 token 让用户重试 */ }
     })();
-    // 5s 轮询
+    // 5s 轮询（v1.03 杠杆 2：用 getPlayerLight 替代 getPlayer，避开 withTransaction 序列化 120MB）
     pollTimer = setInterval(async () => {
       try {
-        const r = await api.getPlayer(currentUser);
+        const r = await api.getPlayerLight(currentUser);
         if (r && r.success && r.data && r.data.player) {
           player.value = r.data.player;
         }
@@ -353,7 +353,8 @@ async function startPolling() {
   if (pollTimer) return; // 防重入：已有轮询在跑时不再叠加新定时器
   pollTimer = setInterval(async () => {
     if (!player.value) return;
-    const res = await api.getPlayer(currentUser);
+    // v1.03 杠杆 2：用 getPlayerLight 替代 getPlayer（跳过 withTransaction + 缓存命中 <1ms）
+    const res = await api.getPlayerLight(currentUser);
     if (res.success) {
       const payload = res.data;
       const p = (payload && payload.player) ? payload.player : payload;

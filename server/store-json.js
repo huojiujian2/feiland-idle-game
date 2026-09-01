@@ -262,7 +262,13 @@ function accountExists(username) { return !!data.accounts[username]; }
 
 // 角色操作
 function getPlayer(username) { return data.players[username]; }
-function setPlayer(username, player) { data.players[username] = player; markDirty(); }
+// v1.03 杠杆 4：view 缓存（按 player.lastTick 失效）
+const { invalidatePlayerView, invalidateAllViews, getViewCacheStats } = require('./middleware/view-cache');
+function setPlayer(username, player) {
+  data.players[username] = player;
+  markDirty();
+  invalidatePlayerView(username);
+}
 function getAllPlayers() { return Object.values(data.players); }
 
 function getMeta() { return data.meta; }
@@ -272,4 +278,10 @@ function setMeta(meta) { data.meta = meta; markDirty(); }
 module.exports = { load, save, safeSave, withTransaction, snapshot, restore, getLastSaveError, clearLastSaveError, cancelSaveTimer, getAccount, setAccount, accountExists, getPlayer, setPlayer, getAllPlayers, getMeta, setMeta, __setDisableSave, __setDbPath, __resetStore, __getRawData: () => data,
   // v1.03：arenaBots 进程内存缓存 API（从 meta 搬出）
   arenaBotsCacheGet, arenaBotsCacheSet, arenaBotsCacheDelete, arenaBotsCacheClear, arenaBotsCacheStats,
+  // v1.03 杠杆 4：view 缓存 API
+  viewCacheGet: (username, lastTick) => require('./middleware/view-cache').getCached(username, lastTick),
+  viewCacheSet: (username, view, offlineSnapshot, lastTick) => require('./middleware/view-cache').setCached(username, view, offlineSnapshot, lastTick),
+  viewCacheInvalidate: invalidatePlayerView,
+  viewCacheInvalidateAll: invalidateAllViews,
+  viewCacheStats: getViewCacheStats,
 };

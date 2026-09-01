@@ -10,6 +10,14 @@ dist/
 server/db.json
 server/db.json.bak
 server/db.json.tmp
+server/db.sqlite
+server/db.sqlite-shm
+server/db.sqlite-wal
+server/db.sqlite.bak
+server/db.sqlite.tmp
+server/db.json.migrated.bak
+server/db.json.before-restore-*
+server/db.json.verify-test.bak
 
 # Environment
 .env

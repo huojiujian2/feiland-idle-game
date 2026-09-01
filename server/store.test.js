@@ -4,6 +4,10 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// 强制 store.test.js 走 JSON 后端（默认检测可能选到 SQLite）
+process.env.DB_ENGINE = 'json';
+delete require.cache[require.resolve('./store-sqlite')];
+
 function tmpPath(tag){ return path.join(os.tmpdir(), `test-store-${tag}-${Date.now()}-${Math.random().toString(36).slice(2,6)}.json`); }
 function clean(p){ try{fs.unlinkSync(p)}catch(_){} try{fs.unlinkSync(p+'.tmp')}catch(_){} try{fs.unlinkSync(p+'.bak')}catch(_){} }
 const _origST=global.setTimeout; const _origCT=global.clearTimeout;

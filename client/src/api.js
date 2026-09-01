@@ -99,6 +99,10 @@ export default {
 
   // 玩家
   getPlayer(username) { return request(`/player/${username}`) },
+  // v1.03 杠杆 2：轻量 view（前端轮询专用）
+  //   跳过 withTransaction + calculateIdle → 不触发 JSON.stringify(data) 120MB
+  //   行为与 getPlayer 一致，但响应时间 <1ms（命中缓存时）
+  getPlayerLight(username) { return request(`/player/${username}/view-light`) },
   changeArea(username, areaId) { return request(`/player/${username}/area`, { method: 'POST', body: JSON.stringify({ areaId }) }) },
   allocateAttributes(username, allocation) { return request(`/player/${username}/attributes`, { method: 'POST', body: JSON.stringify(allocation) }) },
   autoAllocate(username) { return request(`/player/${username}/auto-allocate`, { method: 'POST' }) },
