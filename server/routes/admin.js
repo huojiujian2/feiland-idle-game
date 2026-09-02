@@ -16,6 +16,10 @@ const announcements = require('../announcements');
 const engine = require('../engine');
 const viewCache = require('../middleware/view-cache');
 const { AREAS, JOB_TREE } = require('../data');
+// v1.07：服务器全局设置读写
+const serverSettings = require('../server-settings');
+// v1.08：后台多账号体系（默认 admin/admin，首登强制改密）
+const adminAccounts = require('../admin-accounts');
 
 const ADMIN_TOKEN_TTL_MS = 8 * 60 * 60 * 1000; // admin JWT 8 小时
 
@@ -27,22 +31,45 @@ const adminLoginLimiter = rateLimit({
 
 function registerAdminRoutes(app, store, opts) {
   const requireAdminAuth = opts.auth.requireAdminAuth;
+  // v1.08：初始化后台账号体系（首次启动写入默认 admin/admin 账号）
+  adminAccounts.init(store);
 
-  // ====== 登录：ADMIN_TOKEN → admin JWT ======
+  // ====== 登录：username + password → admin JWT（v1.08 多账号版） ======
   app.post('/api/admin/login', adminLoginLimiter, (req, res) => {
-    const expected = process.env.ADMIN_TOKEN;
-    if (!expected) {
-      return fail(res, 'ADMIN_TOKEN 未配置，无法登录后台', 500);
-    }
-    const password = req.body && req.body.password;
-    if (!password || typeof password !== 'string') {
-      return fail(res, '请输入密码', 400);
-    }
-    if (password !== expected) {
-      return fail(res, '密码错误', 403);
-    }
-    const token = signToken({ username: 'admin', role: 'admin' }, ADMIN_TOKEN_TTL_MS);
-    return ok(res, { token, expiresInMs: ADMIN_TOKEN_TTL_MS, username: 'admin' });
+    const body = req.body || {};
+    const username = String(body.username || '').trim();
+    const password = body.password;
+    if (!username) return fail(res, '请输入账号', 400);
+    if (!password || typeof password !== 'string') return fail(res, '请输入密码', 400);
+    const r = adminAccounts.authenticate(username, password);
+    if (!r.ok) return fail(res, r.reason || '登录失败', 403);
+    const token = signToken({ username: r.record.username, role: 'admin' }, ADMIN_TOKEN_TTL_MS);
+    return ok(res, {
+      token,
+      expiresInMs: ADMIN_TOKEN_TTL_MS,
+      username: r.record.username,
+      mustChangePassword: !!r.record.mustChangePassword,
+    });
+  });
+
+  // ====== v1.08：当前登录账号信息（前端展示 + 首登警告判断） ======
+  app.get('/api/admin/me', requireAdminAuth, (req, res) => {
+    const u = (req.admin && req.admin.username) || '';
+    const r = adminAccounts.findAccount(u);
+    if (!r) return fail(res, '账号不存在', 404);
+    return ok(res, adminAccounts.publicInfo(r));
+  });
+
+  // ====== v1.08：修改密码（自己改自己） ======
+  app.post('/api/admin/me/password', requireAdminAuth, auditLog('admin.password.change'), (req, res) => {
+    const username = (req.admin && req.admin.username) || '';
+    const body = req.body || {};
+    const oldPwd = body.oldPassword;
+    const newPwd = body.newPassword;
+    if (!oldPwd || !newPwd) return fail(res, '请输入旧密码和新密码', 400);
+    const r = adminAccounts.changePassword(username, oldPwd, newPwd);
+    if (!r.ok) return fail(res, r.message, r.status || 400);
+    return ok(res, adminAccounts.publicInfo(r.record));
   });
 
   // ====== 监控总览（只读，无副作用） ======
@@ -186,6 +213,53 @@ function registerAdminRoutes(app, store, opts) {
       if (result.status !== 200) return fail(res, result.message, result.status);
       console.log(`[GM] 重新召唤世界 BOSS: ${result.data && result.data.name}`);
       return ok(res, result.data);
+    } catch (e) {
+      return fail(res, e.message, 500);
+    }
+  });
+
+  // ====== v1.07：服务器全局设置 ======
+  // GET：拉取配置 + 全服数值现状（用于"智能调节"决策展示）
+  app.get('/api/admin/server-config', requireAdminAuth, (req, res) => {
+    try {
+      const cfg = serverSettings.getConfig() || { expMultiplier: 1, goldMultiplier: 1, maxLevel: 0, maxGold: 0 };
+      const overview = serverSettings.getOverview(store);
+      return ok(res, { config: cfg, overview });
+    } catch (e) {
+      return fail(res, e.message, 500);
+    }
+  });
+
+  // PUT：写入服务器设置（事务 + 审计）
+  app.put('/api/admin/server-config', requireAdminAuth, auditLog('gm.server.config'), (req, res) => {
+    try {
+      const body = req.body || {};
+      const expM = Number(body.expMultiplier);
+      const goldM = Number(body.goldMultiplier);
+      const lv = Number(body.maxLevel);
+      const gld = Number(body.maxGold);
+      if (!Number.isFinite(expM) || expM < 0.1 || expM > 1000) return fail(res, 'expMultiplier 须在 0.1 ~ 1000', 400);
+      if (!Number.isFinite(goldM) || goldM < 0.1 || goldM > 1000) return fail(res, 'goldMultiplier 须在 0.1 ~ 1000', 400);
+      if (!Number.isFinite(lv) || lv < 0 || lv > 100000) return fail(res, 'maxLevel 须在 0 ~ 100000（0=不限）', 400);
+      if (!Number.isFinite(gld) || gld < 0 || gld > 1e18) return fail(res, 'maxGold 须在 0 ~ 1e18（0=不限）', 400);
+      const updatedBy = (req.user && req.user.username) || 'admin';
+      const result = store.withTransaction((data) => {
+        data.meta.serverConfig = {
+          expMultiplier: expM,
+          goldMultiplier: goldM,
+          maxLevel: Math.floor(lv),
+          maxGold: Math.floor(gld),
+          updatedAt: Date.now(),
+          updatedBy,
+        };
+        return { status: 200, data: data.meta.serverConfig };
+      });
+      if (result.status !== 200) return fail(res, result.message, result.status);
+      console.log(`[GM] 更新服务器设置: exp×${expM} gold×${goldM} Lv≤${lv || '∞'} Gold≤${gld || '∞'}`);
+      // 清缓存：倍率/上限变化后，所有玩家视图都需刷新
+      try { viewCache.invalidateAll && viewCache.invalidateAll(); } catch (_) {}
+      const overview = serverSettings.getOverview(store);
+      return ok(res, { config: result.data, overview });
     } catch (e) {
       return fail(res, e.message, 500);
     }
