@@ -6,6 +6,8 @@ const {
   refreshDailyIfNeeded, normalizeTutorialStep,
 } = require('./daily');
 const { isValidTitleKey } = require('../data/titles');
+// v1.07 服务器级倍率/上限
+const svrCfg = require('../server-settings');
 
 // 力量等阶（含神格）
 function getStageFull(level, godhood) {
@@ -321,9 +323,13 @@ function migratePlayer(player) {
 // 加点（grantGold/grantExpWithLevelUp 注入到 daily 模块）
 function grantGold(player, amount) {
   if (!amount) return;
-  player.gold += amount;
+  // v1.07 服务器金币倍率（其他产出点已自乘，避免双重；idle/daily/expedition/active/items.出售 全部经此）
+  const scaled = Math.floor((amount || 0) * svrCfg.goldMult());
+  if (scaled <= 0) return;
+  player.gold += scaled;
+  svrCfg.applyGoldCap(player); // 全服金币持有上限
   ensureQuestStats(player);
-  player.questStats.totalGoldEarned += amount;
+  player.questStats.totalGoldEarned += scaled;
   checkAchievements(player);
 }
 function grantExpWithLevelUp(player, exp) {
@@ -349,6 +355,9 @@ function grantExpWithLevelUp(player, exp) {
       }
     }
   }
+  // v1.07 全服等级上限：达到上限后溢出经验清零（保留本次的 levelup 日志显示）
+  const cap = svrCfg.maxLevel();
+  if (cap > 0 && player.level >= cap) player.exp = 0;
   if (exp > 0) player.logs.push({ time: now, type: 'levelup', level: player.level, text: `获得 ${exp} 经验` });
   checkAchievements(player);
 }

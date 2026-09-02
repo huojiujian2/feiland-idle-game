@@ -231,8 +231,11 @@ function grantWorldBossParticipation(player, boss) {
   const baseGold = boss.rewards?.gold || 0;
   const baseExp = boss.rewards?.exp || 0;
   // v3.2 参与奖翻倍
-  const goldGain = Math.floor(baseGold * ratio * 2);
-  const expGain = Math.floor(baseExp * ratio * 2);
+  const svrCfg = require('../server-settings');
+  let goldGain = Math.floor(baseGold * ratio * 2 * svrCfg.goldMult());
+  let expGain = Math.floor(baseExp * ratio * 2 * svrCfg.expMult());
+  const cap = svrCfg.maxLevel();
+  if (cap > 0 && (player.level || 1) >= cap) expGain = 0;
   if (goldGain <=0 && expGain <=0) return;
   const dayKey = getBossDayKey();
   const pid = `boss:participation:${dayKey}:${boss.id}:${player.username}`;
@@ -285,6 +288,11 @@ function settleWorldBossRewards(store, boss) {
   const spawnDayKey = boss.spawnDayKey || getBossDayKey(boss.spawnedAt || getNow());
   const batchId = `boss:settle:${spawnDayKey}:${boss.id}`;
   const childIds = [];
+  // v1.07 服务器倍率与上限（结算奖：参与奖/最后一击/前 3 名/4-20 名统一乘算）
+  const _svrCfg = require('../server-settings');
+  const _gMul = _svrCfg.goldMult();
+  const _eMul = _svrCfg.expMult();
+  const _lvCap = _svrCfg.maxLevel();
   for (let i = 0; i < ranked.length; i++) {
     const r = ranked[i];
     const p = store.getPlayer(r.username);
@@ -297,9 +305,10 @@ function settleWorldBossRewards(store, boss) {
 
     // 1) 最后一击奖（v3.1：去掉材料，只剩金币/经验）
     if (r.username === boss.finalHitBy && boss.finalHitRewards) {
-      const fg = (boss.finalHitRewards.gold || 0);
-      const fe = (boss.finalHitRewards.exp || 0);
+      const fg = Math.floor((boss.finalHitRewards.gold || 0) * _gMul);
+      const fe = (_lvCap > 0 && p.level >= _lvCap) ? 0 : Math.floor((boss.finalHitRewards.exp || 0) * _eMul);
       p.gold = (p.gold || 0) + fg;
+      _svrCfg.applyGoldCap(p);
       p.exp = (p.exp || 0) + fe;
       ledgerGold += fg;
       ledgerExp += fe;
@@ -317,9 +326,10 @@ function settleWorldBossRewards(store, boss) {
 
       // 等级进度奖（v3.3：BOSS 基础奖 × 3/2/1.5 倍，严格高于 4-20 名的 × 1.0）
       const mult = TOP3_MULT[i];
-      const bonusGold = Math.floor(baseGold * mult);
-      const bonusExp = Math.floor(baseExp * mult);
+      const bonusGold = Math.floor(baseGold * mult * _gMul);
+      const bonusExp = (_lvCap > 0 && p.level >= _lvCap) ? 0 : Math.floor(baseExp * mult * _eMul);
       p.gold = (p.gold || 0) + bonusGold;
+      _svrCfg.applyGoldCap(p);
       p.exp = (p.exp || 0) + bonusExp;
       ledgerGold += bonusGold;
       ledgerExp += bonusExp;
@@ -327,10 +337,13 @@ function settleWorldBossRewards(store, boss) {
     }
     // 3) 第 4-20 名：取参与奖上限 = BOSS 基础 gold/exp × 1.0
     else if (rank >= 4 && rank <= RANK_BONUS_MAX_RANK) {
-      p.gold = (p.gold || 0) + rank4_20Gold;
-      p.exp = (p.exp || 0) + rank4_20Exp;
-      ledgerGold += rank4_20Gold;
-      ledgerExp += rank4_20Exp;
+      const r4g = Math.floor(rank4_20Gold * _gMul);
+      const r4e = (_lvCap > 0 && p.level >= _lvCap) ? 0 : Math.floor(rank4_20Exp * _eMul);
+      p.gold = (p.gold || 0) + r4g;
+      _svrCfg.applyGoldCap(p);
+      p.exp = (p.exp || 0) + r4e;
+      ledgerGold += r4g;
+      ledgerExp += r4e;
     }
     // 4) 20 名后：只拿参与奖（在 attackWorldBoss 里已即时发放，× 2 翻倍）
 

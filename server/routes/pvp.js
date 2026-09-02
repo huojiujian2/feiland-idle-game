@@ -241,7 +241,14 @@ function registerPvpRoutes(app, store, deps = {}) {
         exp = baseRewards.exp;
         coinsEarned = isWin ? 10 + (player.level || 1) + Math.min(player.pvpStats.streak || 0, 5) * 5 : 2;
       }
+      // v1.07 服务器倍率与上限（PVP 不经 player.grantGold，自行乘算并钳制）
+      const svrCfg = require('../server-settings');
+      gold = Math.floor(gold * svrCfg.goldMult());
+      exp = Math.floor(exp * svrCfg.expMult());
+      const cap = svrCfg.maxLevel();
+      if (cap > 0 && (player.level || 1) >= cap) exp = 0;
       player.gold = (player.gold || 0) + gold;
+      svrCfg.applyGoldCap(player);
       player.exp = (player.exp || 0) + exp;
       player[PVP_CURRENCY_KEY] = (player[PVP_CURRENCY_KEY] || 0) + coinsEarned;
 
