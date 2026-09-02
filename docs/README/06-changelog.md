@@ -5,6 +5,140 @@
 
 ***
 
+## v1.08 · 2026-09-02 · 后台账号体系（多账号 + 强制改密）
+
+### 🔑 后台多账号体系 + 首登强制改密
+
+后台管理从 v1.06 的"单 token 鉴权"升级为完整的多账号密码体系：
+- **首登账号 `admin` / 密码 `admin`**，登录后顶部黄色横幅 + 头部账号按钮小红点提示"请尽快修改密码"
+- 进入后台后右上角账号按钮一键修改密码（需校验旧密码），修改成功后强制提示消失
+- 旧版本 `ADMIN_TOKEN` 环境变量不再生效（已写脱敏兼容日志）
+
+### 🛡 安全细节
+
+| 项 | 实现 |
+|----|------|
+| **密码哈希** | Node 内置 `crypto.scrypt`（64 字节）+ 16 字节随机 salt，无 npm 依赖；行业标准 KDF，抗暴力破解 |
+| **校验** | `crypto.timingSafeEqual` 等长比对，防时序攻击 |
+| **存哪里** | `meta.adminAccounts[]`（与玩家存档共享 SQLite/meta.json，事务化落盘） |
+| **统一错误** | 账号不存在 / 密码错误都返 403 + "账号或密码错误"，防账号枚举 |
+| **新密码强度** | 长度 ≥ 8，且必须同时含字母与数字 |
+| **拒绝重置** | 新密码不能与旧密码相同 |
+| **审计** | `POST /api/admin/me/password` 挂 `auditLog('admin.password.change')` |
+
+### 🆕 新增 / 修改 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| `POST` | `/api/admin/login` | 多账号版登录（username + password），返回 `{ token, expiresInMs, username, mustChangePassword }` |
+| `GET` | `/api/admin/me` | 当前账号信息（首登警告用，公开字段不返 hash） |
+| `POST` | `/api/admin/me/password` | 修改自己密码（需旧密码） |
+
+### 🎨 前端细节（`/admin`）
+
+- **登录页**：账号输入框预填 `admin`，密码框提示"首次默认密码：`admin`"，登录按钮上方文字提示
+- **顶部账号按钮**（🜲 + 用户名）紧邻暗黑模式切换：若 `mustChangePassword === true`，按钮右上挂红色徽章 + 抖动动画
+- **强制警告横幅**：登录成功后整个后台顶部出现"⚠️ 检测到您正在使用初始密码，请尽快修改"的横幅
+- **改密弹窗**：3 个输入框（旧密码 / 新密码 / 确认新密码），实时校验强度，提交后后端再校验一次、关闭横幅 + 徽章、清缓存 `mustChangePassword` 状态
+- **持久化**：登录态 `localStorage.adminToken` + `username` + `mustChangePassword`（localStorage 仅缓存前端提示用，鉴权永远以服务端为准）
+
+### 📁 新增 / 修改文件
+
+| 类型 | 文件 |
+|------|------|
+| 新增 | `server/admin-accounts.js`（scrypt 哈希 / verifyPassword / authenticate / changePassword） |
+| 改 | `server/routes/admin.js`（登录改多账号，新增 `/me` 与 `/me/password`，挂审计） |
+| 改 | `admin/src/api.js`（login(username, password) / changeMyPassword / me） |
+| 改 | `admin/src/views/Login.vue`（账号 + 密码 + 首登提示） |
+| 改 | `admin/src/App.vue`（头部账号按钮 + 改密弹窗 + 警告横幅 + 路由） |
+
+### 🧪 端到端验证
+
+| 场景 | 结果 |
+|------|------|
+| 首次访问 `localhost:3001/admin/` | 账号框预填 `admin`，提示首登密码 |
+| `admin` / `admin` 登录 | 200，返回 `mustChangePassword: true` |
+| 错密码登录 | 403 "账号或密码错误" |
+| 不存在账号登录 | 403 "账号或密码错误"（统一防枚举） |
+| `GET /me` 旧密码前 | `{ mustChangePassword: true }` |
+| 改密 `admin` → `admin123` | 200，提示消失 |
+| 新密码 < 8 字符 | 400 "新密码长度至少 8 位" |
+| 新密码不含字母 | 400 "新密码需包含字母和数字" |
+| 改密后再用旧密码登录 | 403 拒绝 |
+| 用新密码登录 | 200，`mustChangePassword: false` |
+| 前端构建 | 101KB JS（gzip 39KB），`http://localhost:3001/admin/` HTTP 200 ✓ |
+
+### 🔄 与 v1.06 的兼容
+
+- 旧部署若仍想用 token 鉴权，可在 `server/admin-accounts.js` 把 `admin` 账号删掉后改用 `X-Admin-Token` 兼容（`requireAdminAuth` 中间件兼容 Bearer JWT 与 token header）
+- 推荐：直接走多账号流程，体验更安全
+
+***
+
+## v1.07 · 2026-09-02 · 服务器全局设置（智能调节经济）
+
+### 🆕 新功能：后台「服务器设置」页（侧边栏 监控 与 GM 工具之间）
+
+智能调节本服**经验/金币获取比例**与**全服数值上限**，所有写入走 `withTransaction` + 审计日志 `gm.server.config`。
+
+#### 4 个可调参数
+
+| 参数 | 范围 | 含义 |
+|------|------|------|
+| `expMultiplier` | 0.1 ~ 1000 | 所有经验产出乘算（默认 1） |
+| `goldMultiplier` | 0.1 ~ 1000 | 所有金币产出乘算（默认 1） |
+| `maxLevel` | 0 ~ 100000 | 全服等级上限（0 = 不限，达到上限后溢出经验清零） |
+| `maxGold` | 0 ~ 1e18 | 金币持有上限（0 = 不限，产出后立即钳制，不扣存量） |
+
+#### 接入的 9 个产出点
+
+1. `engine/idle.js` — 挂机单场（`expMult *= svrCfg.expMult()`）
+2. `engine/idle.js` — 离线批量结算（同上）
+3. `engine/player.js` — `grantGold`（所有任务/成就/活跃/远征/出售经此统一乘 `goldMult` + 钳 `maxGold`）
+4. `engine/player.js` — `grantExpWithLevelUp`（升级循环后 `applyLevelCap`）
+5. `routes/pvp.js` — PVP 奖励（`gold * goldMult`、`exp * expMult`，跨等级上限时 exp=0）
+6. `engine/worldboss.js` — 参与奖/最后一击/前 3 名进度奖/4-20 名取参与奖上限（4 处统一乘）
+7. `engine/items.js` — `exp_scroll` / `exp_scroll_great` 经验卷轴
+
+#### "智能调节" 辅助
+
+- GET 接口同步返回全服总览：`playerCount / avgLevel / maxLevel / totalGold / overLevelCap / overGoldCap`，超上限玩家数直观可见
+- 前端 10 秒自动刷新总览（无需手动重查）
+- 5 个一键预设：默认（×1）/ 开服双倍 / 难度上调（×0.5）/ 赛季制（Lv≤5000 + Gold≤100亿）/ 新手服（Lv≤1000 + Gold≤10亿）
+
+#### 重要保证
+
+- **不扣存量**：上限只钳制新产出，避免误伤已达上限的高等级玩家
+- **失败回滚**：写入走 `withTransaction`，失败自动回滚存档
+- **跨进程即时生效**：纯模块读取，无缓存层，调完立刻影响下一次挂机结算
+
+### 📁 新增/修改文件
+
+| 类型 | 文件 |
+|------|------|
+| 新增 | `server/server-settings.js`（meta.serverConfig 读写封装） |
+| 新增 | `admin/src/views/ServerSettings.vue`（设置页：表单 + 总览 + 预设） |
+| 改 | `server/store-sqlite.js`（`_ensureDefaults` 加 `serverConfig` 默认值） |
+| 改 | `server/index.js`（启动时 `serverSettings.init(store)`） |
+| 改 | `server/engine/idle.js`、`player.js`、`worldboss.js`、`items.js`（倍率/上限接入） |
+| 改 | `server/routes/pvp.js`（PVP 奖励乘算 + 等级上限拦截） |
+| 改 | `server/routes/admin.js`（`GET/PUT /api/admin/server-config` + `gm.server.config` 审计） |
+| 改 | `admin/src/api.js`（`getServerConfig` / `putServerConfig` 封装） |
+| 改 | `admin/src/App.vue`（侧边栏插入「服务器设置」菜单 + 路由） |
+
+### 🧪 端到端验证
+
+| 场景 | 结果 |
+|------|------|
+| 经验倍率 ×1 → ×5 | 单场金币产出 1.10 亿 → 5.59 亿（约 5x）✓ |
+| 等级上限 = 当前等级 | 升级循环后 `exp` 准确清零 ✓ |
+| 金币上限 = 当前-1000 | 产出后金币准确钳到上限（不多一文）✓ |
+| GET /api/admin/server-config | 返回 config + overview，含超上限玩家数 ✓ |
+| PUT 边界值 expMultiplier=0 | 400 拦截 ✓ |
+| 前端 `localhost:3001/admin/#/settings` | HTTP 200，构建 96KB JS（gzip 38KB）✓ |
+
+***
+
 ## v1.06 · 2026-09-02 · 后台管理 + 地图性能 + 竞技场修复
 
 ### 🖥 后台管理页（新增 `/admin`，独立前端目录 `admin/`）
