@@ -5,6 +5,44 @@
 
 ***
 
+## v1.06 · 2026-09-02 · 后台管理 + 地图性能 + 竞技场修复
+
+### 🖥 后台管理页（新增 `/admin`，独立前端目录 `admin/`）
+
+1. **零依赖 UI**：独立 Vue3 + Vite 项目，手写组件 + 借鉴 Element Plus 设计 tokens（`tokens.css`），支持暗黑模式；构建产物输出 `server/public/admin`（不受游戏前端 `vite build` 清空 dist 影响）
+2. **鉴权**：`POST /api/admin/login` 用 `ADMIN_TOKEN` 换 8h admin JWT；全部后台接口挂 `requireAdminAuth`（Bearer JWT 或 X-Admin-Token 兼容）
+3. **监控大屏**（5s 自动刷新）：在线玩家（登录会话口径）、内存（V8 真实占比 + RSS 占系统比例）、存档体积、请求量 / 4xx / 5xx、5s idle 循环耗时曲线、服务器信息
+4. **内存占用率算法修正**：分母从 V8 已分配块（heapTotal）改为真实上限（heap_size_limit），修复"Heap 89.8% 虚高"误导
+
+### 🎮 GM 功能（全部挂审计日志 `gm.*`，写操作走事务 + 视图缓存失效）
+
+| 功能 | 说明 |
+|------|------|
+| 全服公告 | 后台广播 → 游戏端大弹窗（离线收益同款样式，可手动关闭），前端每 10s 轮询 |
+| 玩家检索 + 档案 | 模糊搜索（用户名/角色名）、职业/区域/基础属性/战斗日志全中文展示 |
+| 发金币 | `gm/gold`，单次上限 1e13，事务写入 |
+| 发经验 | `gm/exp`，走完整升级逻辑（属性点/职业进阶），单次上限 1e7 |
+| 召唤世界 BOSS | `gm/worldboss`，JWT 版包装（等价 X-Admin-Token 版 `/api/worldboss/spawn`） |
+
+### 🗺 地图页性能（轻视图）
+
+1. **后端** `getMapView(player)` + `GET /api/player/:u/view-map`：只返回地图页 6 个字段（`currentArea / level / maxHp / logs / strategies / strategyCdRemaining`），不再返回全量 view（法则/词条/成就/背包等）
+2. **前端**：地图页独立数据源 `mapPlayer`（`mapPlayer || player` 回退防白屏）+ 进入地图 tab 才启动 10s 轮询；切换区域/策略后同步刷新
+3. 修复刷新页面后地图页空白：自动恢复登录态流程漏调 `loadStaticData`
+
+### ⚙ 挂机循环与在线统计
+
+1. **5s idle 循环只结算在线玩家**（原遍历全部角色做战斗模拟）：无人在线时单轮耗时 258ms → ~1ms；离线玩家收益登录时按时间差补发（`calculateIdle` elapsed ≥60s 批量结算）
+2. **在线统计改为登录会话口径**：登录/建号标记在线（`monitor.markActive`），受保护请求续期，5 分钟无活动自动离线——不再把全服角色全算在线
+3. CORS 白名单补 `localhost:3001`（后台页同源调用被拒导致资源 `ERR_ABORTED` 的问题）
+
+### 🐛 Bug 修复
+
+1. **竞技场只有 bot**：真实玩家对手原按等级差 ±5 过滤，服务器玩家等级两极分化导致真人全被过滤 → 改为同段位优先、不足则跨段位等级最近补足 4 人，列表始终可见真实玩家
+2. **竞技场能看不能打**：挑战接口残留等级差硬校验（>5 返回 409）已移除，胜负交给 ELO 结算
+
+***
+
 ## v1.03 · 2026-08-31 · 综合修订（未发布）
 
 > 本批次改动尚未提交 GitHub，仅本地文件修改。

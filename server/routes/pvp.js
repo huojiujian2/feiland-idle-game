@@ -67,9 +67,8 @@ function registerPvpRoutes(app, store, deps = {}) {
     //   修复前：每次 opponents 调用都改 store.meta，触发 withTransaction 写盘 + 序列化整个 data
     //   修复后：纯进程内存 Map，不参与序列化，不参与 SQLite/JSON 落盘
     store.arenaBotsCacheSet(player.username, { time: getNow(), bots });
-    const realOpponents = store.getAllPlayers()
+    const allReal = store.getAllPlayers()
       .filter(p => p.username !== player.username && p.level)
-      .filter(p => Math.abs((p.level || 1) - myLevel) <= PVP_LEVEL_RANGE)
       .map(p => {
         const rp = getReadonlyPlayer(p);
         return {
@@ -82,6 +81,12 @@ function registerPvpRoutes(app, store, deps = {}) {
           isBot: false,
         };
       });
+    // v1.05 修复"竞技场只有 bot 没有玩家"：真实玩家按等级差升序，
+    //   同段位（±PVP_LEVEL_RANGE）优先；若同段位不足 4 人，从全服等级最近的玩家补足到 4 人，
+    //   保证列表里始终能看到真实玩家（不再因等级跨度大而被全过滤）。
+    allReal.sort((a, b) => Math.abs(a.level - myLevel) - Math.abs(b.level - myLevel));
+    const sameBand = allReal.filter(p => Math.abs(p.level - myLevel) <= PVP_LEVEL_RANGE);
+    const realOpponents = (sameBand.length >= 4 ? sameBand : allReal).slice(0, 4);
     const botOpponents = bots.map(b => ({
       username: b.username, name: b.name, level: b.level, race: b.race,
       job: b.job || '无', godhood: b.godhood || null,
@@ -91,9 +96,8 @@ function registerPvpRoutes(app, store, deps = {}) {
       activeAffix: b.affixes?.active || null,
       passiveCount: (b.affixes?.passive || []).length,
     }));
-    const opponents = [...botOpponents, ...realOpponents]
-      .sort((a, b) => Math.abs(a.level - myLevel) - Math.abs(b.level - myLevel))
-      .slice(0, 10);
+    // 真实玩家在前（含跨段位补位），bot 补位；最多 10 个挑战目标
+    const opponents = [...realOpponents, ...botOpponents].slice(0, 10);
     const cdRemaining = player.pvpStats && player.pvpStats.lastPvpAt
       ? Math.max(0, PVP_CD_MS - (getNow() - player.pvpStats.lastPvpAt)) : 0;
     res.json({
@@ -197,9 +201,9 @@ function registerPvpRoutes(app, store, deps = {}) {
         if (!target) return { status: 404, message: '对手不存在' };
       }
 
-      const levelDiff = Math.abs((player.level || 1) - (target.level || 1));
-      if (levelDiff > PVP_LEVEL_RANGE) return { status: 409, message: `等级差超过 ${PVP_LEVEL_RANGE} 级无法挑战` };
-
+      // v1.05 修复"能看不能对战"：对手列表会显示跨段位真人（等级最近补足），
+      //   这里不再硬拒跨等级挑战——胜负与 ELO 结算由战斗数值本身决定，玩家自行选择。
+      //   战斗模拟只读双方属性快照，不会污染被挑战方存档。
       const battle = simulatePvP(player, target);
       const isWin = battle.result === 'win';
       const isDraw = battle.result === 'draw';

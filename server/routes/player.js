@@ -3,7 +3,7 @@ const {
   calculateIdle, allocateAttributes, autoAllocateAttributes,
   saveAttrPreset, applyAttrPreset, applyAttrPresetByRatio,
   deleteAttrPreset, deleteAttrPresetBySlot,
-  getPlayerView, getOfflineSummary, updateOfflineSnapshot,
+  getPlayerView, getMapView, getOfflineSummary, updateOfflineSnapshot,
   maybeResetWeeklyBossKills, getNow,
 } = require('../engine');
 const { AREAS } = require('../data');
@@ -56,13 +56,38 @@ function registerPlayerRoutes(app, store) {
       }
     } catch (_) { /* cache miss path */ }
     // 缓存未命中：计算 view（不写盘）
-    const view = getPlayerView(player);
+    // v1.05：加防御——getPlayerView 偶发异常时记录堆栈，避免"500 空 body 难排查"
+    let view;
+    try {
+      view = getPlayerView(player);
+    } catch (e) {
+      console.error(`[view-light] ${username} getPlayerView 异常:`, e && e.stack);
+      return fail(res, '视图计算失败', 500);
+    }
     // 注意：getOfflineSummary 修改 player.offlineSnapshot（副作用），view-light 不应触发
     //   所以这里只读 player.offlineSnapshot（已被 idle loop 维护）
     const offlineSummary = player.offlineSnapshot || { offlineSeconds: 0, batches: [] };
     // 写缓存（供下次命中）
     try { store.viewCacheSet(username, view, offlineSummary, player.lastTick); } catch (_) {}
     return res.json({ success: true, data: { player: view, offlineSummary }, player: view, offlineSummary, cached: false });
+  });
+
+  // v1.05 地图页专属轻视图：只返回地图页需要的字段（logs / currentArea / level / maxHp /
+  //   strategies / strategyCdRemaining），响应体远小于 getPlayerView。
+  //   与 view-light 一致：不走 withTransaction、不调 calculateIdle，纯只读。
+  app.get('/api/player/:username/view-map', (req, res) => {
+    const username = req.params.username;
+    if (!username) return fail(res, '缺少参数', 400);
+    const player = store.getPlayer(username);
+    if (!player) return fail(res, '角色不存在', 404);
+    let view;
+    try {
+      view = getMapView(player);
+    } catch (e) {
+      console.error(`[view-map] ${username} getMapView 异常:`, e && e.stack);
+      return fail(res, '视图计算失败', 500);
+    }
+    return res.json({ success: true, data: { player: view } });
   });
 
   // 切换区域

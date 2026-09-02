@@ -228,6 +228,7 @@ module.exports = {
 
   // 视图
   getPlayerView: view.getPlayerView,
+  getMapView: view.getMapView,
 
   // 离线收益
   getOfflineSummary: progression.getOfflineSummary,

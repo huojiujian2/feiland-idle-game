@@ -26,13 +26,17 @@ const { registerExpeditionRoutes } = require('./expedition');
 const { registerActiveRoutes } = require('./active');
 const { registerGuildRoutes } = require('./guild');
 const { registerDiagRoutes } = require('./diag');  // v1.03：内存/健康监控
-const { requireAuth, requirePlayerSelf, requireSelfFromBody, requireAdmin } = require('../middleware/auth');
+const { registerAdminRoutes } = require('./admin'); // v1.05：后台管理页（登录 + 监控 + GM）
+const { registerAnnounceRoutes } = require('./announce'); // v1.05：全服公告（玩家侧轮询）
+const { requireAuth, requirePlayerSelf, requireSelfFromBody, requireAdmin, requireAdminAuth } = require('../middleware/auth');
 
 function registerRoutes(app, store) {
   // 1. 公开路由（先注册，避免被后续的鉴权中间件挡住）
   registerAuthRoutes(app, store);        // /api/register, /api/login, /api/player/:u/create-character, /api/players/names
   registerAccountExistsRoute(app, store); // /api/account-exists
   registerDiagRoutes(app, store);         // /api/diag/health, /api/diag/memory（公开，便于 docker healthcheck）
+  registerAdminRoutes(app, store, { auth: { requireAdminAuth } }); // /api/admin/login（公开）+ 监控接口（admin 鉴权）
+  registerAnnounceRoutes(app);            // /api/announce（公开）全服公告轮询
 
   // 2. 公共数据路由（公开 GET）
   registerCodexRoutes(app, store);       // /api/areas, /api/codex, /api/data/*

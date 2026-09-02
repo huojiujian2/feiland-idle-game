@@ -104,6 +104,10 @@ export default {
   //   跳过 withTransaction + calculateIdle → 不触发 JSON.stringify(data) 120MB
   //   行为与 getPlayer 一致，但响应时间 <1ms（命中缓存时）
   getPlayerLight(username) { return request(`/player/${username}/view-light`) },
+  // v1.05 地图页专属轻视图（只含 logs/currentArea/strategy 等地图页字段）
+  getPlayerMap(username) { return request(`/player/${username}/view-map`) },
+  // v1.05 全服公告（公开只读，对比 latestId 检测新公告）
+  getAnnouncements() { return request('/announce') },
   changeArea(username, areaId) { return request(`/player/${username}/area`, { method: 'POST', body: JSON.stringify({ areaId }) }) },
   allocateAttributes(username, allocation) { return request(`/player/${username}/attributes`, { method: 'POST', body: JSON.stringify(allocation) }) },
   autoAllocate(username) { return request(`/player/${username}/auto-allocate`, { method: 'POST' }) },

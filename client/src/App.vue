@@ -34,7 +34,7 @@
             @sellEquip="handleSellEquip" @sellEquipsByLevel="handleSellEquipsByLevel"
             @equip="handleEquip" @enchant="handleEnchant"
             @refresh="player = $event" />
-          <MapView v-else-if="activeTab === 'map'" :player="player" :areas="areas"
+          <MapView v-else-if="activeTab === 'map'" :player="mapPlayer || player" :areas="areas"
             @select="handleAreaChange" @strategy-change="handleStrategyChange"
             @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" @goBoss="activeTab = 'boss'"
             @goCock="activeTab = 'cock'" @goExpedition="activeTab = 'expedition'" @goGuild="activeTab = 'guild'" />
@@ -85,6 +85,8 @@
       :levelUps="offlineSummary.data?.levelUps || 0"
       :bossKills="offlineSummary.data?.bossKills || 0"
       @close="offlineSummary.visible = false" />
+    <!-- v1.05 全服公告大弹窗（手动关闭） -->
+    <AnnounceModal :visible="announceModal" :list="announceList" @close="announceModal = false" />
 
     <!-- 商店弹窗 -->
     <ShopModal
@@ -122,6 +124,7 @@ import TabBar from './components/TabBar.vue';
 import LevelUpNotice from './components/LevelUpNotice.vue';
 import ReincarnHintModal from './components/ReincarnHintModal.vue';
 import OfflineRewardModal from './components/OfflineRewardModal.vue';
+import AnnounceModal from './components/AnnounceModal.vue';
 import ShopModal from './components/ShopModal.vue';
 import CharacterView from './components/CharacterView.vue';
 import SkillView from './components/SkillView.vue';
@@ -141,6 +144,7 @@ import TutorialOverlay from './components/TutorialOverlay.vue';
 
 // ====== 状态 ======
 const player = ref(null);
+const mapPlayer = ref(null); // 地图页专用精简数据（view-map 接口）
 const areas = ref([]);
 const jobTree = ref({});
 const shopItems = ref([]);
@@ -191,6 +195,9 @@ onMounted(() => {
         const r = await api.getPlayer(savedUser);
         if (r && r.success && r.data && r.data.player) {
           player.value = r.data.player;
+          // v1.05 fix：恢复登录态也要加载静态数据（区域/职业树/商店），
+          //   否则 areas 为空 → 地图页"挂机区域"列表空白，必须退出重登才恢复
+          loadStaticData();
           if (r.data.offlineSummary) offlineSummary.value = { visible: true, data: r.data.offlineSummary };
         } else if (r && !r.success && /登录|token|未登录/.test(r.message || '')) {
           // token 已被服务端拒绝 → 回调已自动清掉 → 回到登录页
@@ -224,6 +231,8 @@ const levelUpNotice = ref(null);
 const reincarnHint = ref(null);  // { level }  | null = 不弹
 const loginScreenRef = ref(null); // 登录界面引用：登录后无角色时切换到创建角色步骤
 const offlineSummary = ref({ visible: false, data: null });
+const announceModal = ref(false); // v1.05 全服公告大弹窗
+const announceList = ref([]); // 公告列表（新→旧，最多 10 条）
 const activeTab = ref('char');
 const showShop = ref(false);
 
@@ -231,6 +240,8 @@ const transitionName = ref('slide-left');
 const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'cock', 'expedition', 'guild', 'genesis'];
 
 let pollTimer = null;
+let mapPollTimer = null; // 地图页专用轮询
+let lastAnnounceId = 0; // 已读公告 id（对比 latestId 检测新公告）
 let prevLevel = 0;
 let currentUser = '';
 let hasHydrated = false;
@@ -248,7 +259,31 @@ watch(activeTab, (newTab, oldTab) => {
   const newIdx = tabOrder.indexOf(newTab);
   const oldIdx = tabOrder.indexOf(oldTab);
   transitionName.value = newIdx >= oldIdx ? 'slide-left' : 'slide-right';
+  // v1.05 地图页独立轻量数据源：进入拉一次 view-map 并轮询，离开即停
+  if (newTab === 'map') startMapPolling();
+  else stopMapPolling();
 });
+
+// ====== v1.05 地图页专属轻视图数据源 ======
+// 地图页只用 logs / currentArea / level / maxHp / strategies，独立用 view-map 轻接口，
+//   避免拉取全量 view（laws / 词条 / 背包 / 远征等）。mapPlayer 为空时 MapView 回退到 player。
+async function loadMapView() {
+  if (!currentUser) return;
+  try {
+    const r = await api.getPlayerMap(currentUser);
+    if (r && r.success && r.data && r.data.player) {
+      mapPlayer.value = r.data.player;
+    }
+  } catch (_) {}
+}
+function startMapPolling() {
+  if (mapPollTimer) return;
+  loadMapView();
+  mapPollTimer = setInterval(loadMapView, 10000);
+}
+function stopMapPolling() {
+  if (mapPollTimer) { clearInterval(mapPollTimer); mapPollTimer = null; }
+}
 
 // ====== 登录/注册/创建角色 ======
 async function handleLogin({ username, password }) {
@@ -351,6 +386,7 @@ async function refreshShop() {
 
 async function startPolling() {
   if (pollTimer) return; // 防重入：已有轮询在跑时不再叠加新定时器
+  loadAnnouncements(); // v1.05：登录后立即查一次公告，不等首个 10s 周期
   pollTimer = setInterval(async () => {
     if (!player.value) return;
     // v1.03 杠杆 2：用 getPlayerLight 替代 getPlayer（跳过 withTransaction + 缓存命中 <1ms）
@@ -376,7 +412,35 @@ async function startPolling() {
       // v0.9：首次达到 Lv.100 且未转生 → 弹转生提醒弹窗（一次性）
       maybeShowReincarnHint(p);
     }
+    loadAnnouncements(); // v1.05：与 light 轮询同拍检查全服公告（对比 lastAnnounceId）
   }, 10000); // v1.03 优化：5s→10s，QPS 减半
+}
+
+// ====== v1.05 全服公告 ======
+// 轮询 /api/announce，发现 id 大于 lastAnnounceId 的新公告就弹出大弹窗（可手动关闭）。
+// 公告列表维护在 announceList（新→旧，最多 10 条）；服务器重启导致 id 回退时重置基线。
+async function loadAnnouncements() {
+  try {
+    const r = await api.getAnnouncements();
+    if (r && r.success && r.data && Array.isArray(r.data.list) && r.data.list.length > 0) {
+      const list = r.data.list;
+      const latest = list[list.length - 1];
+      if (!latest || typeof latest.id !== 'number') return;
+      if (latest.id > lastAnnounceId) {
+        const newOnes = list.filter((a) => a.id > lastAnnounceId).reverse(); // 新→旧
+        lastAnnounceId = latest.id;
+        const seen = new Set(announceList.value.map((a) => a.id));
+        for (const a of newOnes) {
+          if (!seen.has(a.id)) announceList.value.push(a);
+        }
+        if (announceList.value.length > 10) announceList.value = announceList.value.slice(0, 10);
+        announceModal.value = true; // 弹出大弹窗（替代原 toast）
+      } else if (latest.id < lastAnnounceId) {
+        // 服务器重启后公告清空、id 从 1 重新计数：重置基线，避免以后永远不弹
+        lastAnnounceId = latest.id;
+      }
+    }
+  } catch (_) {}
 }
 
 // v0.9：检测是否需要弹出"满百级转生提醒"
@@ -583,11 +647,11 @@ async function handleSellEquipsByLevel(maxLevel) {
 }
 async function handleAreaChange(areaId) {
   const r = await api.changeArea(currentUser, areaId);
-  if (r.success) player.value = r.data; else toast.error(r.message);
+  if (r.success) { player.value = r.data; loadMapView(); } else toast.error(r.message);
 }
 async function handleStrategyChange(strategy) {
   const r = await api.setStrategy(currentUser, strategy);
-  if (r.success || r.data) player.value = r.data;
+  if (r.success || r.data) { player.value = r.data; loadMapView(); }
   if (!r.success) toast.error(r.message);
 }
 async function handleEvolve() {
@@ -611,6 +675,8 @@ function closeShop() { showShop.value = false; }
 
 function logout() {
   player.value = null;
+  mapPlayer.value = null;
+  stopMapPolling();
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
   hasHydrated = false;
@@ -623,7 +689,7 @@ function logout() {
   try { clearAuth(); } catch (_) {}
 }
 
-onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
+onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); stopMapPolling(); });
 </script>
 
 <style scoped>

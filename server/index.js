@@ -8,16 +8,18 @@ const store = require('./store');
 const engine = require('./engine');
 const { registerRoutes } = require('./routes');
 const gzip = require('./middleware/gzip');
+const monitor = require('./monitor'); // v1.05：轻量运行时监控（后台监控页数据源）
 
 const app = express();
 // 端口约定：后端 API 固定 3001；前端固定 3000（开发时由 Vite 提供，生产时由 server/web-server.js 提供）
 const PORT = process.env.PORT || 3001;
 
 // v1.03 P1 2.2：CORS 白名单（防任意网站跨域调用）
-//   默认允许 localhost:3000 / 127.0.0.1:3000（开发/反代同机）
+//   默认允许 localhost:3000 / 127.0.0.1:3000（游戏前端）
+//   以及 localhost:3001 / 127.0.0.1:3001（v1.05：后台管理页与 API 同源部署）
 //   生产通过 CORS_ORIGIN 环境变量设置（逗号分隔），如：
 //     CORS_ORIGIN="https://game.example.com,https://www.example.com"
-const _corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://127.0.0.1:3000')
+const _corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001')
   .split(',').map((s) => s.trim()).filter(Boolean);
 app.use(cors({
   origin: (origin, cb) => {
@@ -34,6 +36,11 @@ app.use(cors({
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '100kb' }));
 // v1.04：HTTP 响应 gzip 压缩（只作用于 /api，减小 JSON 传输体积；大包自动跳过）
 app.use('/api', gzip);
+// v1.05：/api 请求统计（供后台监控页展示 QPS / 错误率）
+app.use('/api', (req, res, next) => {
+  res.on('finish', () => monitor.recordRequest(res.statusCode));
+  next();
+});
 
 // load() 可能是异步（SQLite 后端）也可能是同步（JSON 后端）
 // 用 IIFE 把 store 初始化与后续启动逻辑串起来
@@ -69,15 +76,27 @@ app.use('/api', gzip);
     function runIdleLoop() {
       if (idleRunning) return; // 重入保护（理论上不会发生）
       idleRunning = true;
+      const _loopStart = Date.now(); // v1.05：记录本轮耗时供监控页
       try {
         // 周重置 + 挂机结算（在同一个循环里即可，不用单独 setInterval——P1 5.2 修复）
         engine.maybeResetWeeklyBossKills(store);
-        const players = store.getAllPlayers();
-        for (const player of players) engine.calculateIdle(player);
-        if (players.length > 0) store.safeSave();
+        // v1.05 优化：只结算"在线玩家"（登录后 5 分钟内有活动的会话）。
+        //   离线玩家不需要每 5s 实时模拟战斗——登录时会按 lastTick 时间差批量结算离线收益
+        //   （engine.calculateIdle 内部 elapsed>=60s 走 _calculateIdleBatch），收益不丢。
+        //   顺带解决：全服结算占 CPU（地图卡顿根因之一）+ 离线玩家 view-cache 被持续打失效。
+        const actives = monitor.getActiveUsernames();
+        let settled = 0;
+        for (const username of actives) {
+          const player = store.getPlayer(username);
+          if (!player) continue;
+          engine.calculateIdle(player);
+          settled += 1;
+        }
+        if (settled > 0) store.safeSave();
       } catch (e) {
         console.error('[idle loop] 异常:', e.message);
       } finally {
+        monitor.recordIdleLoop(Date.now() - _loopStart);
         idleRunning = false;
         setTimeout(runIdleLoop, 5000); // 自递归：完成后 5s 再排下一个
       }
@@ -161,9 +180,17 @@ app.use('/api', gzip);
 
     // ====== 静态资源托管 ======
     const distPath = path.join(__dirname, '..', 'client', 'dist');
+    // v1.05：后台管理页产物独立于 client/dist（server/public/admin），
+    //   避免游戏前端 vite build（默认 emptyOutDir 清空 dist）把后台产物误删
+    const adminDistPath = path.join(__dirname, 'public', 'admin');
     const publicIconsPath = path.join(__dirname, '..', 'client', 'public', 'icons');
     if (fs.existsSync(publicIconsPath)) {
       app.use('/icons', express.static(publicIconsPath));
+    }
+    if (fs.existsSync(adminDistPath)) {
+      // v1.05：后台管理页（/admin）——独立构建产物，与游戏前端隔离
+      app.use('/admin', express.static(adminDistPath));
+      console.log(`  后台管理页: ${adminDistPath}`);
     }
     if (fs.existsSync(distPath)) {
       // v1.03 P2 3.4：静态资源加 ETag + Cache-Control（强缓存 + 协商缓存）
@@ -183,6 +210,9 @@ app.use(express.static(distPath, {
 }));
       app.get('*', (req, res) => {
         // /api 已由上方兜底返回 404，这里只负责前端路由回退
+        if (req.path.startsWith('/admin') && fs.existsSync(path.join(adminDistPath, 'index.html'))) {
+          return res.sendFile(path.join(adminDistPath, 'index.html')); // v1.05：后台 SPA 回退
+        }
         res.sendFile(path.join(distPath, 'index.html'));
       });
       console.log(`  静态文件: ${distPath}`);

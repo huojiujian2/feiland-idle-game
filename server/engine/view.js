@@ -162,8 +162,37 @@ function getPlayerView(player) {
   };
 }
 
+// ====== 地图页专属轻视图 ======
+// 只返回地图页（MapView / MapAreaSelector / BattleStrategy / BattleLog）真正用到的字段：
+//   currentArea / level / maxHp / logs（战斗日志）/ strategies（策略面板）/ strategyCdRemaining
+// 相比 getPlayerView，省略 laws / 词条 / 成就 / 任务 / 背包 / 装备 / 远征 / 公会等无关字段，
+//   响应体从几百 KB 缩到几 KB，计算也轻得多（不调 getTotalStats / getCombatStats 等）。
+function getMapView(player) {
+  player = migratePlayer(player);
+  const strategy = player.strategy || 'balanced';
+  const strategyChangedAt = Number.isFinite(player.strategyChangedAt) ? player.strategyChangedAt : 0;
+  const strategyCdRemaining = strategyChangedAt === 0 ? 0 : Math.max(0, STRATEGY_CD_MS - (getNow() - strategyChangedAt));
+  const strategies = Object.entries(STRATEGIES).map(([id, cfg]) => ({
+    id, name: cfg.name, desc: cfg.desc, reqLevel: cfg.reqLevel,
+    unlocked: player.level >= cfg.reqLevel,
+    active: id === strategy
+  }));
+  return {
+    username: player.username,
+    name: player.name,
+    level: player.level,
+    maxHp: player.maxHp,
+    currentArea: player.currentArea,
+    logs: Array.isArray(player.logs) ? player.logs.slice(-20).reverse() : [],
+    strategies,
+    strategyCdRemaining,
+    lastTick: player.lastTick,
+  };
+}
+
 module.exports = {
   getPlayerView,
+  getMapView,
   getPowerScore,
   getReadonlyPlayer,
 };

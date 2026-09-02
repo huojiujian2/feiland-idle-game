@@ -86,6 +86,9 @@ function registerAuthRoutes(app, store) {
     // 签发 JWT（默认 7 天）
     const token = signToken({ username });
 
+    // v1.05：登录成功即标记在线（会话统计用，不用 lastTick）
+    try { require('../monitor').markActive(username); } catch (_) {}
+
     // 已有角色角色
     if (account.hasCharacter) {
       const rawPlayer = store.getPlayer(username);
@@ -133,6 +136,8 @@ function registerAuthRoutes(app, store) {
     });
     if (result.status !== 200) return fail(res, result.message, result.status);
     console.log(`新角色创建: ${charName} (${username})`);
+    // v1.05：建号即进入游戏，标记在线
+    try { require('../monitor').markActive(username); } catch (_) {}
     ok(res, result.data);
   });
 

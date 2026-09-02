@@ -129,7 +129,11 @@ function _isTestMode() {
  *   - isTestMode()=true → 放行（向后兼容测试套）
  */
 function requireAuth(req, res, next) {
-  if (_authMode() === 'off') return next();
+  if (_authMode() === 'off') {
+    // 开发模式：尽力从路径参数标记在线（便于本机观察在线数据）
+    try { if (req.params && req.params.username) require('../monitor').markActive(req.params.username); } catch (_) {}
+    return next();
+  }
   if (_isTestMode()) return next();
   const token = extractToken(req);
   const payload = token ? verifyToken(token) : null;
@@ -137,6 +141,8 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ success: false, message: '未登录或 token 无效' });
   }
   req.user = payload;
+  // v1.05：玩家发起的受保护请求 = 有活动，刷新在线会话（登录/挂机/操作都算在线）
+  try { require('../monitor').markActive(payload.username); } catch (_) {}
   next();
 }
 
@@ -196,6 +202,41 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+/**
+ * requireAdminAuth — 后台管理页鉴权（v1.05）
+ * 两种凭证二选一：
+ *   1) Authorization: Bearer <admin JWT>（由 POST /api/admin/login 签发，payload.role === 'admin'）
+ *   2) X-Admin-Token header（服务器间内部调用，与 requireAdmin 兼容）
+ * 校验成功挂 req.admin = payload
+ */
+function requireAdminAuth(req, res, next) {
+  try {
+    const state = require('../engine/state');
+    if (state && typeof state.isTestMode === 'function' && state.isTestMode()) return next();
+  } catch (_) {}
+  // 1) Bearer admin JWT
+  const token = extractToken(req);
+  if (token) {
+    const payload = verifyToken(token);
+    if (payload && payload.role === 'admin') {
+      req.admin = payload;
+      return next();
+    }
+    return res.status(403).json({ success: false, message: '无权限' });
+  }
+  // 2) 回退 X-Admin-Token（与 requireAdmin 一致）
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected) {
+    return res.status(500).json({ success: false, message: 'ADMIN_TOKEN 未配置' });
+  }
+  const got = req.headers && (req.headers['x-admin-token'] || req.headers['X-Admin-Token']);
+  if (got === expected) {
+    req.admin = { username: 'admin', via: 'header' };
+    return next();
+  }
+  return res.status(403).json({ success: false, message: '无权限' });
+}
+
 module.exports = {
   signToken,
   verifyToken,
@@ -204,6 +245,7 @@ module.exports = {
   requirePlayerSelf,
   requireSelfFromBody,
   requireAdmin,
+  requireAdminAuth,
   __setSecret,
   __resetSecret,
   __getSecret,
