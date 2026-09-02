@@ -9,6 +9,8 @@ const engine = require('./engine');
 const { registerRoutes } = require('./routes');
 const gzip = require('./middleware/gzip');
 const monitor = require('./monitor'); // v1.05：轻量运行时监控（后台监控页数据源）
+// v1.07：服务器全局设置（meta.serverConfig 的访问封装）
+const serverSettings = require('./server-settings');
 
 const app = express();
 // 端口约定：后端 API 固定 3001；前端固定 3000（开发时由 Vite 提供，生产时由 server/web-server.js 提供）
@@ -53,6 +55,8 @@ app.use('/api', (req, res, next) => {
   }
   engine.maybeResetWeeklyBossKills(store);
   engine.setStore(store);   // 把 store.getMeta 注入 idle/genesis（创世系统需要）
+  // v1.07：服务器全局设置注入 store（meta.serverConfig 读写源）
+  serverSettings.init(store);
   // v1.03 P1 1.9：启动期跑一次创世装备衰减（首次启动若 lastDecayDayKey 缺失会全量衰减，后续每日 0 点衰减）
   try { engine.maybeDecayGenesisEquips(store); } catch (e) { console.error('[genesis decay] 启动失败:', e.message); }
   // 启动补偿：按周期各自包裹 withTransaction，失败不推进游标（见 engine.settleDuePeriods）

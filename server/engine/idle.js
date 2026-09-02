@@ -6,6 +6,14 @@ const { simulateBattle } = require('./combat');
 const { migratePlayer } = require('./player');
 const { ensureQuestStats, updateDailyProgress, checkAchievements } = require('./daily');
 const { AREAS, AREA_ORDER, STRATEGIES, JOB_TREE, expToNext, createEquipItem } = require('../data');
+// v1.07：服务器级倍率/上限（meta.serverConfig，见 server/server-settings.js）
+const svrCfg = require('../server-settings');
+
+// 达到等级上限后溢出经验清零（maxLevel <= 0 表示不限，直接返回）
+function applyLevelCap(player) {
+  const cap = svrCfg.maxLevel();
+  if (cap > 0 && (player.level || 1) >= cap) player.exp = 0;
+}
 
 // grantGold 注入
 let _grantGold = (player, amount) => { player.gold += amount; };
@@ -62,6 +70,8 @@ function calculateIdle(player) {
   const stratEff = STRATEGIES[player.strategy]?.effects || {};
   if (stratEff.exp) expMult *= (1 + stratEff.exp);
   if (stratEff.gold) goldMult *= (1 + stratEff.gold);
+  // v1.07 服务器经验倍率（金币统一走 _grantGold → player.grantGold 乘倍率，此处不乘避免双重）
+  expMult *= svrCfg.expMult();
 
   if (battle.result === 'win') {
     if (battle.skillGoldBonus) goldMult *= (1 + battle.skillGoldBonus);
@@ -197,6 +207,7 @@ function calculateIdle(player) {
       }
     }
   }
+  applyLevelCap(player); // v1.07 全服等级上限（溢出经验清零）
   if (levelUps.length > 0) {
     const top = levelUps[levelUps.length - 1];
     player.logs.push({ time: now, type: 'levelup', level: top, text: `等级提升！Lv.${top}，+${levelUps.length * 3}属性 +${levelUps.length}技能点` });
@@ -228,6 +239,8 @@ function _calculateIdleBatch(player, area, elapsed) {
   const stratEff = STRATEGIES[player.strategy]?.effects || {};
   if (stratEff.exp) expMult *= (1 + stratEff.exp);
   if (stratEff.gold) goldMult *= (1 + stratEff.gold);
+  // v1.07 服务器经验倍率（金币统一走 _grantGold → player.grantGold 乘倍率，此处不乘避免双重）
+  expMult *= svrCfg.expMult();
 
   const BATTLE_INTERVAL_MS = 4000;
   let battles = Math.floor(elapsed / BATTLE_INTERVAL_MS);
@@ -300,6 +313,7 @@ function _calculateIdleBatch(player, area, elapsed) {
     player.maxMp += 10;
     levelUps++;
   }
+  applyLevelCap(player); // v1.07 全服等级上限（溢出经验清零）
   // 离线批量结算同样满血满蓝
   player.hp = player.maxHp;
   player.mp = player.maxMp;

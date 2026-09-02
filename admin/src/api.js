@@ -44,9 +44,17 @@ async function request(path, { method = 'GET', body } = {}) {
 }
 
 export const adminApi = {
-  // 登录：ADMIN_TOKEN 换 admin JWT
-  login(password) {
-    return request('/admin/login', { method: 'POST', body: { password } });
+  // 登录：账号 + 密码（v1.08：多账号体系，首登密码 admin，强制改密）
+  login(username, password) {
+    return request('/admin/login', { method: 'POST', body: { username, password } });
+  },
+  // 当前登录账号信息（首登警告用）
+  me() {
+    return request('/admin/me');
+  },
+  // 修改自己的密码
+  changeMyPassword(oldPassword, newPassword) {
+    return request('/admin/me/password', { method: 'POST', body: { oldPassword, newPassword } });
   },
   // 监控总览
   overview() {
@@ -77,5 +85,12 @@ export const adminApi = {
   // 世界 BOSS：强制重新召唤（清空当前进度）
   spawnWorldBoss() {
     return request('/admin/worldboss/spawn', { method: 'POST' });
+  },
+  // ====== v1.07：服务器全局设置 ======
+  getServerConfig() {
+    return request('/admin/server-config');
+  },
+  putServerConfig(payload) {
+    return request('/admin/server-config', { method: 'PUT', body: payload });
   },
 };

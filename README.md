@@ -2,7 +2,7 @@
 
 # ⚡ 费兰德世界
 
-### 挂机文字成长游戏 · v1.06
+### 挂机文字成长游戏 · v1.07
 
 <img src="https://img.shields.io/badge/Vue-3.4-42b883?logo=vuedotjs&logoColor=white" alt="Vue 3.4">
 <img src="https://img.shields.io/badge/Vite-5.2-646cff?logo=vite&logoColor=white" alt="Vite 5.2">
@@ -28,7 +28,7 @@
 | 3 | [docs/README/03-areas-and-equipment.md](docs/README/03-areas-and-equipment.md) | 11 区域 + 50+ 装备 + 5 品质阶 + 24 怪物技能 |
 | 4 | [docs/README/04-quickstart.md](docs/README/04-quickstart.md) | 启动与部署（4 种方式 + Docker） |
 | 5 | [docs/README/05-architecture.md](docs/README/05-architecture.md) | 项目结构 + 技术栈 + UI/UX 规范 |
-| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v1.06） |
+| 6 | [docs/README/06-changelog.md](docs/README/06-changelog.md) | 版本历史（v0.1 → v1.08） |
 
 ### 🔧 开发者 / 运维文档
 
@@ -106,8 +106,10 @@
 | 🛡 **审计日志** | 所有写操作记录 + 敏感字段自动脱敏 |
 | 📦 **SQLite WAL 后端** | 异步落盘 + epoch 守卫，支持几十人在线并发 |
 | 💾 **事务化存档** | `withTransaction` 原子写 + 回滚，主备双备份 |
-| 🖥 **后台管理页** | 独立 `/admin` 前端（零依赖）：服务器监控大屏 + GM 工具，admin JWT 登录 + 暗黑模式（v1.06） |
+| 🖥 **后台管理页** | 独立 `/admin` 前端（零依赖）：服务器监控大屏 + GM 工具 + 服务器设置 + 账号管理，admin 多账号登录 + 暗黑模式（v1.06→v1.08） |
 | 🎮 **GM 工具** | 全服公告 / 玩家检索与档案 / 发金币发经验 / 召唤世界 BOSS，全部挂审计日志 `gm.*`（v1.06） |
+| ⚙️ **服务器设置** | 经验/金币倍率 + 全服等级与金币上限，9 个产出点（idle/PVP/BOSS/卷轴/任务/成就/活跃/远征/出售）统一接入，含智能预设（默认/开服双倍/难度上调/赛季制/新手服）（v1.07） |
+| 🔑 **后台账号体系** | 多账号 + scrypt 密码哈希，首登账号 `admin/admin` 强制改密提示 + 顶部账号按钮一键改密（v1.08） |
 | 👥 **在线统计** | 登录会话口径（5 分钟活跃判在线），5s 挂机循环只结算在线玩家（v1.06） |
 | 📊 **内存监控** | `/api/diag/memory` 实时 heap/arenaBots 缓存 + docker healthcheck |
 | 🚀 **生产内存限制** | `--max-old-space-size` 默认 384MB，监控告警阈值 80% |
@@ -157,7 +159,9 @@ docker compose up -d --build
 
 > **端口约定（所有模式统一）**：前端固定 **3000**（浏览器打开的地址），后端 API 固定 **3001**（正常游玩无需关心）。
 > 开发模式下若 3000 被占用，Vite 会直接报错退出（`strictPort`），不会悄悄换端口。
-> **后台管理（v1.06）**：`http://localhost:3001/admin`，需设置环境变量 `ADMIN_TOKEN` 作为登录密码（`server/routes/admin.js`）。
+> **后台管理（v1.06→v1.08）**：`http://localhost:3001/admin`
+> * v1.06：单 token（`ADMIN_TOKEN` 环境变量）
+> * **v1.08**：多账号 + 密码哈希（首登账号 `admin/admin`，进入后顶部弹窗强制改密；旧 `ADMIN_TOKEN` 不再使用）
 
 **完整部署文档（含 JWT_SECRET / 内存推荐 / 健康检查）**：[04-quickstart.md](docs/README/04-quickstart.md) · [docs/DEPLOY.md](docs/DEPLOY.md)
 

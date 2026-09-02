@@ -151,6 +151,8 @@ function _ensureDefaults() {
   if (!isPlainObject(data.meta.guilds)) data.meta.guilds = {};
   if (!isPlainObject(data.meta.guildNameIndex)) data.meta.guildNameIndex = {};
   if (!isPlainObject(data.meta.guildArchive)) data.meta.guildArchive = {};
+  // v1.07：服务器全局设置（后台「服务器设置」页读写；expMultiplier/goldMultiplier 倍率，maxLevel/maxGold 全服数值上限，0 = 不限）
+  if (!isPlainObject(data.meta.serverConfig)) data.meta.serverConfig = { expMultiplier: 1, goldMultiplier: 1, maxLevel: 0, maxGold: 0, updatedAt: 0, updatedBy: '' };
   try {
     data.meta.guildNameIndex = {};
     for (const [gid, g] of Object.entries(data.meta.guilds)) {

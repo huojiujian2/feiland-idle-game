@@ -105,8 +105,21 @@ function useConsumable(player, itemId, count = 1) {
   invItem.count -= safeCount;
   if (invItem.count <= 0) player.inventory = player.inventory.filter(i => i !== invItem);
   for (let i = 0; i < safeCount; i++) {
-    if (itemId === 'exp_scroll') player.exp += 500;
-    else if (itemId === 'exp_scroll_great') player.exp += 3000;
+    if (itemId === 'exp_scroll') {
+      // v1.07 服务器经验倍率（卷轴不经过 player.grantExpWithLevelUp，自行乘算）
+      const _svrCfg = require('../server-settings');
+      const _cap = _svrCfg.maxLevel();
+      const _eMul = _svrCfg.expMult();
+      if (_cap > 0 && (player.level || 1) >= _cap) continue; // 等级上限：卷轴无效
+      player.exp += Math.floor(500 * _eMul);
+    }
+    else if (itemId === 'exp_scroll_great') {
+      const _svrCfg2 = require('../server-settings');
+      const _cap2 = _svrCfg2.maxLevel();
+      const _eMul2 = _svrCfg2.expMult();
+      if (_cap2 > 0 && (player.level || 1) >= _cap2) continue;
+      player.exp += Math.floor(3000 * _eMul2);
+    }
   }
   return { success: true };
 }
