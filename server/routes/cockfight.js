@@ -56,11 +56,14 @@ function registerCockfightRoutes(app, store) {
     if (!existing) return fail(res, '角色不存在', 404);
     const { bet, intervention, createdAt: clientCreatedAt } = req.body || {};
     if (bet === undefined || bet === null) return fail(res, '缺少参数', 400);
-    // v1.03：createdAt 服务端生成（防伪造）
-    const createdNum = getNow();
-    if (clientCreatedAt !== undefined && clientCreatedAt !== null && process.env.NODE_ENV !== 'production') {
-      console.warn(`[cockfight] 客户端传 createdAt=${clientCreatedAt} 已被忽略，使用服务端时间`);
+    // v1.09 修复：客户端必须把 enter 阶段返回的 createdAt 原样回传，引擎据此做幂等校验
+    //   不再"忽略客户端时间改用服务端时间"——那是 v1.03 的旧实现，破坏了 enter→resolve 闭环
+    //   防御策略改为：客户端伪造 createdAt → 命中不了 s.current.createdAt → 直接 409（由引擎内部判）
+    if (clientCreatedAt === undefined || clientCreatedAt === null) {
+      return fail(res, '缺少 createdAt（请先进入斗场）', 400);
     }
+    const createdNum = Number(clientCreatedAt);
+    if (!Number.isFinite(createdNum)) return fail(res, 'createdAt 非法', 400);
     const result = store.withTransaction((data) => {
       const player = data.players[username];
       if (!player) return { status: 404, message: '角色不存在' };
