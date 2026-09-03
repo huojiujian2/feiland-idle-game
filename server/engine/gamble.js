@@ -30,10 +30,10 @@ const crypto = require('crypto');
 //   期望倍数 E[m] = (1 - houseEdge) * (max * ln(max) / (max - 1))
 //   本实现的 RTP：简单 E[m] / max（详细 RTP 计算见 test 文件）
 const DIFFICULTY = {
-  easy:   { id: 'easy',   name: '简单', color: '#4caf50', maxMultiplier: 5,   maxDuration: 12, houseEdge: 0.05, freeRewardBase: 500,   baseBetMin: 100,     baseBetMax: 100000      },
-  normal: { id: 'normal', name: '普通', color: '#ffb300', maxMultiplier: 15,  maxDuration: 18, houseEdge: 0.07, freeRewardBase: 1000,  baseBetMin: 500,     baseBetMax: 1000000     },
-  hard:   { id: 'hard',   name: '困难', color: '#ff7043', maxMultiplier: 50,  maxDuration: 22, houseEdge: 0.10, freeRewardBase: 2000,  baseBetMin: 5000,    baseBetMax: 10000000    },
-  hell:   { id: 'hell',   name: '地狱', color: '#e53935', maxMultiplier: 200, maxDuration: 25, houseEdge: 0.15, freeRewardBase: 5000,  baseBetMin: 50000,   baseBetMax: 100000000   },
+  easy:   { id: 'easy',   name: '简单', color: '#4caf50', maxMultiplier: 5,   maxDuration: 8,  houseEdge: 0.12, distK: 1.0,  freeRewardBase: 500,   baseBetMin: 100,     baseBetMax: 100000      },
+  normal: { id: 'normal', name: '普通', color: '#ffb300', maxMultiplier: 15,  maxDuration: 12, houseEdge: 0.18, distK: 1.0,  freeRewardBase: 1000,  baseBetMin: 500,     baseBetMax: 1000000     },
+  hard:   { id: 'hard',   name: '困难', color: '#ff7043', maxMultiplier: 50,  maxDuration: 16, houseEdge: 0.22, distK: 1.0,  freeRewardBase: 2000,  baseBetMin: 5000,    baseBetMax: 10000000    },
+  hell:   { id: 'hell',   name: '地狱', color: '#e53935', maxMultiplier: 200, maxDuration: 20, houseEdge: 0.25, distK: 1.0,  freeRewardBase: 5000,  baseBetMin: 50000,   baseBetMax: 100000000   },
 };
 
 const DIFFICULTY_KEYS = Object.keys(DIFFICULTY);
@@ -48,21 +48,17 @@ const ROUND_TTL_MS = 35 * 1000;
 // 反作弊：客户端报值与服务端反算值之差 > 0.3 倍视为作弊
 const CHEAT_TOLERANCE = 0.3;
 
-// ============ 难度档位 ============
-//   用 crypto.randomBytes 生成均匀随机数 u ∈ [0, 1)，
-//   crashMult = pow(max, 1 - u)  ← 这是行业标准 crash 分布：
-//     越接近 max 倍数概率越低（1.01x 很常见，10x 罕见，100x 极罕见）
-//   返回时额外抛掉 > maxMultiplier 的越界值（不会发生，只是保险）
+// ============ PRNG：生成 crashMult ============
+//   行业标准 crash 分布：crashMult = pow(max, 1-u)
+//     u=0 → x=max（极难），u=1 → x=1（极容易）
+//   概率密度 f(x) = 1/(x² × ln(max))——1.01x 很常见，10x 罕见，100x 极罕见
 function generateCrashMult(difficulty) {
   const cfg = DIFFICULTY[difficulty];
   if (!cfg) throw new Error('unknown difficulty');
   // 4 字节随机数 → 0~1 浮点
   const buf = crypto.randomBytes(4);
   const u = buf.readUInt32BE(0) / 0x100000000;
-  // 拒绝采样：保证 u ∈ (0, 1)（理论上是，但边界处理）
   if (u <= 0 || u >= 1) return generateCrashMult(difficulty);
-  // crashMult ∈ [1, maxMultiplier]
-  // 公式：x = pow(max, 1-u) 推导：当 u→0 时 x→max（极难），u→1 时 x→1（极容易）
   let x = Math.pow(cfg.maxMultiplier, 1 - u);
   if (x < 1.01) x = 1.01;
   if (x > cfg.maxMultiplier) x = cfg.maxMultiplier;
@@ -151,12 +147,18 @@ function placeBet({ username, difficulty, isFree, bet }) {
 
   const crashMult = generateCrashMult(difficulty);
   const startAt = Date.now();
+  // 计算从 startAt 到炸点的时刻（毫秒）
+  //   currentMultiplier(t) = = 1.0 + t × (max - 1.0) / maxDuration
+  //   → t_at_crash = (crashMult - 1.0) × maxDuration / (max - 1.0)
+  const tAtCrash = (crashMult - 1.0) * cfg.maxDuration / (cfg.maxMultiplier - 1.0);
+  const crashAt = startAt + Math.max(200, tAtCrash * 1000); // 至少 200ms 后炸
   const round = {
     username,
     difficulty,
     isFree: !!isFree,
     bet,
     crashMult,
+    crashAt,
     startAt,
     maxDuration: cfg.maxDuration,
     maxMultiplier: cfg.maxMultiplier,
@@ -173,11 +175,12 @@ function placeBet({ username, difficulty, isFree, bet }) {
       isFree: !!isFree,
       bet,
       startAt,
+      crashAt, // 客户端用来判定"火箭炸了"——超过此时刻禁用收手
       maxDuration: cfg.maxDuration,
       maxMultiplier: cfg.maxMultiplier,
       baseBetMin: cfg.baseBetMin,
       baseBetMax: cfg.baseBetMax,
-      // 注意：crashMult 故意不返回给客户端（防前端偷看）
+      // 注意：crashMult 故意不返回给客户端（防前端偷看具体炸点倍数）
     },
   };
 }

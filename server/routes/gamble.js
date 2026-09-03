@@ -235,6 +235,57 @@ function registerGambleRoutes(app, store) {
     return ok(res, result.data);
   });
 
+  // 自动炸（前端到 crashAt 时间触发）
+  app.post('/api/player/:username/gamble/autoexplode', auditLog('gamble.autoexplode'), (req, res) => {
+    const username = req.params.username;
+    if (!username) return fail(res, '缺少参数', 400);
+    const existing = store.getPlayer(username);
+    if (!existing) return fail(res, '角色不存在', 404);
+    const result = store.withTransaction((data) => {
+      const player = data.players[username];
+      if (!player) return { status: 404, message: '角色不存在' };
+      const round = gamble.getActiveRound(username);
+      if (!round) return { status: 200, data: { alreadyResolved: true } };
+      // 标记炸了：bet 已扣（开局扣过），派彩 = 0
+      const crashInfo = gamble.autoCrash(username);
+      if (!crashInfo) return { status: 200, data: { alreadyResolved: true } };
+      const g = ensureFreeRounds(player);
+      g.stats = g.stats || { played: 0, won: 0, lost: 0, biggestMult: 0, totalWon: 0, totalLost: 0 };
+      g.stats.played += 1;
+      g.stats.lost += 1;
+      g.stats.totalLost = (g.stats.totalLost || 0) + (round.isFree ? 0 : round.bet);
+      ensureQuestStatsInc(player, 'gamble_play_total', 1);
+      // 历史
+      g.history.push({
+        at: Date.now(),
+        difficulty: round.difficulty,
+        isFree: round.isFree,
+        bet: round.bet,
+        result: 'lose',
+        reason: 'crashed',
+        mult: crashInfo.mult,
+        payout: 0,
+      });
+      if (g.history.length > 50) g.history.splice(0, g.history.length - 50);
+      return {
+        status: 200,
+        data: {
+          result: 'lose',
+          reason: 'crashed',
+          mult: crashInfo.mult,
+          crashMult: crashInfo.mult,
+          payout: 0,
+          bet: round.bet,
+          isFree: round.isFree,
+          currentGold: Math.floor(player.gold || 0),
+          stats: g.stats,
+        },
+      };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ success: false, message: result.message });
+    return ok(res, result.data);
+  });
+
   // 放弃当前局（不计费；用于客户端异常退出）
   app.post('/api/player/:username/gamble/cancel', auditLog('gamble.cancel'), (req, res) => {
     const username = req.params.username;

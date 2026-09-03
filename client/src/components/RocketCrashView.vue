@@ -26,14 +26,15 @@
       <div class="canvas-wrap">
         <canvas ref="canvasRef" :width="canvasW" :height="canvasH" class="rocket-canvas"></canvas>
         <div class="mult-readout">
-          <div class="mult-num" :class="{ crashed: status === 'crashed', won: status === 'won' }">
+          <div class="mult-num" :class="{ crashed: status === 'crashed', won: status === 'won' || status === 'cashed', cashed: status === 'cashed' }">
             {{ currentMult.toFixed(2) }}<span class="x">x</span>
           </div>
           <div class="mult-status">
             <template v-if="status === 'idle'">点击「发射」开始</template>
             <template v-else-if="status === 'flying'">飞行中…{{ isFree ? '免费局' : `投注 ${formatGold(bet)}` }}</template>
+            <template v-else-if="status === 'cashed'">✓ 已收手 {{ cashedMult.toFixed(2) }}x · +{{ formatGold(lastResult.payout) }}（看它能飞多高）</template>
             <template v-else-if="status === 'won'">✓ 收手成功 · +{{ formatGold(lastResult.payout) }}</template>
-            <template v-else-if="status === 'crashed'">✗ 火箭炸了 · 输了 {{ formatGold(bet) }}</template>
+            <template v-else-if="status === 'crashed'">✗ 火箭炸了 · 输了 {{ formatGold(bet) }} <span v-if="lastResult.mult">（炸点 {{ lastResult.mult.toFixed(2) }}x）</span></template>
           </div>
         </div>
         <div class="canvas-axis">
@@ -84,7 +85,7 @@
 
         <!-- 操作按钮 -->
         <div class="section action-row">
-          <button v-if="status === 'idle' || status === 'won' || status === 'crashed'" class="btn-launch"
+          <button v-if="status === 'idle' || status === 'won' || status === 'crashed' || status === 'cashed'" class="btn-launch"
             :disabled="!canLaunch" @click="doLaunch">
             🚀 发射（投注 {{ formatGold(bet) }}）
           </button>
@@ -168,8 +169,11 @@ const maxDuration = ref(18);
 const isFree = ref(false);
 
 const currentMult = ref(1.0);
+const cashedMult = ref(1.0); // 用户收手时的倍数（用来在火箭继续飞时回显）
 let startAt = 0;
+let crashAt = 0;
 let rafId = null;
+let autoExploded = false; // 防止 autoexplode 重复触发
 
 const lastResult = ref({ payout: 0, mult: 0 });
 const stats = ref({ played: 0, won: 0, lost: 0, biggestMult: 0, totalWon: 0, totalLost: 0 });
@@ -211,14 +215,64 @@ function quickAdd(level) {
 
 // ============ 动画循环 ============
 function tick() {
-  if (status.value !== 'flying') return;
-  const elapsedMs = Date.now() - startAt;
+  if (status.value !== 'flying' && status.value !== 'cashed') return;
+  const now = Date.now();
+  const elapsedMs = now - startAt;
   const elapsedSec = elapsedMs / 1000;
-  // 客户端自渲染倍数（与服务端公式一致）
-  const m = 1.0 + elapsedSec * (maxMult.value - 1.0) / maxDuration.value;
-  currentMult.value = Number(m.toFixed(2));
+  // 客户端自渲染倍数（与服务端公式一致）—— cashed 状态也继续跑动画到炸点
+  if (elapsedSec <= maxDuration.value) {
+    const m = 1.0 + elapsedSec * (maxMult.value - 1.0) / maxDuration.value;
+    currentMult.value = Number(m.toFixed(2));
+  }
   drawCanvas(elapsedSec);
+  // 火箭炸了：触发 autoexplode（收手后也会继续炸，只是禁用收手按钮）
+  if (!autoExploded && now >= crashAt) {
+    autoExploded = true;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    doAutoexplode();
+    return;
+  }
   rafId = requestAnimationFrame(tick);
+}
+
+async function doAutoexplode() {
+  const r = await api.gambleAutoexplode(props.currentUser);
+  // 即使接口失败，本地也要走完动画（防止永远卡在 flying/cashed）
+  const data = r && r.success ? r.data : null;
+  if (data) {
+    lastResult.value = data;
+    currentGold.value = data.currentGold || currentGold.value;
+  }
+  const crashedAt = data && data.mult ? data.mult : currentMult.value;
+  // 区分两种情况：
+  //   1. cashed（用户已收手）：炸了只是动画收尾，金币已入账，不弹"输了"
+  //   2. flying（用户没动）：等炸了，钱才真输
+  if (status.value === 'cashed') {
+    // 用户已经赢了 → 只展示炸点作为对比信息
+    status.value = 'crashed';
+    const diff = (crashedAt - cashedMult.value).toFixed(2);
+    if (parseFloat(diff) > 0) {
+      toast(`看，早走一步！炸点 ${crashedAt.toFixed(2)}x（你收在 ${cashedMult.value.toFixed(2)}x，多赚 ${diff}x）`, 'info');
+    } else {
+      toast(`炸点 ${crashedAt.toFixed(2)}x（你收在 ${cashedMult.value.toFixed(2)}x，险胜）`, 'info');
+    }
+  } else {
+    status.value = 'crashed';
+    toast.error(`火箭炸了！炸点 ${crashedAt.toFixed(2)}x · 输了 ${formatGold(bet.value)}`);
+  }
+  await Promise.all([loadHistory(), loadConfig()]);
+  if (props.currentUser) {
+    const rp = await api.getPlayerLight(props.currentUser);
+    if (rp && rp.success && rp.data && rp.data.player) {
+      props.player.gold = rp.data.player.gold;
+    }
+  }
+  // 3 秒后回 idle
+  setTimeout(() => {
+    status.value = 'idle';
+    autoExploded = false;
+    clearCanvas();
+  }, 3000);
 }
 
 function currentMultiplierAt(t) {
@@ -355,8 +409,10 @@ async function doLaunch() {
   }
   isFree.value = false;
   startAt = r.data.startAt;
+  crashAt = r.data.crashAt;
   maxMult.value = r.data.maxMultiplier;
   maxDuration.value = r.data.maxDuration;
+  autoExploded = false;
   status.value = 'flying';
   currentMult.value = 1.0;
   await nextTick();
@@ -376,8 +432,10 @@ async function doLaunchFree() {
   }
   isFree.value = true;
   startAt = r.data.startAt;
+  crashAt = r.data.crashAt;
   maxMult.value = r.data.maxMultiplier;
   maxDuration.value = r.data.maxDuration;
+  autoExploded = false;
   status.value = 'flying';
   currentMult.value = 1.0;
   await nextTick();
@@ -387,7 +445,9 @@ async function doLaunchFree() {
 
 async function doCashout() {
   if (status.value !== 'flying') return;
-  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  // 锁定收手时的倍数（动画继续用 currentMult 渲染，但显示用 cashedMult）
+  cashedMult.value = currentMult.value;
+  // 不取消 rAF —— 让动画继续飞到炸点（杀猪盘经典体验：看它能飞多高）
   const r = await api.gambleCashout(props.currentUser, currentMult.value);
   if (!r || !r.success) {
     toast.error(r && r.message ? r.message : '收手失败');
@@ -396,28 +456,25 @@ async function doCashout() {
   const data = r.data;
   lastResult.value = data;
   if (data.result === 'win') {
-    status.value = 'won';
+    status.value = 'cashed'; // 进入 cashed 态：金币已入账，火箭继续飞
     currentGold.value = data.currentGold || currentGold.value;
     toast.success(`收手成功！${data.mult.toFixed(2)}x · +${formatGold(data.payout)}`);
   } else {
+    // 服务端判定为输（按晚了）：直接走 crashed
     status.value = 'crashed';
-    toast.error(`火箭炸了！炸点 ${data.mult.toFixed(2)}x · 输了 ${formatGold(bet.value)}`);
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    toast.error(`按晚了！炸点 ${data.mult.toFixed(2)}x · 输了 ${formatGold(bet.value)}`);
   }
   // 刷新历史 + 配置（更新金币/净亏/免费次数）
   await Promise.all([loadHistory(), loadConfig()]);
-  // 通知父组件刷新 player
-  // 简单起见：刷新一次 player（轻接口）
+  // 通知父组件刷新 player（轻接口）
   if (props.currentUser) {
     const rp = await api.getPlayerLight(props.currentUser);
     if (rp && rp.success && rp.data && rp.data.player) {
       props.player.gold = rp.data.player.gold;
     }
   }
-  // 3 秒后回到 idle
-  setTimeout(() => {
-    status.value = 'idle';
-    clearCanvas();
-  }, 3000);
+  // cashed 状态下：等 autoexplode 把动画跑完才会回 idle（在 doAutoexplode 末尾）
 }
 
 function syncStart() {
@@ -478,7 +535,8 @@ watch(() => props.player?.gold, (v) => {
 }
 .mult-num { font-family: var(--font-display); font-size: 3.5rem; font-weight: 800; color: #fff; line-height: 1; }
 .mult-num.crashed { color: #ff5252; }
-.mult-num.won { color: #69f0ae; }
+ .mult-num.won { color: #69f0ae; }
+ .mult-num.cashed { color: #ffb300; opacity: 0.85; }
 .mult-num .x { font-size: 1.6rem; opacity: 0.7; margin-left: 0.1rem; }
 .mult-status { font-size: 0.85rem; color: rgba(255,255,255,0.85); }
 .canvas-axis {

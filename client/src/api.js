@@ -142,6 +142,7 @@ export default {
   gambleConfig(username) { return request(`/player/${username}/gamble/config`) },
   gambleBet(username, payload) { return request(`/player/${username}/gamble/bet`, { method: 'POST', body: JSON.stringify(payload || {}) }) },
   gambleCashout(username, clientMult) { return request(`/player/${username}/gamble/cashout`, { method: 'POST', body: JSON.stringify({ clientMult }) }) },
+  gambleAutoexplode(username) { return request(`/player/${username}/gamble/autoexplode`, { method: 'POST' }) },
   gambleCancel(username) { return request(`/player/${username}/gamble/cancel`, { method: 'POST' }) },
   gambleStatus(username) { return request(`/player/${username}/gamble/status`) },
   gambleHistory(username) { return request(`/player/${username}/gamble/history`) },
