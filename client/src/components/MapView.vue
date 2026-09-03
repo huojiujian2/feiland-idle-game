@@ -60,6 +60,10 @@
             <IconBase name="shield" :size="20" class="side-tab-icon" />
             <span class="side-tab-label">公会大厅</span>
           </div>
+          <div class="side-tab-item" @click="$emit('goRocket')">
+            <IconBase name="bolt" :size="20" class="side-tab-icon" />
+            <span class="side-tab-label">星际火箭</span>
+          </div>
         </div>
       </transition>
     </div>
