@@ -5,6 +5,109 @@
 
 ***
 
+## v1.09 · 2026-09-03 · 星际火箭（地图页 Crash Game）
+
+### 🚀 新玩法：星际火箭（杀猪盘式 Crash Game）
+
+在地图页右侧新增「🚀 星际火箭」入口，进入独立玩法页。下注金币 → 火箭从左下角飞向右上方 → 倍数实时增长 → 在你满意的倍数按下「收手」拿钱；火箭自动飞到炸点则全输。
+
+#### 4 个难度档位
+
+| 难度 | 最大倍数 | 最长飞行 | 抽水 | 投注范围 |
+|------|---------|---------|------|---------|
+| 🟢 简单 | 5× | 12s | 5% | 100 ~ 10 万 |
+| 🟡 普通 | 15× | 18s | 7% | 500 ~ 100 万 |
+| 🟠 困难 | 50× | 22s | 10% | 5000 ~ 1000 万 |
+| 🔴 地狱 | 200× | 25s | 15% | 5 万 ~ 1 亿 |
+
+#### 6 大关键设计
+
+1. **服务端权威炸点**：开局时 `crypto.randomBytes` 生成 `crashMult ∈ [1.01, max]`，前端自渲染动画但**不知道炸点在哪**
+2. **反作弊**：服务端用 `(cashoutTime - startAt)` 反算理论最大倍数，客户端报值 > 理论值 + 0.3 容忍度 → 判定作弊返 400
+3. **行业标准 crash 分布**：炸点 `x = pow(max, 1 - u)`（u 均匀分布），越接近 max 概率越低（1.01x 常见，10x 罕见）
+4. **每日免费 3 次**：免费局派彩按基础金币 × 倍数，不扣投注；超过 3 次需付费
+5. **日净亏上限保护**：`max(5000, level × 100)`，超阈值拒绝新投注并提示"去挂会儿机"
+6. **v1.07 maxGold 联动**：派彩走 `engine/player.grantGold` → 自动应用 `applyGoldCap`，**不冲破全服金币上限**
+
+#### 接入金币路径
+
+- **扣金币**（付费局开局）：`player.gold -= bet`，事务内完成
+- **派彩**（赢）：`grantGold(player, payout)` → 自动走 `applyGoldCap`
+- **免费局**：基础奖励 500/1000/2000/5000 × cashoutMult（按难度），无抽水
+- **统计**：每个玩家 `player.gamble = { freeDayKey, freeUsed, history[50], stats, netLossTracker }`
+
+#### 前端细节
+
+- 地图页右侧折叠栏新增「星际火箭」入口
+- 主页面：左侧 canvas（480×280，星空 + 网格 + 火箭动画）+ 倍数大字（炸了红/赢了绿）
+- 控制面板：4 难度按钮 + 投注额输入（含 ±1万/±10万快捷 + 最小/10%/25%/50%/75%/梭哈预设）
+- 操作按钮：空闲态「🚀 发射」/ 飞行中绿色脉冲「💰 收手（Nx · +金币）」
+- 净亏预警：达到上限 80% 时横幅提示
+- 累计统计：已局 / 胜 / 负 / 最高倍数 / 累计赢 / 累计输
+- 历史：本服最近 20 局（绿/红边框）
+
+#### 🛡 安全细节
+
+| 项 | 实现 |
+|----|------|
+| **随机性** | Node 内置 `crypto.randomBytes(4)` 拒绝采样 |
+| **缓存** | 服务端内存 Map（带 TTL 35s 过期） |
+| **并发** | 同用户同时间只允许 1 个飞行仓位 |
+| **超时** | 35s 内未 cashout → 自动判定输 |
+| **审计** | `gamble.bet` / `gamble.cashout` / `gamble.cancel` 三条审计 |
+| **异常退出** | `POST /gamble/cancel` 退还投注金币（不计输赢） |
+
+### 📁 新增 / 修改文件
+
+| 类型 | 文件 |
+|------|------|
+| 新增 | `server/engine/gamble.js`（PRNG + 难度表 + 反作弊 + 缓存） |
+| 新增 | `server/routes/gamble.js`（5 个接口 + withTransaction + 审计） |
+| 改 | `server/store-sqlite.js`（`_ensureDefaults` 加 `meta.gambleGlobal`） |
+| 改 | `server/routes/index.js`（注册 `registerGambleRoutes`） |
+| 改 | `server/index.js`（require gambleEngine，无需定时器） |
+| 新增 | `client/src/components/RocketCrashView.vue`（约 600 行，含 canvas 动画） |
+| 改 | `client/src/components/MapView.vue`（右侧栏新增「星际火箭」入口） |
+| 改 | `client/src/App.vue`（注册视图 + tabOrder 加 `rocket`） |
+| 改 | `client/src/api.js`（6 个方法：`gambleConfig/Bet/Cashout/Cancel/Status/History`） |
+
+### 🆕 新增 API
+
+| Method | Path | 说明 |
+|--------|------|------|
+| `GET` | `/api/player/:u/gamble/config` | 难度列表 + 玩家剩余免费次数 + 当前金币 + 净亏 |
+| `POST` | `/api/player/:u/gamble/bet` | 开局（扣金币 + 生成炸点） |
+| `POST` | `/api/player/:u/gamble/cashout` | 结算（按上报倍数） |
+| `POST` | `/api/player/:u/gamble/cancel` | 放弃当前局（退还金币） |
+| `GET` | `/api/player/:u/gamble/status` | 当前飞行中仓位状态 |
+| `GET` | `/api/player/:u/gamble/history` | 本人历史 + 累计统计 |
+
+### 🧪 端到端验证（11/11 通过）
+
+| 场景 | 结果 |
+|------|------|
+| GET /config | 200，4 难度 + 3 免费 + 金币 ✓ |
+| BET normal 1000 | 200，生成炸点 ✓ |
+| STATUS（飞行中） | currentMult=2.23 / elapsed=1.5s ✓ |
+| CASHOUT 1.5x | win, payout=1395（1000×1.5×0.93）✓ |
+| **反作弊 CASHOUT 999x** | 400 时间戳异常 ✓ |
+| 免费局 + CASHOUT | win, payout=600（500×1.2）✓ |
+| HISTORY | 2 条 + 最大倍数 1.5 ✓ |
+| CANCEL（无在飞局） | 200 cancelled=false ✓ |
+| 投注 > 持有金币 | 400 金币不足 ✓ |
+| 低于最低投注 | 400 拒绝 ✓ |
+| 并发投注 | 409 上一局未结束 ✓ |
+| **v1.07 maxGold=10000 联动** | 派彩不冲破上限 ✓ |
+
+### 🔄 与现有系统兼容
+
+- **存档零迁移**：`meta.gambleGlobal` 是新增默认值；老存档下次启动自动补齐
+- **后台审计**：所有 bet/cashout/cancel 走 `auditLog` 自动记录
+- **不影响挂机**：Crash Game 与 idle/PVP/BOSS/远征完全解耦
+- **管理员不可作弊**：服务端炸点用 PRNG，admin token 也无法预测
+
+***
+
 ## v1.08 · 2026-09-02 · 后台账号体系（多账号 + 强制改密）
 
 ### 🔑 后台多账号体系 + 首登强制改密
