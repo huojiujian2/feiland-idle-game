@@ -153,6 +153,8 @@ function _ensureDefaults() {
   if (!isPlainObject(data.meta.guildArchive)) data.meta.guildArchive = {};
   // v1.07：服务器全局设置（后台「服务器设置」页读写；expMultiplier/goldMultiplier 倍率，maxLevel/maxGold 全服数值上限，0 = 不限）
   if (!isPlainObject(data.meta.serverConfig)) data.meta.serverConfig = { expMultiplier: 1, goldMultiplier: 1, maxLevel: 0, maxGold: 0, updatedAt: 0, updatedBy: '' };
+  // v1.09：星际火箭服务端全局配置（meta.gambleGlobal，仅后台监控/审计用）
+  if (!isPlainObject(data.meta.gambleGlobal)) data.meta.gambleGlobal = { totalBets: 0, totalPayouts: 0, totalRounds: 0, biggestMultEver: 0, biggestPayoutEver: 0 };
   try {
     data.meta.guildNameIndex = {};
     for (const [gid, g] of Object.entries(data.meta.guilds)) {

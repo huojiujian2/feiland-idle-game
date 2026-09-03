@@ -60,6 +60,10 @@
             <IconBase name="shield" :size="20" class="side-tab-icon" />
             <span class="side-tab-label">公会大厅</span>
           </div>
+          <div class="side-tab-item" @click="$emit('goRocket')">
+            <IconBase name="bolt" :size="20" class="side-tab-icon" />
+            <span class="side-tab-label">星际火箭</span>
+          </div>
         </div>
       </transition>
     </div>
@@ -99,7 +103,7 @@ const props = defineProps({
   player: { type: Object, required: true },
   areas: { type: Array, required: true },
 });
-const emit = defineEmits(['select', 'strategy-change', 'goBoss', 'goRank', 'goPvP', 'goCock', 'goExpedition', 'goGuild']);
+const emit = defineEmits(['select', 'strategy-change', 'goBoss', 'goRank', 'goPvP', 'goCock', 'goExpedition', 'goGuild', 'goRocket']);
 
 // 页面状态：'select' 第一页 / 'battle' 第二页
 const page = ref('select');

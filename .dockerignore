@@ -1,49 +1,69 @@
-# Dependencies
+# ====== .dockerignore · v1.10 · 2026-09-03 ======
+# 优化：彻底排除任何"用不到 + 可能泄漏"的本地文件
+# 加速 build context 上传 + 减小镜像体积
+
+# ==== 依赖 ====
 node_modules
 client/node_modules
+admin/node_modules
 
-# Build output
+# ==== 构建产物（dockerfile 自己 COPY） ====
 client/dist
+server/public/admin
 dist
 
-# Database
+# ==== 数据库 & 存档（绝不能进镜像） ====
 server/db.json
+server/db.sqlite
+server/db.sqlite.*
+server/data/
 
-# Tests
+# ==== 测试 ====
 server/*.test.js
+server/**/*.test.js
 
-# Docker files (not needed inside image)
+# ==== Docker & 部署文件（避免循环 COPY） ====
 Dockerfile
 docker-compose.yml
 .dockerignore
 
-# Version control
+# ==== 版本控制 ====
 .git
 .gitignore
 
-# Environment
+# ==== 环境变量（避免泄漏 .env 内容） ====
 .env
 .env.local
+.env.*.local
 
-# Editor / OS
+# ==== 编辑器 & OS ====
 .vscode
 .idea
 .DS_Store
 Thumbs.db
 
-# Logs
+# ==== 日志 & 调试 ====
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.cache
 
-# Lock files (we use pnpm, not npm)
-package-lock.json
+# ==== 锁文件统一用 npm（v1.10 修复 pnpm→npm 切换） ====
+pnpm-lock.yaml
 
-# Windows-only files
+# ==== Windows 启动脚本（容器内不需要） ====
 启动游戏.bat
 
-# Documentation (not needed in image)
+# ==== 文档（运行时用不到） ====
 GAMEPLAY_GUIDE.html
 GAMEPLAY_TASKS.md
 AGENT.md
 AGENTS.md
 docs
+*.md
+
+# ==== 测试覆盖率 ====
+coverage
+.nyc_output

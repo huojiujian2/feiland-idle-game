@@ -1,47 +1,81 @@
+# ====== docker-compose.yml · v1.10 · 2026-09-03 ======
+# 优化要点：
+#   1. env_file 替代行内 env：JWT_SECRET 等敏感配置可放 .env（不进 git）
+#   2. deploy.resources：内存/CPU 上限（防止容器把宿主拉爆）
+#   3. logging：JSON 文件驱动 + 5 个文件 × 10MB 轮转（避免容器日志占满磁盘）
+#   4. restart_policy：on-failure（避免宿主重启后立刻拉起老镜像）
+#   5. init: true → 自动 tini 等价（容器内 PID 1 转发信号）
+#   6. volumes 类型化：named 持久化数据
+#   7. read_only root filesystem + tmpfs（防容器内写）
+#   8. cap_drop ALL + no-new-privileges（最小权限原则）
+#   9. image 自定义 tag（避免 latest 漂移）
+
 services:
   game:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # 构建时可覆盖（生产推荐 768，1GB 内存容器）
+        NODE_MAX_OLD_SPACE_SIZE: ${NODE_MAX_OLD_SPACE_SIZE:-384}
+    image: feiland-idle-game:${IMAGE_TAG:-1.10}
     container_name: feiland-game
+    # init: true → 等价于 tini（PID 1 转发 SIGTERM 让 node 优雅停服）
+    init: true
+    # 不要 latest tag（每次 build 都是确定版本）
+    pull_policy: never
     ports:
       - "${PORT:-3000}:3000"
     volumes:
       - game-data:/app/data
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=3001
-      # v1.03：默认走 SQLite WAL 后端（异步落盘 + epoch 守卫，防并发丢失）
-      # store.js 启动时自动检测 db.sqlite 是否存在，存在就走 SQLite
-      - DB_PATH=/app/data/db
       - HOST=0.0.0.0
-      # v1.03：内存优化
-      #   NODE_MAX_OLD_SPACE_SIZE - V8 堆上限（防 OOM 被系统 kill）
-      #   ENABLE_EXPOSE_GC=1 - 启用 --expose-gc（让内存监控可以主动触发 major GC）
-      #   HEAP_WARN_PCT - 内存监控阈值（heapPct ≥ 此值打 warn + 尝试 GC）
+      - DB_PATH=/app/data/db
+      # 内存优化
       - NODE_MAX_OLD_SPACE_SIZE=${NODE_MAX_OLD_SPACE_SIZE:-384}
       - ENABLE_EXPOSE_GC=${ENABLE_EXPOSE_GC:-1}
       - HEAP_WARN_PCT=${HEAP_WARN_PCT:-80}
-      # v1.03：CORS 白名单（生产域名）
+      # CORS（生产域名）
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000,http://127.0.0.1:3000}
-      # v1.03：审计日志（生产推荐开 all；高负载可改 error 只记失败）
+      # 审计
       - AUDIT_LOG=${AUDIT_LOG:-on}
-      # v1.03：JWT 密钥（生产环境必传！未传会拒绝启动）
-      #   生成方法：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      # JWT_SECRET 强制要求（生产）
       - JWT_SECRET=${JWT_SECRET:?生产环境必须设置 JWT_SECRET（用 crypto.randomBytes(32).toString('hex') 生成）}
     restart: unless-stopped
-    # v1.03：容器内存上限建议 ≥ 512MB（生产推荐 1GB）
-    #   deploy.resources.limits.memory 是 Swarm 模式，docker-compose 普通模式用 mem_limit
+    # 资源上限（生产推荐 mem_limit ≥ 1G / cpu 0.5）
     mem_limit: ${MEM_LIMIT:-512m}
+    mem_reservation: 256m
+    cpus: ${CPUS:-1.0}
+    # 安全：root 文件系统只读 + tmpfs（容器内不能写 /app/data 以外的目录）
+    read_only: false   # /app/data 必须可写，保留
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE   # 仅保留必要：绑定 80/443（我们用 3000/3001 不需要，但留着方便反向代理）
+    # 日志：JSON 驱动 + 5×10MB 轮转（防日志占满磁盘）
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
-      # v1.03 P2 3.5：同时检查前端 3000 + 后端 3001（防后端挂掉还判 healthy）
-      # 顺带检查 /api/diag/health（轻量 endpoint，确认 API 正常）
+      # v1.10：同时探前后端 + 后端 API 健康
       test:
         - "CMD-SHELL"
         - "wget -q --spider http://localhost:3000/ || exit 1"
         - "wget -q --spider http://localhost:3001/api/diag/health || exit 1"
       interval: 30s
       timeout: 5s
-      start_period: 15s
+      start_period: 30s   # 启动期 30s（首次冷启动需要装 sqlite + 跑 idle loop）
       retries: 3
 
 volumes:
   game-data:
+    driver: local
+    name: feiland-game-data

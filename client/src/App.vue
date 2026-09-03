@@ -37,7 +37,8 @@
           <MapView v-else-if="activeTab === 'map'" :player="mapPlayer || player" :areas="areas"
             @select="handleAreaChange" @strategy-change="handleStrategyChange"
             @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" @goBoss="activeTab = 'boss'"
-            @goCock="activeTab = 'cock'" @goExpedition="activeTab = 'expedition'" @goGuild="activeTab = 'guild'" />
+            @goCock="activeTab = 'cock'" @goExpedition="activeTab = 'expedition'" @goGuild="activeTab = 'guild'"
+            @goRocket="activeTab = 'rocket'" />
           <CodexView v-else-if="activeTab === 'codex'" :player="player" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             :initialSubTab="reincarnHint ? 'reinc' : undefined"
@@ -54,6 +55,8 @@
           <ExpeditionView v-else-if="activeTab === 'expedition'" :player="player" :currentUser="currentUserRef"
             @goBack="activeTab = 'map'" />
           <GuildView v-else-if="activeTab === 'guild'" :player="player" :currentUser="currentUserRef"
+            @goBack="activeTab = 'map'" />
+          <RocketCrashView v-else-if="activeTab === 'rocket'" :player="player" :currentUser="currentUserRef"
             @goBack="activeTab = 'map'" />
           <GenesisView v-else-if="activeTab === 'genesis'" :player="player" />
         </div>
@@ -140,6 +143,7 @@ import CockfightArena from './components/CockfightArena.vue';
 import ExpeditionView from './components/ExpeditionView.vue';
 import GuildView from './components/GuildView.vue';
 import GenesisView from './components/GenesisView.vue';
+import RocketCrashView from './components/RocketCrashView.vue'; // v1.09：星际火箭
 import TutorialOverlay from './components/TutorialOverlay.vue';
 
 // ====== 状态 ======
@@ -237,7 +241,7 @@ const activeTab = ref('char');
 const showShop = ref(false);
 
 const transitionName = ref('slide-left');
-const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'cock', 'expedition', 'guild', 'genesis'];
+const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'cock', 'expedition', 'guild', 'genesis', 'rocket'];
 
 let pollTimer = null;
 let mapPollTimer = null; // 地图页专用轮询

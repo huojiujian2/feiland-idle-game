@@ -11,6 +11,8 @@ const gzip = require('./middleware/gzip');
 const monitor = require('./monitor'); // v1.05：轻量运行时监控（后台监控页数据源）
 // v1.07：服务器全局设置（meta.serverConfig 的访问封装）
 const serverSettings = require('./server-settings');
+// v1.09：星际火箭引擎（单局缓存 TTL 由 ROUND_TTL_MS 控制，无需定时清理）
+const gambleEngine = require('./engine/gamble');
 
 const app = express();
 // 端口约定：后端 API 固定 3001；前端固定 3000（开发时由 Vite 提供，生产时由 server/web-server.js 提供）
