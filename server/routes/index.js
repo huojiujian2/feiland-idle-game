@@ -24,6 +24,7 @@ const { registerTitleRoutes } = require('./titles');
 const { registerCockfightRoutes } = require('./cockfight');
 const { registerExpeditionRoutes } = require('./expedition');
 const { registerActiveRoutes } = require('./active');
+const { registerGambleRoutes } = require('./gamble'); // v1.09：星际火箭
 const { registerGuildRoutes } = require('./guild');
 const { registerDiagRoutes } = require('./diag');  // v1.03：内存/健康监控
 const { registerAdminRoutes } = require('./admin'); // v1.05：后台管理页（登录 + 监控 + GM）
@@ -66,6 +67,7 @@ function registerRoutes(app, store) {
   registerExpeditionRoutes(app, store);
   registerActiveRoutes(app, store);
   registerGuildRoutes(app, store);
+  registerGambleRoutes(app, store); // v1.09：星际火箭
 }
 
 module.exports = { registerRoutes };
