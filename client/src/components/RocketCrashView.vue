@@ -50,12 +50,9 @@
           <div class="section-title">难度</div>
           <div class="difficulty-list">
             <button v-for="d in difficulties" :key="d.id"
-              class="diff-btn"
-              :class="{ active: difficulty === d.id, locked: status !== 'idle' }"
-              :style="{ borderColor: difficulty === d.id ? d.color : '' }"
-              :disabled="status !== 'idle'"
-              @click="onSelectDifficulty(d.id)">
-              <span class="diff-name" :style="{ color: difficulty === d.id ? d.color : '' }">{{ d.name }}</span>
+              class="diff-btn diff-btn--single active"
+              :style="{ borderColor: d.color }">
+              <span class="diff-name" :style="{ color: d.color }">{{ d.name }}</span>
               <span class="diff-max">封顶 {{ d.maxMultiplier }}x</span>
               <span class="diff-range">{{ d.maxDuration }}s · 抽水 {{Math.round(d.houseEdge * 100)}}%</span>
               <span class="diff-bet">{{ formatGold(d.baseBetMin) }} ~ {{ formatGold(d.baseBetMax) }}</span>
@@ -390,7 +387,7 @@ async function loadConfig() {
     currentGold.value = r.data.currentGold || 0;
     netLoss.value = r.data.netLossToday || 0;
     netLossLimit.value = r.data.netLossLimit || 5000;
-    const d = difficulties.value.find(d => d.id === difficulty.value) || difficulties.value[1] || difficulties.value[0];
+    const d = difficulties.value.find(d => d.id === difficulty.value) || difficulties.value[0];
     if (d) {
       maxMult.value = d.maxMultiplier;
       maxDuration.value = d.maxDuration;
@@ -563,7 +560,8 @@ watch(() => props.player?.gold, (v) => {
 .section { display: flex; flex-direction: column; gap: 0.3rem; }
 .section-title { font-size: 0.8rem; color: var(--muted); letter-spacing: 0.04em; font-weight: 600; }
 
-.difficulty-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem; }
+.difficulty-list { display: grid; grid-template-columns: 1fr; gap: 0.3rem; }
+.difficulty-list .diff-btn--single { border-width: 2px; background: rgba(var(--gold-rgb),0.08); }
 .diff-btn {
   display: flex; flex-direction: column; gap: 0.1rem;
   padding: 0.4rem 0.5rem; border: 1px solid rgba(var(--violet-rgb),0.2); border-radius: 6px;

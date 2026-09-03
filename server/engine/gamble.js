@@ -30,14 +30,11 @@ const crypto = require('crypto');
 //   期望倍数 E[m] = (1 - houseEdge) * (max * ln(max) / (max - 1))
 //   本实现的 RTP：简单 E[m] / max（详细 RTP 计算见 test 文件）
 const DIFFICULTY = {
-  easy:   { id: 'easy',   name: '简单', color: '#4caf50', maxMultiplier: 5,   maxDuration: 8,  houseEdge: 0.12, distK: 1.0,  freeRewardBase: 500,   baseBetMin: 100,     baseBetMax: 100000      },
-  normal: { id: 'normal', name: '普通', color: '#ffb300', maxMultiplier: 15,  maxDuration: 12, houseEdge: 0.18, distK: 1.0,  freeRewardBase: 1000,  baseBetMin: 500,     baseBetMax: 1000000     },
-  hard:   { id: 'hard',   name: '困难', color: '#ff7043', maxMultiplier: 50,  maxDuration: 16, houseEdge: 0.22, distK: 1.0,  freeRewardBase: 2000,  baseBetMin: 5000,    baseBetMax: 10000000    },
-  hell:   { id: 'hell',   name: '地狱', color: '#e53935', maxMultiplier: 200, maxDuration: 20, houseEdge: 0.25, distK: 1.0,  freeRewardBase: 5000,  baseBetMin: 50000,   baseBetMax: 100000000   },
+  pig:    { id: 'pig',    name: '杀猪盘', color: '#e53935', maxMultiplier: 10,  maxDuration: 30, houseEdge: 0.20, freeRewardBase: 500,   baseBetMin: 100,     baseBetMax: 100000000   },
 };
 
 const DIFFICULTY_KEYS = Object.keys(DIFFICULTY);
-const DEFAULT_DIFFICULTY = 'normal';
+const DEFAULT_DIFFICULTY = 'pig';
 
 // 免费局每玩家每天 3 次
 const FREE_ROUNDS_PER_DAY = 3;
