@@ -37,7 +37,8 @@
           <MapView v-else-if="activeTab === 'map'" :player="mapPlayer || player" :areas="areas"
             @select="handleAreaChange" @strategy-change="handleStrategyChange"
             @goRank="activeTab = 'rank'" @goPvP="activeTab = 'pvp'" @goBoss="activeTab = 'boss'"
-            @goCock="activeTab = 'cock'" @goExpedition="activeTab = 'expedition'" @goGuild="activeTab = 'guild'" />
+            @goCock="activeTab = 'cock'" @goExpedition="activeTab = 'expedition'" @goGuild="activeTab = 'guild'"
+            @goRocket="activeTab = 'rocket'" />
           <CodexView v-else-if="activeTab === 'codex'" :player="player" />
           <EvolutionView v-else-if="activeTab === 'evo'" :player="player"
             :initialSubTab="reincarnHint ? 'reinc' : undefined"
