@@ -458,7 +458,7 @@ async function doCashout() {
   if (status.value !== 'flying') return;
   // 锁定收手时的倍数（动画继续用 currentMult 渲染，但显示用 cashedMult）
   cashedMult.value = currentMult.value;
-  // 不取消 rAF —— 让动画继续飞到炸点（杀猪盘经典体验：看它能飞多高）
+  // 不取消 rAF —— 让动画继续飞到炸点（搏一搏经典体验：看它能飞多高）
   const r = await api.gambleCashout(props.currentUser, currentMult.value);
   if (!r || !r.success) {
     toast.error(r && r.message ? r.message : '收手失败');

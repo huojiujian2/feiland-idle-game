@@ -30,7 +30,7 @@ const crypto = require('crypto');
 //   期望倍数 E[m] = (1 - houseEdge) * (max * ln(max) / (max - 1))
 //   本实现的 RTP：简单 E[m] / max（详细 RTP 计算见 test 文件）
 const DIFFICULTY = {
-  pig:    { id: 'pig',    name: '杀猪盘', color: '#e53935', maxMultiplier: 10,  maxDuration: 30, houseEdge: 0.20, freeRewardBase: 500,   baseBetMin: 100,     baseBetMax: 100000000   },
+  pig:    { id: 'pig',    name: '搏一搏', color: '#e53935', maxMultiplier: 10,  maxDuration: 30, houseEdge: 0.20, freeRewardBase: 500,   baseBetMin: 100,     baseBetMax: 100000000   },
 };
 
 const DIFFICULTY_KEYS = Object.keys(DIFFICULTY);
