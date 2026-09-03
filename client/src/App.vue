@@ -140,6 +140,7 @@ import CockfightArena from './components/CockfightArena.vue';
 import ExpeditionView from './components/ExpeditionView.vue';
 import GuildView from './components/GuildView.vue';
 import GenesisView from './components/GenesisView.vue';
+import RocketCrashView from './components/RocketCrashView.vue'; // v1.09：星际火箭
 import TutorialOverlay from './components/TutorialOverlay.vue';
 
 // ====== 状态 ======
@@ -237,7 +238,7 @@ const activeTab = ref('char');
 const showShop = ref(false);
 
 const transitionName = ref('slide-left');
-const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'cock', 'expedition', 'guild', 'genesis'];
+const tabOrder = ['char', 'skill', 'bag', 'map', 'codex', 'evo', 'rank', 'quest', 'pvp', 'boss', 'cock', 'expedition', 'guild', 'genesis', 'rocket'];
 
 let pollTimer = null;
 let mapPollTimer = null; // 地图页专用轮询

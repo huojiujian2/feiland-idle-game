@@ -99,7 +99,7 @@ const props = defineProps({
   player: { type: Object, required: true },
   areas: { type: Array, required: true },
 });
-const emit = defineEmits(['select', 'strategy-change', 'goBoss', 'goRank', 'goPvP', 'goCock', 'goExpedition', 'goGuild']);
+const emit = defineEmits(['select', 'strategy-change', 'goBoss', 'goRank', 'goPvP', 'goCock', 'goExpedition', 'goGuild', 'goRocket']);
 
 // 页面状态：'select' 第一页 / 'battle' 第二页
 const page = ref('select');
