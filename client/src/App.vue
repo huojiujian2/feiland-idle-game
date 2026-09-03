@@ -55,6 +55,8 @@
             @goBack="activeTab = 'map'" />
           <GuildView v-else-if="activeTab === 'guild'" :player="player" :currentUser="currentUserRef"
             @goBack="activeTab = 'map'" />
+          <RocketCrashView v-else-if="activeTab === 'rocket'" :player="player" :currentUser="currentUserRef"
+            @goBack="activeTab = 'map'" />
           <GenesisView v-else-if="activeTab === 'genesis'" :player="player" />
         </div>
       </transition>
