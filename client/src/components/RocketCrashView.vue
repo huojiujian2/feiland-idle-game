@@ -155,9 +155,9 @@ const currentGold = ref(0);
 const netLoss = ref(0);
 const netLossLimit = ref(5000);
 
-const difficulty = ref('normal');
-const diffCfg = computed(() => difficulties.value.find(d => d.id === difficulty.value) || difficulties.value[1] || {});
-const betInput = ref(0);
+const difficulty = ref('pig');
+const diffCfg = computed(() => difficulties.value.find(d => d.id === difficulty.value) || difficulties.value[0] || {});
+const betInput = ref(100); // 默认显示 100（最低投注），避免按钮 disabled
 const bet = computed(() => Math.floor(Math.max(0, Number(betInput.value) || 0)));
 
 const status = ref('idle'); // idle | flying | won | crashed
@@ -180,8 +180,12 @@ const canLaunch = computed(() => {
   if (!diffCfg.value) return false;
   // v1.10 修复：flying 时禁用发射按钮（火箭正在飞，不能开新局）
   if (status.value === 'flying') return false;
-  if (bet.value < diffCfg.value.baseBetMin) return false;
-  if (bet.value > (diffCfg.value.baseBetMax || 0)) return false;
+  // bet 必须是有效正整数（> 0 且 >= 最低）
+  if (!bet.value || bet.value <= 0) return false;
+  const minBet = diffCfg.value.baseBetMin || 100;
+  const maxBet = diffCfg.value.baseBetMax || 1e8;
+  if (bet.value < minBet) return false;
+  if (bet.value > maxBet) return false;
   if (bet.value > currentGold.value) return false;
   if (netLoss.value >= netLossLimit.value) return false;
   return true;
@@ -406,7 +410,15 @@ async function loadHistory() {
 
 async function doLaunch() {
   if (!canLaunch.value) {
-    toast.error('当前无法发射：检查金币 / 投注额 / 难度');
+    // 调试：告诉用户具体哪个条件没满足
+    let reason = '检查金币 / 投注额 / 难度';
+    if (status.value === 'flying') reason = '上一局正在飞'
+    else if (!bet.value || bet.value <= 0) reason = '请输入投注额'
+    else if (bet.value < (diffCfg.value?.baseBetMin || 100)) reason = `本档最低投注 ${diffCfg.value?.baseBetMin || 100} 金币`
+    else if (bet.value > (diffCfg.value?.baseBetMax || 1e8)) reason = `本档最高投注 ${(diffCfg.value?.baseBetMax || 1e8).toLocaleString()} 金币`
+    else if (bet.value > currentGold.value) reason = '金币不足'
+    else if (netLoss.value >= netLossLimit.value) reason = `今日净亏已达上限`
+    toast.error(reason);
     return;
   }
   // v1.10 修复：开新局前兜底清服务端缓存（防止 autoexplode 已失败导致缓存残留）
