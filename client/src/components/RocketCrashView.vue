@@ -181,6 +181,8 @@ const history = ref([]);
 
 const canLaunch = computed(() => {
   if (!diffCfg.value) return false;
+  // v1.10 修复：flying 时禁用发射按钮（火箭正在飞，不能开新局）
+  if (status.value === 'flying') return false;
   if (bet.value < diffCfg.value.baseBetMin) return false;
   if (bet.value > (diffCfg.value.baseBetMax || 0)) return false;
   if (bet.value > currentGold.value) return false;
@@ -236,7 +238,15 @@ function tick() {
 }
 
 async function doAutoexplode() {
-  const r = await api.gambleAutoexplode(props.currentUser);
+  // v1.10 加超时兜底：8s 内没回也强制回 idle（防止服务端 hang 死永远卡住）
+  const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 8000));
+  let r = null;
+  try {
+    r = await Promise.race([
+      api.gambleAutoexplode(props.currentUser),
+      timeoutPromise,
+    ]);
+  } catch (_) { r = null; }
   // 即使接口失败，本地也要走完动画（防止永远卡在 flying/cashed）
   const data = r && r.success ? r.data : null;
   if (data) {
@@ -402,6 +412,8 @@ async function doLaunch() {
     toast.error('当前无法发射：检查金币 / 投注额 / 难度');
     return;
   }
+  // v1.10 修复：开新局前兜底清服务端缓存（防止 autoexplode 已失败导致缓存残留）
+  await api.gambleAutoexplode(props.currentUser).catch(() => {});
   const r = await api.gambleBet(props.currentUser, { difficulty: difficulty.value, isFree: false, bet: bet.value });
   if (!r || !r.success) {
     toast.error(r && r.message ? r.message : '发射失败');
@@ -425,6 +437,8 @@ async function doLaunchFree() {
     toast.error('今日免费机会已用完');
     return;
   }
+  // 同样兜底
+  await api.gambleAutoexplode(props.currentUser).catch(() => {});
   const r = await api.gambleBet(props.currentUser, { difficulty: difficulty.value, isFree: true, bet: 0 });
   if (!r || !r.success) {
     toast.error(r && r.message ? r.message : '免费发射失败');
